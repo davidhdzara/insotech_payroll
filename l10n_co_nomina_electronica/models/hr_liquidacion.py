@@ -51,14 +51,12 @@ class L10nCoHrLiquidacion(models.Model):
         comodel_name='hr.employee',
         string='Empleado',
         required=True,
-        tracking=True,
         help='Empleado cuyo contrato se está liquidando.',
     )
     contract_id = fields.Many2one(
         comodel_name='hr.contract',
         string='Contrato',
         required=True,
-        tracking=True,
         help='Contrato laboral que se termina.',
     )
     company_id = fields.Many2one(
@@ -82,7 +80,6 @@ class L10nCoHrLiquidacion(models.Model):
     date_end = fields.Date(
         string='Fecha de Retiro',
         required=True,
-        tracking=True,
         help='Fecha efectiva de terminación del contrato laboral.',
     )
     cause = fields.Selection(
@@ -96,7 +93,6 @@ class L10nCoHrLiquidacion(models.Model):
         ],
         string='Causa de Retiro',
         required=True,
-        tracking=True,
         help='Causa de terminación del contrato laboral. Determina si '
              'procede indemnización (Art. 64 CST).',
     )
@@ -122,7 +118,6 @@ class L10nCoHrLiquidacion(models.Model):
         string='Estado',
         default='draft',
         required=True,
-        tracking=True,
         copy=False,
         help='Estado de la liquidación:\n'
              '• Borrador: recién creada, pendiente de cálculo.\n'

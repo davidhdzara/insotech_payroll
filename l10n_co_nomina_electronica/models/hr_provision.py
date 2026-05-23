@@ -96,7 +96,6 @@ class L10nCoHrProvision(models.Model):
         string='Estado',
         default='draft',
         required=True,
-        tracking=True,
         help='Estado de la provisión:\n'
              '• Borrador: pendiente de cálculo.\n'
              '• Confirmado: provisiones calculadas.\n'

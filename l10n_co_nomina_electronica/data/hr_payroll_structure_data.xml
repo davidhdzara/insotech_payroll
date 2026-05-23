@@ -285,7 +285,7 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="amount_select">code</field>
             <field name="amount_python_compute">result = inputs.CO_COMISIONES.amount</field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">Comisiones</field>
+            <field name="l10n_co_ne_dian_concept">Comision</field>
             <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
@@ -301,7 +301,7 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="amount_select">code</field>
             <field name="amount_python_compute">result = inputs.CO_BONIF_SAL.amount</field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">BonoSalarial</field>
+            <field name="l10n_co_ne_dian_concept">BonificacionS</field>
             <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
@@ -316,7 +316,7 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="amount_select">code</field>
             <field name="amount_python_compute">result = inputs.CO_BONIF_NOSAL.amount</field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">BonoNoSalarial</field>
+            <field name="l10n_co_ne_dian_concept">BonificacionNS</field>
             <field name="l10n_co_ugpp_payment_type">tp_no_salarial</field>
             <field name="l10n_co_ugpp_non_salary_class">mera_liberalidad</field>
         </record>
@@ -333,7 +333,7 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="amount_select">code</field>
             <field name="amount_python_compute">result = inputs.CO_AUX_ALIM.amount</field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">Alimentacion</field>
+            <field name="l10n_co_ne_dian_concept">BonoAlimNS</field>
             <field name="l10n_co_ugpp_payment_type">tp_no_salarial</field>
             <field name="l10n_co_ugpp_non_salary_class">contrato</field>
         </record>
@@ -350,7 +350,7 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="amount_select">code</field>
             <field name="amount_python_compute">result = inputs.CO_VIATICOS_SAL.amount</field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">OtrosConceptosDev</field>
+            <field name="l10n_co_ne_dian_concept">ViaticoS</field>
             <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
@@ -365,7 +365,7 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="amount_select">code</field>
             <field name="amount_python_compute">result = inputs.CO_VIATICOS_NOSAL.amount</field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">OtrosConceptosDev</field>
+            <field name="l10n_co_ne_dian_concept">ViaticoNS</field>
             <field name="l10n_co_ugpp_payment_type">tp_no_salarial</field>
             <field name="l10n_co_ugpp_non_salary_class">contrato</field>
         </record>
@@ -430,7 +430,7 @@ else:
     result = valor_dia * 2 + (valor_dia * 0.6667 * 88) + (valor_dia * 0.50 * (dias - 90))
             </field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">IncapacidadComun</field>
+            <field name="l10n_co_ne_dian_concept">Incapacidad</field>
             <field name="l10n_co_ugpp_payment_type">tp_incapacidad</field>
         </record>
 
@@ -449,7 +449,7 @@ dias = inputs.CO_INC_LABORAL.amount
 result = (contract.wage / 30) * dias
             </field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">IncapacidadLaboral</field>
+            <field name="l10n_co_ne_dian_concept">Incapacidad</field>
             <field name="l10n_co_ugpp_payment_type">tp_incapacidad</field>
         </record>
 
@@ -614,7 +614,7 @@ result = inputs.CO_CESANTIAS.amount
 result = inputs.CO_INT_CES.amount
             </field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">IntCesantias</field>
+            <field name="l10n_co_ne_dian_concept">InteresesCesantias</field>
             <field name="l10n_co_ugpp_payment_type">tp_prestaciones</field>
         </record>
 
@@ -797,7 +797,7 @@ result = -abs(ibc * pct)
             <field name="amount_select">code</field>
             <field name="amount_python_compute">result = -abs(inputs.CO_LIBRANZAS.amount)</field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">Libranzas</field>
+            <field name="l10n_co_ne_dian_concept">Libranza</field>
         </record>
 
         <record id="hr_salary_rule_co_sindicato" model="hr.salary.rule">
@@ -811,7 +811,7 @@ result = -abs(ibc * pct)
             <field name="amount_select">code</field>
             <field name="amount_python_compute">result = -abs(inputs.CO_SINDICATO.amount)</field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">Sindicatos</field>
+            <field name="l10n_co_ne_dian_concept">Sindicato</field>
         </record>
 
         <record id="hr_salary_rule_co_afc" model="hr.salary.rule">
@@ -923,7 +923,7 @@ result = -abs(_total_embargo) if _total_embargo &gt; 0 else 0
             <field name="amount_select">code</field>
             <field name="amount_python_compute">result = -abs(inputs.CO_OTRAS_DED.amount)</field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">OtrasDeducciones</field>
+            <field name="l10n_co_ne_dian_concept">OtraDeduccion</field>
         </record>
 
         <!-- ============================================================ -->

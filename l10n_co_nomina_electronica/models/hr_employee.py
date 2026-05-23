@@ -201,7 +201,7 @@ class HrEmployee(models.Model):
         help='Código EPS destino en caso de traslado.',
     )
     l10n_co_pila_colombiano_exterior = fields.Boolean(
-        string='Colombiano en el Exterior',
+        string='Colombiano en el Exterior (PILA)',
         default=False,
     )
     l10n_co_pila_fecha_radicacion_ext = fields.Date(
