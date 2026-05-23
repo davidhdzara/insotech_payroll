@@ -105,6 +105,7 @@ class L10nCoHrLiquidacion(models.Model):
         ],
         string='Tipo de Contrato',
         required=True,
+        default='indefinido',
         help='Tipo de contrato laboral. Afecta el cálculo de '
              'indemnización por despido sin justa causa (Art. 64 CST).',
     )
