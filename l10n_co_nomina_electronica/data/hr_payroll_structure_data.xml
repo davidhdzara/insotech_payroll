@@ -107,7 +107,7 @@
             <field name="amount_python_compute">
 # Periodo de nomina: dias del periodo configurado en el contrato
 _period = int(contract.l10n_co_payroll_period or 30)
-result = contract.wage / 30 * worked_days.WORK100.number_of_days if worked_days.WORK100 else contract.wage * _period / 30
+result = contract.wage / 30 * worked_days['WORK100'].number_of_days if 'WORK100' in worked_days else contract.wage * _period / 30
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Sueldo</field>
@@ -131,7 +131,7 @@ result = contract.wage &lt;= _smmlv * 2 and not contract.l10n_co_ne_integral_sal
             <field name="amount_python_compute">
 # Auxilio de Transporte: valor parametrizado en la empresa
 _aux_trans = employee.company_id.l10n_co_ne_aux_transporte or 162000
-result = _aux_trans / 30 * (worked_days.WORK100.number_of_days if worked_days.WORK100 else 30)
+result = _aux_trans / 30 * (worked_days['WORK100'].number_of_days if 'WORK100' in worked_days else 30)
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Transporte</field>
