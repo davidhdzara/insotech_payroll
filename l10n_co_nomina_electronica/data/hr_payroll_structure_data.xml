@@ -677,7 +677,7 @@ result = inputs['CO_INT_CES'].amount
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = categories.DEV</field>
+            <field name="amount_python_compute">result = categories['DEV']</field>
             <field name="appears_on_payslip" eval="True"/>
         </record>
 
@@ -698,7 +698,7 @@ result = inputs['CO_INT_CES'].amount
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # IBC para salud = total salarial (simplificado)
-ibc = categories.DEV_SAL
+ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
 result = -abs(ibc * 0.04)
@@ -721,7 +721,7 @@ result = not employee.l10n_co_ne_foreigner_no_pension
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = categories.DEV_SAL
+ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
 result = -abs(ibc * 0.04)
@@ -741,7 +741,7 @@ result = -abs(ibc * 0.04)
             <field name="condition_python">
 # Aplica desde 4 SMMLV
 SMMLV = employee.company_id.l10n_co_ne_smmlv or 1300000
-ibc = categories.DEV_SAL
+ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
 result = ibc &gt;= SMMLV * 4
@@ -750,7 +750,7 @@ result = ibc &gt;= SMMLV * 4
             <field name="amount_python_compute">
 # 1% desde 4 SMMLV, escala adicional desde 16 SMMLV
 SMMLV = employee.company_id.l10n_co_ne_smmlv or 1300000
-ibc = categories.DEV_SAL
+ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
 pct = 0.01  # 1% base
@@ -871,7 +871,7 @@ result = (inputs.get('CO_EMBARGO') and inputs.get('CO_EMBARGO').amount &gt; 0) o
             <field name="amount_python_compute">
 # Embargo con topes legales Art. 155 CST
 _smmlv = employee.company_id.l10n_co_ne_smmlv or 1300000
-_salario = categories.DEV
+_salario = categories['DEV']
 _total_embargo = 0.0
 for embargo in employee.l10n_co_embargo_ids:
     if embargo.state == 'active':
@@ -937,7 +937,7 @@ result = -abs(_total_embargo) if _total_embargo &gt; 0 else 0
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = categories.DEV + categories.DEDU</field>
+            <field name="amount_python_compute">result = categories['DEV'] + categories['DEDU']</field>
             <field name="appears_on_payslip" eval="True"/>
         </record>
 
@@ -956,7 +956,7 @@ result = -abs(_total_embargo) if _total_embargo &gt; 0 else 0
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = categories.DEV_SAL
+ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
 result = ibc * 0.085
@@ -975,7 +975,7 @@ result = ibc * 0.085
             <field name="condition_python">result = not employee.l10n_co_ne_foreigner_no_pension</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = categories.DEV_SAL
+ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
 result = ibc * 0.12
@@ -995,7 +995,7 @@ result = ibc * 0.12
             <field name="amount_python_compute">
 # El % de ARL depende del nivel de riesgo (I: 0.522%, II: 1.044%, III: 2.436%, IV: 4.350%, V: 6.960%)
 # Se usa Nivel I como default, el usuario puede ajustar
-ibc = categories.DEV_SAL
+ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
 result = ibc * 0.00522
@@ -1013,7 +1013,7 @@ result = ibc * 0.00522
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = categories.DEV_SAL
+ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
 result = ibc * 0.04
@@ -1034,7 +1034,7 @@ result = ibc * 0.04
 # Empleados con salario &lt; 10 SMMLV están exonerados para ciertos empleadores
 SMMLV = employee.company_id.l10n_co_ne_smmlv or 1300000
 if employee.company_id.l10n_co_ne_exoneration_1607:
-    ibc = categories.DEV_SAL
+    ibc = categories['DEV_SAL']
     if contract.l10n_co_ne_integral_salary:
         ibc = contract.wage * 0.70
     result = ibc &gt;= SMMLV * 10
@@ -1043,7 +1043,7 @@ else:
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = categories.DEV_SAL
+ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
 result = ibc * 0.02
@@ -1062,7 +1062,7 @@ result = ibc * 0.02
             <field name="condition_python">result = True</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = categories.DEV_SAL
+ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
 result = ibc * 0.03
