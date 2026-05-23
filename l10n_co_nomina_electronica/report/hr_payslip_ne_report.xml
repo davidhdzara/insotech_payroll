@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ===================================================================
+         Registro del reporte de Comprobante de Nómina Electrónica (PDF)
+         Resolución 000013 de 2021 - DIAN Colombia
+         =================================================================== -->
+    <record id="action_report_payslip_ne" model="ir.actions.report">
+        <field name="name">Comprobante Nómina Electrónica</field>
+        <field name="model">hr.payslip</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">l10n_co_nomina_electronica.report_payslip_ne</field>
+        <field name="report_file">l10n_co_nomina_electronica.report_payslip_ne</field>
+        <field name="binding_model_id" ref="hr_payroll.model_hr_payslip"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <!-- ===================================================================
+         Plantilla QWeb del Comprobante de Nómina Electrónica
+         Secciones:
+           1. Encabezado con datos de empresa y consecutivo NE
+           2. Datos del empleado y período de nómina
+           3. Tabla de conceptos (devengados y deducciones)
+           4. Totales y neto a pagar
+           5. Información de nómina electrónica (CUNE, estado)
+           6. Espacio para firma del empleado
+         =================================================================== -->
+    <template id="report_payslip_ne">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <div class="page">
+                        <!-- ============================================
+                             SECCIÓN 1: ENCABEZADO
+                             Datos de la empresa y número consecutivo NE
+                             ============================================ -->
+                        <div class="row" style="margin-bottom: 20px;">
+                            <div class="col-8">
+                                <h3 style="color: #2c3e50;">COMPROBANTE DE NÓMINA ELECTRÓNICA</h3>
+                                <p style="margin: 0;"><strong>Empresa:</strong> <span t-field="o.company_id.name"/></p>
+                                <p style="margin: 0;"><strong>NIT:</strong> <span t-field="o.company_id.vat"/></p>
+                                <p style="margin: 0;"><strong>Dirección:</strong> <span t-field="o.company_id.street"/></p>
+                            </div>
+                            <div class="col-4 text-end">
+                                <p style="margin: 0;"><strong>No.:</strong> <span t-field="o.l10n_co_ne_consecutive"/></p>
+                                <p style="margin: 0;"><strong>Fecha:</strong> <span t-field="o.date_to" t-options='{"format": "dd/MM/yyyy"}'/></p>
+                                <p style="margin: 0;"><strong>CUNE:</strong></p>
+                                <p style="font-size: 8px; word-break: break-all;"><span t-field="o.l10n_co_ne_cune"/></p>
+                            </div>
+                        </div>
+
+                        <!-- ============================================
+                             SECCIÓN 2: DATOS DEL EMPLEADO
+                             Información personal, cargo, período y salario
+                             ============================================ -->
+                        <div class="row" style="background-color: #ecf0f1; padding: 10px; margin-bottom: 15px; border-radius: 4px;">
+                            <div class="col-6">
+                                <p style="margin: 2px 0;"><strong>Empleado:</strong> <span t-field="o.employee_id.name"/></p>
+                                <p style="margin: 2px 0;"><strong>Documento:</strong> <span t-field="o.employee_id.identification_id"/></p>
+                                <p style="margin: 2px 0;"><strong>Cargo:</strong> <span t-field="o.employee_id.job_title"/></p>
+                            </div>
+                            <div class="col-6">
+                                <p style="margin: 2px 0;"><strong>Período:</strong> <span t-field="o.date_from" t-options='{"format": "dd/MM/yyyy"}'/> - <span t-field="o.date_to" t-options='{"format": "dd/MM/yyyy"}'/></p>
+                                <p style="margin: 2px 0;"><strong>Salario:</strong> <span t-field="o.contract_id.wage" t-options='{"widget": "monetary", "display_currency": o.company_id.currency_id}'/></p>
+                                <p style="margin: 2px 0;"><strong>Días trabajados:</strong>
+                                    <t t-foreach="o.worked_days_line_ids" t-as="wd">
+                                        <t t-if="wd.code == 'WORK100'"><span t-field="wd.number_of_days"/></t>
+                                    </t>
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- ============================================
+                             SECCIÓN 3: TABLA DE CONCEPTOS
+                             Líneas de nómina con devengados y deducciones
+                             ============================================ -->
+                        <table class="table table-sm table-bordered" style="font-size: 11px;">
+                            <thead style="background-color: #2c3e50; color: white;">
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Concepto</th>
+                                    <th class="text-end">Devengado</th>
+                                    <th class="text-end">Deducción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="o.line_ids" t-as="line">
+                                    <t t-if="line.appears_on_payslip">
+                                        <tr>
+                                            <td><span t-field="line.code"/></td>
+                                            <td><span t-field="line.name"/></td>
+                                            <td class="text-end">
+                                                <t t-if="line.total &gt;= 0">
+                                                    <span t-field="line.total" t-options='{"widget": "monetary", "display_currency": o.company_id.currency_id}'/>
+                                                </t>
+                                            </td>
+                                            <td class="text-end">
+                                                <t t-if="line.total &lt; 0">
+                                                    <span t-esc="'{:,.0f}'.format(abs(line.total))"/>
+                                                </t>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                </t>
+                            </tbody>
+                            <!-- ============================================
+                                 SECCIÓN 4: TOTALES Y NETO A PAGAR
+                                 ============================================ -->
+                            <tfoot style="background-color: #ecf0f1; font-weight: bold;">
+                                <tr>
+                                    <td colspan="2">TOTALES</td>
+                                    <td class="text-end">
+                                        <span t-esc="'{:,.0f}'.format(sum(line.total for line in o.line_ids if line.total &gt;= 0 and line.appears_on_payslip))"/>
+                                    </td>
+                                    <td class="text-end">
+                                        <span t-esc="'{:,.0f}'.format(abs(sum(line.total for line in o.line_ids if line.total &lt; 0 and line.appears_on_payslip)))"/>
+                                    </td>
+                                </tr>
+                                <tr style="background-color: #27ae60; color: white; font-size: 14px;">
+                                    <td colspan="3">NETO A PAGAR</td>
+                                    <td class="text-end">
+                                        <span t-esc="'{:,.0f}'.format(sum(line.total for line in o.line_ids if line.appears_on_payslip))"/>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                        <!-- ============================================
+                             SECCIÓN 5: INFORMACIÓN NE Y FIRMA
+                             Estado NE, CUNE, referencia legal y firma
+                             ============================================ -->
+                        <div class="row" style="margin-top: 20px; font-size: 10px; color: #7f8c8d;">
+                            <div class="col-8">
+                                <p style="margin: 2px 0;"><strong>Estado NE:</strong> <span t-field="o.l10n_co_ne_state"/></p>
+                                <p style="margin: 2px 0;"><strong>CUNE:</strong> <span t-field="o.l10n_co_ne_cune"/></p>
+                                <p style="margin-top: 10px;">Documento generado electrónicamente conforme a la Resolución 000013 de 2021 - DIAN</p>
+                            </div>
+                            <!-- SECCIÓN 6: FIRMA DEL EMPLEADO -->
+                            <div class="col-4 text-end">
+                                <p style="margin: 2px 0;"><strong>Firma del empleado</strong></p>
+                                <div style="border-bottom: 1px solid #333; margin-top: 40px; width: 200px; margin-left: auto;"/>
+                                <p style="margin: 2px 0;"><span t-field="o.employee_id.name"/></p>
+                                <p style="margin: 2px 0;">C.C. <span t-field="o.employee_id.identification_id"/></p>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>

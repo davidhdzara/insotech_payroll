@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Parámetros por defecto de Nómina Colombiana.
+
+    noupdate="1": los valores definidos aquí se cargan solo en la primera
+    instalación del módulo. Si el usuario los modifica manualmente en la
+    configuración de la compañía, los cambios NO serán sobrescritos
+    al actualizar el módulo.
+
+    Estos valores corresponden al año fiscal 2024 y deben ser
+    actualizados manualmente cada 1 de enero desde la configuración
+    de la compañía.
+-->
+<odoo noupdate="1">
+
+    <!-- ============================================================ -->
+    <!-- Parámetros de Nómina – Valores por Defecto 2024               -->
+    <!-- ============================================================ -->
+
+    <!--
+        Se utiliza un record sobre res.company apuntando a la compañía
+        principal (base.main_company) para precargar los valores.
+    -->
+    <record id="base.main_company" model="res.company">
+        <!-- SMMLV 2024: $1.300.000 COP -->
+        <field name="l10n_co_ne_smmlv">1300000</field>
+
+        <!-- Auxilio de Transporte 2024: $162.000 COP -->
+        <field name="l10n_co_ne_aux_transporte">162000</field>
+
+        <!-- UVT 2024: $47.065 COP -->
+        <field name="l10n_co_ne_uvt">47065</field>
+
+        <!-- Exoneración Ley 1607/2012: deshabilitada por defecto -->
+        <field name="l10n_co_ne_exoneration_1607" eval="False"/>
+    </record>
+
+</odoo>
