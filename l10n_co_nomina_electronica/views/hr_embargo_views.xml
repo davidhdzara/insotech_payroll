@@ -146,7 +146,7 @@
             <xpath expr="//notebook" position="inside">
                 <page string="Embargos Judiciales" name="embargos">
                     <field name="l10n_co_embargo_ids" nolabel="1"
-                           context="{'default_employee_id': active_id}">
+                           context="{'default_employee_id': id}">
                         <list editable="bottom">
                             <field name="name"/>
                             <field name="tipo_embargo"/>
