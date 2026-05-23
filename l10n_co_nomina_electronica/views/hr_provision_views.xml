@@ -222,7 +222,7 @@
     <!-- ============================================================ -->
     <menuitem id="menu_l10n_co_nomina_provisiones_root"
               name="Provisiones"
-              parent="hr_payroll.menu_hr_payroll_root"
+              parent="hr_work_entry_contract_enterprise.menu_hr_payroll_root"
               sequence="50"/>
 
     <menuitem id="menu_l10n_co_nomina_provisiones_list"
@@ -231,12 +231,5 @@
               action="action_l10n_co_hr_provision"
               sequence="10"
               groups="hr_payroll.group_hr_payroll_user"/>
-
-    <menuitem id="menu_l10n_co_nomina_provisiones_wizard"
-              name="Generar Provisión"
-              parent="menu_l10n_co_nomina_provisiones_root"
-              action="action_l10n_co_hr_provision_wizard"
-              sequence="20"
-              groups="hr_payroll.group_hr_payroll_manager"/>
 
 </odoo>

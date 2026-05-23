@@ -68,6 +68,12 @@ class L10nCoHrLiquidacion(models.Model):
         store=True,
         help='Compañía del contrato.',
     )
+    currency_id = fields.Many2one(
+        related='company_id.currency_id',
+        string='Moneda',
+        store=True,
+        readonly=True,
+    )
     date_start = fields.Date(
         string='Fecha Inicio Contrato',
         help='Fecha de inicio del contrato laboral. Se toma de '

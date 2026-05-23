@@ -110,7 +110,7 @@ _period = int(contract.l10n_co_payroll_period or 30)
 result = contract.wage / 30 * worked_days.WORK100.number_of_days if worked_days.WORK100 else contract.wage * _period / 30
             </field>
             <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">Basico</field>
+            <field name="l10n_co_ne_dian_concept">Sueldo</field>
             <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 

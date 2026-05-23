@@ -43,4 +43,12 @@
         <field name="target">new</field>
     </record>
 
+    <!-- Menu item moved here from hr_provision_views.xml to avoid forward reference -->
+    <menuitem id="menu_l10n_co_nomina_provisiones_wizard"
+              name="Generar Provisión"
+              parent="menu_l10n_co_nomina_provisiones_root"
+              action="action_l10n_co_hr_provision_wizard"
+              sequence="20"
+              groups="hr_payroll.group_hr_payroll_manager"/>
+
 </odoo>

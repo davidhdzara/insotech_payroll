@@ -14,11 +14,11 @@
                             string="Generar Reporte"
                             type="object"
                             class="btn-primary"
-                            invisible="state == 'done'"
+                            invisible="state == 'generated'"
                             groups="hr_payroll.group_hr_payroll_manager"/>
                     <field name="state"
                            widget="statusbar"
-                           statusbar_visible="draft,done"/>
+                           statusbar_visible="draft,generated"/>
                 </header>
                 <sheet>
                     <div class="oe_title">
@@ -38,7 +38,7 @@
                                    groups="base.group_multi_company"/>
                         </group>
                     </group>
-                    <group string="Resultado" invisible="state != 'done'">
+                    <group string="Resultado" invisible="state != 'generated'">
                         <field name="excel_file"
                                string="Archivo Excel"
                                filename="excel_filename"/>
@@ -63,7 +63,7 @@
                 <field name="state" string="Estado"
                        widget="badge"
                        decoration-info="state == 'draft'"
-                       decoration-success="state == 'done'"/>
+                       decoration-success="state == 'generated'"/>
             </list>
         </field>
     </record>

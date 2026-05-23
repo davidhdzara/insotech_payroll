@@ -173,7 +173,7 @@
     <menuitem id="l10n_co_retefuente_menu"
               name="Retención en la Fuente"
               action="l10n_co_retefuente_uvt_action"
-              parent="hr_payroll.menu_hr_payroll_configuration"
+              parent="hr_work_entry_contract_enterprise.menu_hr_payroll_configuration"
               sequence="40"/>
 
 </odoo>

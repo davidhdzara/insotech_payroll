@@ -75,6 +75,12 @@ class L10nCoHrProvision(models.Model):
         default=lambda self: self.env.company,
         help='Compañía a la que pertenece esta provisión.',
     )
+    currency_id = fields.Many2one(
+        related='company_id.currency_id',
+        string='Moneda',
+        store=True,
+        readonly=True,
+    )
     line_ids = fields.One2many(
         comodel_name='l10n.co.hr.provision.line',
         inverse_name='provision_id',

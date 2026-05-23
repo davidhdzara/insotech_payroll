@@ -131,7 +131,7 @@
     <menuitem id="menu_l10n_co_hr_embargo"
               name="Embargos Judiciales"
               action="action_l10n_co_hr_embargo"
-              parent="hr_payroll.menu_hr_payroll_root"
+              parent="hr_work_entry_contract_enterprise.menu_hr_payroll_root"
               sequence="25"/>
 
     <!-- ============================================================ -->

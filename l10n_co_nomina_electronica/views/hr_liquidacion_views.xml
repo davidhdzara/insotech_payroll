@@ -266,7 +266,7 @@
     <!-- ============================================================ -->
     <menuitem id="menu_l10n_co_liquidaciones_root"
               name="Liquidaciones"
-              parent="hr_payroll.menu_hr_payroll_root"
+              parent="hr_work_entry_contract_enterprise.menu_hr_payroll_root"
               sequence="60"/>
 
     <menuitem id="menu_l10n_co_liquidaciones_list"

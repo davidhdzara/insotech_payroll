@@ -46,7 +46,6 @@ Funcionalidades principales:
         # Security
         'security/ir.model.access.csv',
         # Data
-        'data/dane_municipalities.csv',
         'data/ir_sequence_data.xml',
         'data/hr_payroll_params_data.xml',
         'data/hr_payroll_structure_data.xml',
