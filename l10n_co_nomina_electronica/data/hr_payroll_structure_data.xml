@@ -147,12 +147,12 @@ result = _aux_trans / 30 * (worked_days['WORK100'].number_of_days if 'WORK100' i
             <field name="category_id" ref="hr_salary_rule_category_horas_extra"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_HED and inputs.CO_HED.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_HED') and inputs.get('CO_HED').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # HED = valor hora * 1.25
 valor_hora = contract.wage / 240
-result = valor_hora * 1.25 * inputs.CO_HED.amount
+result = valor_hora * 1.25 * inputs['CO_HED'].amount
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">HED</field>
@@ -166,12 +166,12 @@ result = valor_hora * 1.25 * inputs.CO_HED.amount
             <field name="category_id" ref="hr_salary_rule_category_horas_extra"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_HEN and inputs.CO_HEN.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_HEN') and inputs.get('CO_HEN').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # HEN = valor hora * 1.75
 valor_hora = contract.wage / 240
-result = valor_hora * 1.75 * inputs.CO_HEN.amount
+result = valor_hora * 1.75 * inputs['CO_HEN'].amount
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">HEN</field>
@@ -185,12 +185,12 @@ result = valor_hora * 1.75 * inputs.CO_HEN.amount
             <field name="category_id" ref="hr_salary_rule_category_horas_extra"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_HRN and inputs.CO_HRN.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_HRN') and inputs.get('CO_HRN').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # HRN = valor hora * 0.35
 valor_hora = contract.wage / 240
-result = valor_hora * 0.35 * inputs.CO_HRN.amount
+result = valor_hora * 0.35 * inputs['CO_HRN'].amount
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">HRN</field>
@@ -204,12 +204,12 @@ result = valor_hora * 0.35 * inputs.CO_HRN.amount
             <field name="category_id" ref="hr_salary_rule_category_horas_extra"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_HEDDF and inputs.CO_HEDDF.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_HEDDF') and inputs.get('CO_HEDDF').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # HEDDF = valor hora * 2.00
 valor_hora = contract.wage / 240
-result = valor_hora * 2.00 * inputs.CO_HEDDF.amount
+result = valor_hora * 2.00 * inputs['CO_HEDDF'].amount
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">HEDDF</field>
@@ -223,12 +223,12 @@ result = valor_hora * 2.00 * inputs.CO_HEDDF.amount
             <field name="category_id" ref="hr_salary_rule_category_horas_extra"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_HENDF and inputs.CO_HENDF.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_HENDF') and inputs.get('CO_HENDF').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # HENDF = valor hora * 2.50
 valor_hora = contract.wage / 240
-result = valor_hora * 2.50 * inputs.CO_HENDF.amount
+result = valor_hora * 2.50 * inputs['CO_HENDF'].amount
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">HENDF</field>
@@ -242,12 +242,12 @@ result = valor_hora * 2.50 * inputs.CO_HENDF.amount
             <field name="category_id" ref="hr_salary_rule_category_horas_extra"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_HRDDF and inputs.CO_HRDDF.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_HRDDF') and inputs.get('CO_HRDDF').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # HRDDF = valor hora * 1.75
 valor_hora = contract.wage / 240
-result = valor_hora * 1.75 * inputs.CO_HRDDF.amount
+result = valor_hora * 1.75 * inputs['CO_HRDDF'].amount
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">HRDDF</field>
@@ -261,12 +261,12 @@ result = valor_hora * 1.75 * inputs.CO_HRDDF.amount
             <field name="category_id" ref="hr_salary_rule_category_horas_extra"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_HRNDF and inputs.CO_HRNDF.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_HRNDF') and inputs.get('CO_HRNDF').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # HRNDF = valor hora * 2.10
 valor_hora = contract.wage / 240
-result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
+result = valor_hora * 2.10 * inputs['CO_HRNDF'].amount
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">HRNDF</field>
@@ -281,9 +281,9 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="category_id" ref="hr_salary_rule_category_devengados_salariales"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_COMISIONES and inputs.CO_COMISIONES.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_COMISIONES') and inputs.get('CO_COMISIONES').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_COMISIONES.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_COMISIONES'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Comision</field>
             <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
@@ -297,9 +297,9 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="category_id" ref="hr_salary_rule_category_devengados_salariales"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_BONIF_SAL and inputs.CO_BONIF_SAL.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_BONIF_SAL') and inputs.get('CO_BONIF_SAL').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_BONIF_SAL.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_BONIF_SAL'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">BonificacionS</field>
             <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
@@ -312,9 +312,9 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="category_id" ref="hr_salary_rule_category_devengados_no_salariales"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_BONIF_NOSAL and inputs.CO_BONIF_NOSAL.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_BONIF_NOSAL') and inputs.get('CO_BONIF_NOSAL').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_BONIF_NOSAL.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_BONIF_NOSAL'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">BonificacionNS</field>
             <field name="l10n_co_ugpp_payment_type">tp_no_salarial</field>
@@ -329,9 +329,9 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="category_id" ref="hr_salary_rule_category_devengados_no_salariales"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_AUX_ALIM and inputs.CO_AUX_ALIM.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_AUX_ALIM') and inputs.get('CO_AUX_ALIM').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_AUX_ALIM.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_AUX_ALIM'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">BonoAlimNS</field>
             <field name="l10n_co_ugpp_payment_type">tp_no_salarial</field>
@@ -346,9 +346,9 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="category_id" ref="hr_salary_rule_category_devengados_salariales"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_VIATICOS_SAL and inputs.CO_VIATICOS_SAL.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_VIATICOS_SAL') and inputs.get('CO_VIATICOS_SAL').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_VIATICOS_SAL.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_VIATICOS_SAL'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">ViaticoS</field>
             <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
@@ -361,9 +361,9 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="category_id" ref="hr_salary_rule_category_devengados_no_salariales"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_VIATICOS_NOSAL and inputs.CO_VIATICOS_NOSAL.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_VIATICOS_NOSAL') and inputs.get('CO_VIATICOS_NOSAL').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_VIATICOS_NOSAL.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_VIATICOS_NOSAL'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">ViaticoNS</field>
             <field name="l10n_co_ugpp_payment_type">tp_no_salarial</field>
@@ -378,9 +378,9 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="category_id" ref="hr_salary_rule_category_devengados_no_salariales"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_DOTACION and inputs.CO_DOTACION.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_DOTACION') and inputs.get('CO_DOTACION').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_DOTACION.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_DOTACION'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Dotacion</field>
             <field name="l10n_co_ugpp_payment_type">tp_no_salarial</field>
@@ -395,9 +395,9 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="category_id" ref="hr_salary_rule_category_devengados_no_salariales"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_TELETRABAJO and inputs.CO_TELETRABAJO.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_TELETRABAJO') and inputs.get('CO_TELETRABAJO').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_TELETRABAJO.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_TELETRABAJO'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Teletrabajo</field>
             <field name="l10n_co_ugpp_payment_type">tp_no_salarial</field>
@@ -414,13 +414,13 @@ result = valor_hora * 2.10 * inputs.CO_HRNDF.amount
             <field name="category_id" ref="hr_salary_rule_category_incapacidades"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_INC_COMUN and inputs.CO_INC_COMUN.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_INC_COMUN') and inputs.get('CO_INC_COMUN').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Primeros 2 días: 100% a cargo del empleador
 # Días 3-90: 66.67% pagado por EPS
 # Días 91+: 50% pagado por EPS
-dias = inputs.CO_INC_COMUN.amount
+dias = inputs['CO_INC_COMUN'].amount
 valor_dia = contract.wage / 30
 if dias &lt;= 2:
     result = valor_dia * dias
@@ -441,11 +441,11 @@ else:
             <field name="category_id" ref="hr_salary_rule_category_incapacidades"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_INC_LABORAL and inputs.CO_INC_LABORAL.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_INC_LABORAL') and inputs.get('CO_INC_LABORAL').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # ARL paga 100% desde el primer día
-dias = inputs.CO_INC_LABORAL.amount
+dias = inputs['CO_INC_LABORAL'].amount
 result = (contract.wage / 30) * dias
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -460,11 +460,11 @@ result = (contract.wage / 30) * dias
             <field name="category_id" ref="hr_salary_rule_category_incapacidades"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_LIC_MAT and inputs.CO_LIC_MAT.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_LIC_MAT') and inputs.get('CO_LIC_MAT').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # 18 semanas (126 días) al 100% del salario, pagado por EPS
-dias = inputs.CO_LIC_MAT.amount
+dias = inputs['CO_LIC_MAT'].amount
 result = (contract.wage / 30) * dias
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -479,11 +479,11 @@ result = (contract.wage / 30) * dias
             <field name="category_id" ref="hr_salary_rule_category_incapacidades"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_LIC_PAT and inputs.CO_LIC_PAT.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_LIC_PAT') and inputs.get('CO_LIC_PAT').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # 2 semanas (14 días) al 100%, pagado por EPS
-dias = inputs.CO_LIC_PAT.amount
+dias = inputs['CO_LIC_PAT'].amount
 result = (contract.wage / 30) * dias
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -498,10 +498,10 @@ result = (contract.wage / 30) * dias
             <field name="category_id" ref="hr_salary_rule_category_incapacidades"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_LIC_REM and inputs.CO_LIC_REM.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_LIC_REM') and inputs.get('CO_LIC_REM').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-dias = inputs.CO_LIC_REM.amount
+dias = inputs['CO_LIC_REM'].amount
 result = (contract.wage / 30) * dias
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -516,7 +516,7 @@ result = (contract.wage / 30) * dias
             <field name="category_id" ref="hr_salary_rule_category_incapacidades"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_LIC_NR and inputs.CO_LIC_NR.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_LIC_NR') and inputs.get('CO_LIC_NR').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">result = 0  # No genera pago</field>
             <field name="appears_on_payslip" eval="True"/>
@@ -534,11 +534,11 @@ result = (contract.wage / 30) * dias
             <field name="category_id" ref="hr_salary_rule_category_vacaciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_VAC and inputs.CO_VAC.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_VAC') and inputs.get('CO_VAC').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # 15 días hábiles por año (Art. 186 CST)
-dias = inputs.CO_VAC.amount
+dias = inputs['CO_VAC'].amount
 result = (contract.wage / 30) * dias
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -553,9 +553,9 @@ result = (contract.wage / 30) * dias
             <field name="category_id" ref="hr_salary_rule_category_vacaciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_VAC_COMP and inputs.CO_VAC_COMP.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_VAC_COMP') and inputs.get('CO_VAC_COMP').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_VAC_COMP.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_VAC_COMP'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">VacacionesCompensadas</field>
             <field name="l10n_co_ugpp_payment_type">tp_vacaciones_terminacion</field>
@@ -571,11 +571,11 @@ result = (contract.wage / 30) * dias
             <field name="category_id" ref="hr_salary_rule_category_prestaciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_PRIMA and inputs.CO_PRIMA.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_PRIMA') and inputs.get('CO_PRIMA').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Prima = (salario + auxilio transporte) * días / 360
-result = inputs.CO_PRIMA.amount
+result = inputs['CO_PRIMA'].amount
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Primas</field>
@@ -589,11 +589,11 @@ result = inputs.CO_PRIMA.amount
             <field name="category_id" ref="hr_salary_rule_category_prestaciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_CESANTIAS and inputs.CO_CESANTIAS.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_CESANTIAS') and inputs.get('CO_CESANTIAS').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Cesantías = (salario + auxilio transporte) * días / 360
-result = inputs.CO_CESANTIAS.amount
+result = inputs['CO_CESANTIAS'].amount
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Cesantias</field>
@@ -607,11 +607,11 @@ result = inputs.CO_CESANTIAS.amount
             <field name="category_id" ref="hr_salary_rule_category_prestaciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_INT_CES and inputs.CO_INT_CES.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_INT_CES') and inputs.get('CO_INT_CES').amount > 0</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Intereses = cesantías * 12% * días / 360
-result = inputs.CO_INT_CES.amount
+result = inputs['CO_INT_CES'].amount
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">InteresesCesantias</field>
@@ -626,9 +626,9 @@ result = inputs.CO_INT_CES.amount
             <field name="category_id" ref="hr_salary_rule_category_devengados_no_salariales"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_APOYO_SOST and inputs.CO_APOYO_SOST.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_APOYO_SOST') and inputs.get('CO_APOYO_SOST').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_APOYO_SOST.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_APOYO_SOST'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">ApoyoSost</field>
             <field name="l10n_co_ugpp_payment_type">tp_estudiantes</field>
@@ -641,9 +641,9 @@ result = inputs.CO_INT_CES.amount
             <field name="category_id" ref="hr_salary_rule_category_devengados_no_salariales"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_BONIF_RET and inputs.CO_BONIF_RET.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_BONIF_RET') and inputs.get('CO_BONIF_RET').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_BONIF_RET.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_BONIF_RET'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">BonifRetiro</field>
             <field name="l10n_co_ugpp_payment_type">tp_no_salarial</field>
@@ -657,9 +657,9 @@ result = inputs.CO_INT_CES.amount
             <field name="category_id" ref="hr_salary_rule_category_devengados_no_salariales"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_INDEMNIZ and inputs.CO_INDEMNIZ.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_INDEMNIZ') and inputs.get('CO_INDEMNIZ').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = inputs.CO_INDEMNIZ.amount</field>
+            <field name="amount_python_compute">result = inputs['CO_INDEMNIZ'].amount</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Indemnizacion</field>
             <field name="l10n_co_ugpp_payment_type">tp_no_salarial</field>
@@ -779,9 +779,9 @@ result = -abs(ibc * pct)
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_RETEFUENTE and inputs.CO_RETEFUENTE.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_RETEFUENTE') and inputs.get('CO_RETEFUENTE').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = -abs(inputs.CO_RETEFUENTE.amount)</field>
+            <field name="amount_python_compute">result = -abs(inputs['CO_RETEFUENTE'].amount)</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">RetencionFuente</field>
         </record>
@@ -793,9 +793,9 @@ result = -abs(ibc * pct)
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_LIBRANZAS and inputs.CO_LIBRANZAS.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_LIBRANZAS') and inputs.get('CO_LIBRANZAS').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = -abs(inputs.CO_LIBRANZAS.amount)</field>
+            <field name="amount_python_compute">result = -abs(inputs['CO_LIBRANZAS'].amount)</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Libranza</field>
         </record>
@@ -807,9 +807,9 @@ result = -abs(ibc * pct)
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_SINDICATO and inputs.CO_SINDICATO.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_SINDICATO') and inputs.get('CO_SINDICATO').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = -abs(inputs.CO_SINDICATO.amount)</field>
+            <field name="amount_python_compute">result = -abs(inputs['CO_SINDICATO'].amount)</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Sindicato</field>
         </record>
@@ -821,9 +821,9 @@ result = -abs(ibc * pct)
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_AFC and inputs.CO_AFC.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_AFC') and inputs.get('CO_AFC').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = -abs(inputs.CO_AFC.amount)</field>
+            <field name="amount_python_compute">result = -abs(inputs['CO_AFC'].amount)</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">AFC</field>
         </record>
@@ -835,9 +835,9 @@ result = -abs(ibc * pct)
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_PENSION_VOL and inputs.CO_PENSION_VOL.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_PENSION_VOL') and inputs.get('CO_PENSION_VOL').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = -abs(inputs.CO_PENSION_VOL.amount)</field>
+            <field name="amount_python_compute">result = -abs(inputs['CO_PENSION_VOL'].amount)</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">PensionVoluntaria</field>
         </record>
@@ -849,9 +849,9 @@ result = -abs(ibc * pct)
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_COOPERATIVA and inputs.CO_COOPERATIVA.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_COOPERATIVA') and inputs.get('CO_COOPERATIVA').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = -abs(inputs.CO_COOPERATIVA.amount)</field>
+            <field name="amount_python_compute">result = -abs(inputs['CO_COOPERATIVA'].amount)</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Cooperativa</field>
         </record>
@@ -865,7 +865,7 @@ result = -abs(ibc * pct)
             <field name="condition_select">python</field>
             <field name="condition_python">
 # Aplica si hay input manual o embargos activos registrados
-result = (inputs.CO_EMBARGO and inputs.CO_EMBARGO.amount &gt; 0) or len(employee.l10n_co_embargo_ids.filtered(lambda e: e.state == 'active')) &gt; 0
+result = (inputs.get('CO_EMBARGO') and inputs.get('CO_EMBARGO').amount &gt; 0) or len(employee.l10n_co_embargo_ids.filtered(lambda e: e.state == 'active')) &gt; 0
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
@@ -876,8 +876,8 @@ _total_embargo = 0.0
 for embargo in employee.l10n_co_embargo_ids:
     if embargo.state == 'active':
         _total_embargo += embargo.compute_embargo_amount(_salario, _smmlv)
-if inputs.CO_EMBARGO and inputs.CO_EMBARGO.amount &gt; 0:
-    _total_embargo = max(_total_embargo, inputs.CO_EMBARGO.amount)
+if inputs.get('CO_EMBARGO') and inputs.get('CO_EMBARGO').amount &gt; 0:
+    _total_embargo = max(_total_embargo, inputs['CO_EMBARGO'].amount)
 result = -abs(_total_embargo) if _total_embargo &gt; 0 else 0
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -891,9 +891,9 @@ result = -abs(_total_embargo) if _total_embargo &gt; 0 else 0
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_PLAN_COMP and inputs.CO_PLAN_COMP.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_PLAN_COMP') and inputs.get('CO_PLAN_COMP').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = -abs(inputs.CO_PLAN_COMP.amount)</field>
+            <field name="amount_python_compute">result = -abs(inputs['CO_PLAN_COMP'].amount)</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">PlanComplementarios</field>
         </record>
@@ -905,9 +905,9 @@ result = -abs(_total_embargo) if _total_embargo &gt; 0 else 0
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_EDUCACION and inputs.CO_EDUCACION.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_EDUCACION') and inputs.get('CO_EDUCACION').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = -abs(inputs.CO_EDUCACION.amount)</field>
+            <field name="amount_python_compute">result = -abs(inputs['CO_EDUCACION'].amount)</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Educacion</field>
         </record>
@@ -919,9 +919,9 @@ result = -abs(_total_embargo) if _total_embargo &gt; 0 else 0
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.CO_OTRAS_DED and inputs.CO_OTRAS_DED.amount > 0</field>
+            <field name="condition_python">result = inputs.get('CO_OTRAS_DED') and inputs.get('CO_OTRAS_DED').amount > 0</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = -abs(inputs.CO_OTRAS_DED.amount)</field>
+            <field name="amount_python_compute">result = -abs(inputs['CO_OTRAS_DED'].amount)</field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">OtraDeduccion</field>
         </record>
