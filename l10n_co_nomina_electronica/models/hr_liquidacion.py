@@ -283,14 +283,12 @@ class L10nCoHrLiquidacion(models.Model):
                 '4': 'aprendizaje',
                 '5': 'aprendizaje',
             }
-            dian_type = getattr(contract, 'l10n_co_ne_contract_type', False)
+            dian_type = contract.l10n_co_ne_contract_type
             if dian_type:
                 self.contract_type = type_map.get(dian_type, 'indefinido')
             # Aux transporte: aplica si salario <= 2 SMMLV y no integral
             smmlv = self.company_id.l10n_co_ne_smmlv or 1300000
-            is_integral = getattr(
-                contract, 'l10n_co_ne_integral_salary', False
-            )
+            is_integral = contract.l10n_co_ne_integral_salary
             if not is_integral and (contract.wage or 0) <= smmlv * 2:
                 self.aux_transporte = (
                     self.company_id.l10n_co_ne_aux_transporte or 162000

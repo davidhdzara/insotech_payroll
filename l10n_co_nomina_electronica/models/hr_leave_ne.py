@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from odoo import api, fields, models, _
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -122,8 +122,8 @@ class HrPayslipLeaveIntegration(models.Model):
         # hr.leave.date_from / date_to son Datetime; convertir a date
         leave_start_dt = leave.date_from
         leave_end_dt = leave.date_to
-        leave_start = leave_start_dt.date() if hasattr(leave_start_dt, 'date') else leave_start_dt
-        leave_end = leave_end_dt.date() if hasattr(leave_end_dt, 'date') else leave_end_dt
+        leave_start = leave_start_dt.date() if isinstance(leave_start_dt, datetime) else leave_start_dt
+        leave_end = leave_end_dt.date() if isinstance(leave_end_dt, datetime) else leave_end_dt
 
         # Recortar al período de la nómina
         period_start = max(leave_start, self.date_from)

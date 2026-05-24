@@ -8,6 +8,7 @@ Adaptado de insotech_core/utils/dian.py eliminando funciones que
 dependen de modelos Odoo (partner_to_dian_dict, get_partner_doc_type).
 """
 
+import math
 import re
 from datetime import date as _date_type
 from typing import Union
@@ -109,24 +110,27 @@ def get_doc_type_code(l10n_co_document_code: str) -> str:
 # =====================================================================
 
 def format_amount(value: Union[int, float, str]) -> str:
-    """Formatea un valor numérico a string con 2 decimales para CUNE.
+    """Formatea un valor numérico a string con 2 decimales truncados.
 
-    El cálculo del CUNE requiere que los montos se representen
-    con exactamente 2 decimales (ej: '1500000.00').
+    El cálculo del CUNE requiere que los montos se representen con
+    exactamente 2 decimales *truncados* (no redondeados) según el
+    Anexo Técnico DIAN.
 
     Args:
         value: Valor numérico (int, float o string numérico).
 
     Returns:
-        String con formato '%.2f' (ej: '1500000.00').
+        String con 2 decimales truncados (ej: '1500000.00').
 
     Examples:
         >>> format_amount(1500000)
         '1500000.00'
         >>> format_amount('25000.5')
         '25000.50'
+        >>> format_amount('25000.999')
+        '25000.99'
     """
-    return '%.2f' % float(value)
+    return '%.2f' % (math.trunc(float(value) * 100) / 100)
 
 
 # =====================================================================

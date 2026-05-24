@@ -122,6 +122,14 @@ class HrPayslip(models.Model):
         help='Respuesta completa del servicio web de la DIAN tras el '
              'envío del documento de nómina electrónica.',
     )
+    l10n_co_ne_zip_key = fields.Char(
+        string='ZipKey DIAN',
+        readonly=True,
+        copy=False,
+        help='Identificador (ZipKey/trackId) devuelto por la DIAN al '
+             'enviar el documento. Se usa para consultar el estado del '
+             'procesamiento (GetStatusZip).',
+    )
 
     # ──────────────────────────────────────────────────────────────────
     # Campos para Notas de Ajuste
@@ -222,7 +230,7 @@ class HrPayslip(models.Model):
         else:
             xml_bytes = nomina_xml_builder.build_nomina_individual(payslip_data)
 
-        # Calcular CUNE (10 argumentos posicionales según Anexo Técnico)
+        # Calcular CUNE (11 campos según Anexo Técnico, incluye Software-Pin)
         company = self.company_id
         cune_value, _raw = cune_service.compute_cune(
             num_ne=self.l10n_co_ne_consecutive,
@@ -234,6 +242,7 @@ class HrPayslip(models.Model):
             nit_ne=dian_utils.clean_nit(company.vat),
             doc_trab=self.employee_id.identification_id or '',
             cl_ne='103' if self.l10n_co_ne_is_adjustment else '102',
+            software_pin=company.l10n_co_ne_software_pin or '',
             tipo_amb=company.l10n_co_ne_environment or '2',
         )
         self.l10n_co_ne_cune = cune_value
@@ -348,6 +357,9 @@ class HrPayslip(models.Model):
 
         # Procesar respuesta DIAN
         self.l10n_co_ne_dian_response = response.get('RawResponse', '')
+        zip_key = response.get('ZipKey', '')
+        if zip_key:
+            self.l10n_co_ne_zip_key = zip_key
         is_valid = response.get('IsValid', '') == 'true'
 
         if is_valid:
@@ -519,8 +531,15 @@ class HrPayslip(models.Model):
     def action_check_dian_status(self):
         """Consulta el estado de un envío en la DIAN (GetStatusZip)."""
         self.ensure_one()
-        if not self.l10n_co_ne_cune:
-            raise UserError(_('Esta nómina no tiene CUNE asignado.'))
+        # GetStatusZip espera el ZipKey/trackId devuelto por el envío,
+        # no el CUNE. Para registros enviados antes de almacenar el ZipKey
+        # se recurre al CUNE como respaldo.
+        track_id = self.l10n_co_ne_zip_key or self.l10n_co_ne_cune
+        if not track_id:
+            raise UserError(_(
+                'Esta nómina no tiene ZipKey ni CUNE; envíela a la DIAN '
+                'antes de consultar su estado.'
+            ))
 
         company = self.company_id
         cert_data = base64.b64decode(company.l10n_co_ne_cert_file)
@@ -535,7 +554,7 @@ class HrPayslip(models.Model):
         )
 
         response = soap_client.get_status_zip(
-            track_id=self.l10n_co_ne_cune,
+            track_id=track_id,
             private_key=private_key,
             cert_pem=cert_pem,
             endpoint=endpoint,
@@ -637,8 +656,11 @@ class HrPayslip(models.Model):
             },
             'proveedor_xml': {
                 'RazonSocial': company.name or '',
-                'NIT': company.vat or '',
-                'DV': dian_utils.compute_dv(company.vat) if company.vat else '',
+                'NIT': dian_utils.clean_nit(company.vat),
+                'DV': (
+                    dian_utils.compute_dv(dian_utils.clean_nit(company.vat))
+                    if company.vat else ''
+                ),
                 'SoftwareID': company.l10n_co_ne_software_id or '',
                 'SoftwareSC': dian_utils.compute_software_security_code(
                     company.l10n_co_ne_software_id,
@@ -648,8 +670,11 @@ class HrPayslip(models.Model):
             },
             'empleador': {
                 'RazonSocial': company.name or '',
-                'NIT': company.vat or '',
-                'DV': dian_utils.compute_dv(company.vat) if company.vat else '',
+                'NIT': dian_utils.clean_nit(company.vat),
+                'DV': (
+                    dian_utils.compute_dv(dian_utils.clean_nit(company.vat))
+                    if company.vat else ''
+                ),
                 'Pais': 'CO',
                 'DepartamentoEstado': dian_utils.get_department_code(
                     company.state_id

@@ -5,14 +5,23 @@ de Nómina Electrónica de la DIAN (Resolución 000013 de 2021).
 
 El CUNE se calcula como SHA-384 de la concatenación de:
     NumNE + FecNE + HorNE + ValDev + ValDed + ValTolNE +
-    NitNE + DocTrab + ClNE + TipoAmb
+    NitNE + DocTrab + ClNE + SoftwarePin + TipoAmb
 
 Todas las funciones son puras — sin efectos secundarios ni
 dependencias de Odoo.
 """
 
 import hashlib
+import math
 from typing import Union
+
+
+def _truncate_amount(value: Union[str, float]) -> str:
+    """Formatea un monto truncando (no redondeando) a 2 decimales.
+
+    El Anexo Técnico exige decimales *truncados* a dos dígitos.
+    """
+    return '%.2f' % (math.trunc(float(value) * 100) / 100)
 
 
 def compute_cune(
@@ -26,6 +35,7 @@ def compute_cune(
     doc_trab: str,
     cl_ne: str,
     tipo_amb: str,
+    software_pin: str = '',
 ) -> tuple[str, str]:
     """Calcula el CUNE (Código Único de Nómina Electrónica).
 
@@ -50,6 +60,7 @@ def compute_cune(
         cl_ne: Código del tipo de XML:
                '102' para nómina individual,
                '103' para nómina de ajuste.
+        software_pin: PIN del software asignado por la DIAN.
         tipo_amb: Tipo de ambiente:
                   '1' para producción,
                   '2' para habilitación/pruebas.
@@ -63,15 +74,15 @@ def compute_cune(
         >>> cune, raw = compute_cune(
         ...     'NE001', '2024-01-15', '10:30:00-05:00',
         ...     '2500000.00', '350000.00', '2150000.00',
-        ...     '901797249', '1234567890', '102', '2'
+        ...     '901797249', '1234567890', '102', '2', '693'
         ... )
         >>> len(cune)
         96
     """
-    # Formatear montos a 2 decimales si vienen como float
-    val_dev_str = '%.2f' % float(val_dev)
-    val_ded_str = '%.2f' % float(val_ded)
-    val_tol_str = '%.2f' % float(val_tol)
+    # Montos con 2 decimales truncados (Anexo Técnico DIAN)
+    val_dev_str = _truncate_amount(val_dev)
+    val_ded_str = _truncate_amount(val_ded)
+    val_tol_str = _truncate_amount(val_tol)
 
     raw = (
         str(num_ne)
@@ -83,6 +94,7 @@ def compute_cune(
         + str(nit_ne)
         + str(doc_trab)
         + str(cl_ne)
+        + str(software_pin)
         + str(tipo_amb)
     )
 

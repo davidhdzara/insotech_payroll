@@ -18,6 +18,7 @@ Dependencias externas:
 Sin dependencias de Odoo.
 """
 
+import math
 from typing import Any, Optional, Union
 from lxml import etree
 
@@ -124,7 +125,11 @@ def _attr(
 
 
 def _fmt(value: Union[int, float, str, None], decimals: int = 2) -> str:
-    """Formatea un valor numérico a string con N decimales.
+    """Formatea un valor numérico a string con N decimales truncados.
+
+    El Anexo Técnico DIAN exige decimales *truncados* (no redondeados).
+    Se trunca hacia cero para coincidir con el formato del CUNE y evitar
+    discrepancias entre los totales del XML y el CUNE.
 
     Args:
         value: Valor a formatear. Si None o vacío, retorna '0.00'.
@@ -135,7 +140,9 @@ def _fmt(value: Union[int, float, str, None], decimals: int = 2) -> str:
     """
     if value is None or value == '':
         return '0.' + '0' * decimals
-    return ('%%.%df' % decimals) % float(value)
+    factor = 10 ** decimals
+    truncated = math.trunc(float(value) * factor) / factor
+    return ('%%.%df' % decimals) % truncated
 
 
 def _get(data: dict, *keys, default=None):
