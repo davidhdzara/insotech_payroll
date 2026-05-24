@@ -622,6 +622,7 @@ class HrPayslip(models.Model):
         )
 
         now = datetime.now()
+        company_nit, company_dv = self._ne_company_nit_dv()
 
         data = {
             'informacion_general': {
@@ -656,11 +657,8 @@ class HrPayslip(models.Model):
             },
             'proveedor_xml': {
                 'RazonSocial': company.name or '',
-                'NIT': dian_utils.clean_nit(company.vat),
-                'DV': (
-                    dian_utils.compute_dv(dian_utils.clean_nit(company.vat))
-                    if company.vat else ''
-                ),
+                'NIT': company_nit,
+                'DV': company_dv,
                 'SoftwareID': company.l10n_co_ne_software_id or '',
                 'SoftwareSC': dian_utils.compute_software_security_code(
                     company.l10n_co_ne_software_id,
@@ -670,11 +668,8 @@ class HrPayslip(models.Model):
             },
             'empleador': {
                 'RazonSocial': company.name or '',
-                'NIT': dian_utils.clean_nit(company.vat),
-                'DV': (
-                    dian_utils.compute_dv(dian_utils.clean_nit(company.vat))
-                    if company.vat else ''
-                ),
+                'NIT': company_nit,
+                'DV': company_dv,
                 'Pais': 'CO',
                 'DepartamentoEstado': dian_utils.get_department_code(
                     company.state_id
@@ -683,46 +678,7 @@ class HrPayslip(models.Model):
                 'Direccion': company.street or '',
             },
         }
-        _name_parts = dian_utils.split_name(employee.name or '')
-        data['trabajador'] = {
-                'TipoTrabajador': employee.l10n_co_ne_worker_type or '01',
-                'SubTipoTrabajador': employee.l10n_co_ne_worker_subtype or '00',
-                'AltoRiesgoPension': (
-                    'true' if employee.l10n_co_ne_high_risk_pension else 'false'
-                ),
-                'TipoDocumento': employee.l10n_co_ne_document_type or '13',
-                'NumeroDocumento': employee.identification_id or '',
-                'PrimerApellido': _name_parts.get(
-                    'primer_apellido', ''
-                ),
-                'SegundoApellido': _name_parts.get(
-                    'segundo_apellido', ''
-                ),
-                'PrimerNombre': _name_parts.get(
-                    'primer_nombre', ''
-                ),
-                'OtrosNombres': _name_parts.get(
-                    'otros_nombres', ''
-                ),
-                'LugarTrabajoPais': 'CO',
-                'LugarTrabajoDepartamentoEstado': dian_utils.get_department_code(
-                    employee.l10n_co_ne_dane_city_id.state_id
-                    if employee.l10n_co_ne_dane_city_id
-                    else company.state_id
-                ),
-                'LugarTrabajoMunicipioCiudad': dian_utils.get_city_code(
-                    employee.l10n_co_ne_dane_city_id
-                ) if employee.l10n_co_ne_dane_city_id else dian_utils.get_city_code(
-                    company.city_id
-                ),
-                'LugarTrabajoDireccion': employee.work_contact_id.street or company.street or '',
-                'SalarioIntegral': (
-                    'true' if contract.l10n_co_ne_integral_salary else 'false'
-                ),
-                'TipoContrato': contract.l10n_co_ne_contract_type or '2',
-                'Sueldo': '%.2f' % contract.wage,
-                'CodigoTrabajador': str(employee.id),
-        }
+        data['trabajador'] = self._ne_trabajador()
         data['pago'] = {
                 'Forma': '1',  # 1=Contado
                 'Metodo': employee.l10n_co_ne_payment_method or '1',
@@ -763,30 +719,82 @@ class HrPayslip(models.Model):
                 'value': True,
             }
             data['tipo_nota'] = '1'  # Reemplazar by default
-            data['reemplazar'] = {
-                'predecesor': {
-                    'NumeroPred': self.l10n_co_ne_adjustment_ref_cune[:20] if self.l10n_co_ne_adjustment_ref_cune else '',
-                    'CUNEPred': self.l10n_co_ne_adjustment_ref_cune or '',
-                    'FechaGenPred': str(self.date_to),
-                },
-                # Include all the same sections
-                'periodo': data['periodo'],
-                'numero_secuencia': data['numero_secuencia'],
-                'lugar_generacion': data['lugar_generacion'],
-                'proveedor_xml': data['proveedor_xml'],
-                'informacion_general': data['informacion_general'],
-                'empleador': data['empleador'],
-                'trabajador': data['trabajador'],
-                'pago': data['pago'],
-                'fechas_pagos': data['fechas_pagos'],
-                'devengados': data['devengados'],
-                'deducciones': data['deducciones'],
-                'devengados_total': data['devengados_total'],
-                'deducciones_total': data['deducciones_total'],
-                'comprobante_total': data['comprobante_total'],
-            }
+            data['reemplazar'] = self._ne_reemplazar(data)
 
         return data
+
+    def _ne_company_nit_dv(self):
+        """NIT limpio (sin DV ni separadores) y su DV verificador.
+
+        Fuente única para empleador y proveedor del XML, de modo que el
+        NIT coincida siempre con el usado en el CUNE.
+        """
+        nit = dian_utils.clean_nit(self.company_id.vat)
+        dv = dian_utils.compute_dv(nit) if self.company_id.vat else ''
+        return nit, dv
+
+    def _ne_trabajador(self):
+        """Sección <Trabajador> del XML de nómina electrónica."""
+        employee = self.employee_id
+        contract = self.contract_id
+        company = self.company_id
+        _name_parts = dian_utils.split_name(employee.name or '')
+        return {
+            'TipoTrabajador': employee.l10n_co_ne_worker_type or '01',
+            'SubTipoTrabajador': employee.l10n_co_ne_worker_subtype or '00',
+            'AltoRiesgoPension': (
+                'true' if employee.l10n_co_ne_high_risk_pension else 'false'
+            ),
+            'TipoDocumento': employee.l10n_co_ne_document_type or '13',
+            'NumeroDocumento': employee.identification_id or '',
+            'PrimerApellido': _name_parts.get('primer_apellido', ''),
+            'SegundoApellido': _name_parts.get('segundo_apellido', ''),
+            'PrimerNombre': _name_parts.get('primer_nombre', ''),
+            'OtrosNombres': _name_parts.get('otros_nombres', ''),
+            'LugarTrabajoPais': 'CO',
+            'LugarTrabajoDepartamentoEstado': dian_utils.get_department_code(
+                employee.l10n_co_ne_dane_city_id.state_id
+                if employee.l10n_co_ne_dane_city_id
+                else company.state_id
+            ),
+            'LugarTrabajoMunicipioCiudad': dian_utils.get_city_code(
+                employee.l10n_co_ne_dane_city_id
+            ) if employee.l10n_co_ne_dane_city_id else dian_utils.get_city_code(
+                company.city_id
+            ),
+            'LugarTrabajoDireccion': employee.work_contact_id.street or company.street or '',
+            'SalarioIntegral': (
+                'true' if contract.l10n_co_ne_integral_salary else 'false'
+            ),
+            'TipoContrato': contract.l10n_co_ne_contract_type or '2',
+            'Sueldo': '%.2f' % contract.wage,
+            'CodigoTrabajador': str(employee.id),
+        }
+
+    def _ne_reemplazar(self, data):
+        """Sección <Reemplazar> de la nota de ajuste, reutilizando ``data``."""
+        return {
+            'predecesor': {
+                'NumeroPred': self.l10n_co_ne_adjustment_ref_cune[:20] if self.l10n_co_ne_adjustment_ref_cune else '',
+                'CUNEPred': self.l10n_co_ne_adjustment_ref_cune or '',
+                'FechaGenPred': str(self.date_to),
+            },
+            # Include all the same sections
+            'periodo': data['periodo'],
+            'numero_secuencia': data['numero_secuencia'],
+            'lugar_generacion': data['lugar_generacion'],
+            'proveedor_xml': data['proveedor_xml'],
+            'informacion_general': data['informacion_general'],
+            'empleador': data['empleador'],
+            'trabajador': data['trabajador'],
+            'pago': data['pago'],
+            'fechas_pagos': data['fechas_pagos'],
+            'devengados': data['devengados'],
+            'deducciones': data['deducciones'],
+            'devengados_total': data['devengados_total'],
+            'deducciones_total': data['deducciones_total'],
+            'comprobante_total': data['comprobante_total'],
+        }
 
     def _map_salary_rules_to_xml(self):
         """
@@ -801,17 +809,33 @@ class HrPayslip(models.Model):
                    nomina_xml_builder.
         """
         self.ensure_one()
-        devengados = {}
-        deducciones = {}
+        concept_lines = self._group_lines_by_concept()
+        devengados = self._build_devengados(concept_lines)
+        deducciones = self._build_deducciones(concept_lines)
+        return devengados, deducciones
 
-        # Agrupar líneas por concepto DIAN
+    def _group_lines_by_concept(self):
+        """Agrupa las líneas de nómina por concepto DIAN (omite total=0)."""
         concept_lines = defaultdict(list)
         for line in self.line_ids:
             concept = line.salary_rule_id.l10n_co_ne_dian_concept
             if concept and line.total != 0:
                 concept_lines[concept].append(line)
+        return concept_lines
 
-        # ── Procesar Devengados ──────────────────────────────────────
+    def _build_devengados(self, concept_lines):
+        """Construye el dict <Devengados> del XML a partir de concept_lines."""
+        devengados = {}
+        self._dev_basico_y_transporte(concept_lines, devengados)
+        self._dev_horas_extra(concept_lines, devengados)
+        self._dev_prestaciones(concept_lines, devengados)
+        self._dev_novedades(concept_lines, devengados)
+        self._dev_complementarios(concept_lines, devengados)
+        self._dev_bonos_y_pagos(concept_lines, devengados)
+        return devengados
+
+    def _dev_basico_y_transporte(self, concept_lines, devengados):
+        """Devengados: sueldo básico, transporte y viáticos."""
         # Sueldo básico
         if 'Sueldo' in concept_lines:
             sueldo_lines = concept_lines['Sueldo']
@@ -855,7 +879,8 @@ class HrPayslip(models.Model):
                 l.total for l in concept_lines['ViaticoNS']
             )
 
-        # Horas extras y recargos
+    def _dev_horas_extra(self, concept_lines, devengados):
+        """Devengados: horas extras y recargos."""
         for he_concept in HORA_EXTRA_CONCEPTS:
             if he_concept in concept_lines:
                 container_key = he_concept + 's'  # HEDs, HENs, etc.
@@ -870,6 +895,8 @@ class HrPayslip(models.Model):
                     })
                 devengados[container_key] = items
 
+    def _dev_prestaciones(self, concept_lines, devengados):
+        """Devengados: vacaciones, primas, cesantías e intereses."""
         # Vacaciones
         vac_comunes = concept_lines.get('VacacionesComunes', [])
         vac_compensadas = concept_lines.get('VacacionesCompensadas', [])
@@ -911,6 +938,8 @@ class HrPayslip(models.Model):
                 ),
             }
 
+    def _dev_novedades(self, concept_lines, devengados):
+        """Devengados: incapacidades y licencias."""
         # Incapacidades
         if 'Incapacidad' in concept_lines:
             items = []
@@ -948,6 +977,8 @@ class HrPayslip(models.Model):
         if licencias:
             devengados['Licencias'] = licencias
 
+    def _dev_complementarios(self, concept_lines, devengados):
+        """Devengados: bonificaciones, auxilios, huelgas, otros y compensaciones."""
         # Bonificaciones
         bonif_s = concept_lines.get('BonificacionS', [])
         bonif_ns = concept_lines.get('BonificacionNS', [])
@@ -1004,6 +1035,8 @@ class HrPayslip(models.Model):
                 'CompensacionE': '%.2f' % sum(l.total for l in comp_e),
             }]
 
+    def _dev_bonos_y_pagos(self, concept_lines, devengados):
+        """Devengados: bonos EPCTV, comisiones, pagos a terceros, anticipos y conceptos simples."""
         # Bonos EPCTV
         bono_keys = {
             'BonoEPCTVS': 'PagoS',
@@ -1047,7 +1080,9 @@ class HrPayslip(models.Model):
                     l.total for l in concept_lines[concept_key]
                 )
 
-        # ── Procesar Deducciones ─────────────────────────────────────
+    def _build_deducciones(self, concept_lines):
+        """Construye el dict <Deducciones> del XML a partir de concept_lines."""
+        deducciones = {}
         # Salud
         if 'Salud' in concept_lines:
             deducciones['Salud'] = {
@@ -1131,7 +1166,7 @@ class HrPayslip(models.Model):
                     l.total for l in concept_lines[concept_key]
                 ))
 
-        return devengados, deducciones
+        return deducciones
 
     # ══════════════════════════════════════════════════════════════════
     # MÉTODOS AUXILIARES PRIVADOS
