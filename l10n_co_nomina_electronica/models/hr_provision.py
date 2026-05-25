@@ -226,7 +226,7 @@ class L10nCoHrProvision(models.Model):
 
         # Obtener parametros del ano de la provision
         from datetime import date
-        ref_date = date(self.year, int(self.month), 1)
+        ref_date = date(int(self.year), int(self.month), 1)
         params = self.company_id._get_co_payroll_params(ref_date)
         smmlv = params.smmlv
         aux_trans = params.aux_transporte
