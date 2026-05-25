@@ -131,6 +131,13 @@ class HrPayslip(models.Model):
              'procesamiento (GetStatusZip).',
     )
 
+    l10n_co_ne_is_salarial = fields.Boolean(
+        string='Es Salarial (Bonificaciones)',
+        default=True,
+        help='Determina si las bonificaciones de esta nomina constituyen salario '
+             'para el calculo de seguridad social y deducciones.',
+    )
+
     # ──────────────────────────────────────────────────────────────────
     # Campos para Notas de Ajuste
     # ──────────────────────────────────────────────────────────────────

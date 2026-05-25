@@ -60,6 +60,8 @@
                             <field name="l10n_co_ne_cune"
                                    string="CUNE"
                                    readonly="1"/>
+                            <field name="l10n_co_ne_is_salarial"
+                                   readonly="state != 'draft'"/>
                         </group>
                         <group string="Estado DIAN">
                             <field name="l10n_co_ne_state"
