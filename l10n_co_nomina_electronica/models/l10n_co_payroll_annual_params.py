@@ -76,5 +76,6 @@ class L10nCoPayrollAnnualParams(models.Model):
                     _('El valor UVT debe ser un valor positivo mayor que cero.')
                 )
 
-    def name_get(self):
-        return [(r.id, '%d - %s' % (r.year, r.company_id.name)) for r in self]
+    def _compute_display_name(self):
+        for rec in self:
+            rec.display_name = '%d - %s' % (rec.year, rec.company_id.name)
