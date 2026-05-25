@@ -781,11 +781,52 @@ result = -abs(ibc * pct)
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.get('CO_RETEFUENTE') and inputs.get('CO_RETEFUENTE').amount > 0</field>
+            <field name="condition_python">
+# Calculo automatico de retencion en la fuente
+# Busca configuracion del ano; si no existe, no aplica
+_rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
+    ('year', '=', str(payslip.date_from.year)),
+    ('company_id', '=', employee.company_id.id),
+], limit=1)
+if not _rete_cfg:
+    _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
+        ('year', '=', str(payslip.date_from.year)),
+    ], limit=1)
+result = bool(_rete_cfg)
+            </field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = -abs(inputs['CO_RETEFUENTE'].amount)</field>
+            <field name="amount_python_compute">
+# Calculo automatico: Procedimiento 1 o 2 segun configuracion
+# Usa el metodo compute_retefuente() del modelo l10n.co.retefuente.uvt
+_rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
+    ('year', '=', str(payslip.date_from.year)),
+    ('company_id', '=', employee.company_id.id),
+], limit=1)
+if not _rete_cfg:
+    _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
+        ('year', '=', str(payslip.date_from.year)),
+    ], limit=1)
+
+# Calcular IBC y bruto para la depuracion
+_gross = categories['GROSS'] if categories.get('GROSS') else contract.wage
+_ibc_pension = categories.get('DEV_SAL', contract.wage)
+if contract.l10n_co_ne_integral_salary:
+    _ibc_pension = contract.wage * 0.70
+_ibc_salud = _ibc_pension
+
+# Ejecutar depuracion y tabla marginal Art. 383 ET
+_rete_result = _rete_cfg.compute_retefuente(
+    employee, _gross, _ibc_pension, _ibc_salud, employee.company_id
+)
+_valor = _rete_result.get('retencion_pesos', 0)
+result = -abs(_valor) if _valor > 0 else 0
+            </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">RetencionFuente</field>
+            <field name="note">Calculo automatico basado en la tabla marginal del Art. 383 ET.
+Configurar en Nomina > Configuracion > Retencion en la Fuente.
+Soporta Procedimiento 1 (tabla marginal) y Procedimiento 2 (porcentaje fijo).
+La depuracion incluye: aportes obligatorios, voluntarios, AFC, dependientes, renta exenta 25%.</field>
         </record>
 
         <record id="hr_salary_rule_co_libranzas" model="hr.salary.rule">
