@@ -60,5 +60,21 @@ class L10nCoPayrollAnnualParams(models.Model):
                     _('El ano debe estar entre 2000 y 2100.')
                 )
 
+    @api.constrains('smmlv', 'aux_transporte', 'uvt')
+    def _check_positive_values(self):
+        for rec in self:
+            if rec.smmlv <= 0:
+                raise ValidationError(
+                    _('El SMMLV debe ser un valor positivo mayor que cero.')
+                )
+            if rec.aux_transporte <= 0:
+                raise ValidationError(
+                    _('El auxilio de transporte debe ser un valor positivo mayor que cero.')
+                )
+            if rec.uvt <= 0:
+                raise ValidationError(
+                    _('El valor UVT debe ser un valor positivo mayor que cero.')
+                )
+
     def name_get(self):
         return [(r.id, '%d - %s' % (r.year, r.company_id.name)) for r in self]
