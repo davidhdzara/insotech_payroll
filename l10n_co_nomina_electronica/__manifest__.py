@@ -30,6 +30,7 @@ Funcionalidades principales:
     'license': 'LGPL-3',
     'depends': [
         'hr_payroll',
+        'account',
         'l10n_co',
         'hr_holidays',
     ],
@@ -48,6 +49,8 @@ Funcionalidades principales:
         # Data
         'data/ir_sequence_data.xml',
         'data/hr_payroll_structure_data.xml',
+        'data/hr_payroll_structure_special_data.xml',
+        'data/hr_salary_rule_auto_deductions.xml',
         'data/hr_retefuente_data.xml',
         # Views
         'views/res_company_views.xml',
@@ -61,6 +64,8 @@ Funcionalidades principales:
         'views/hr_liquidacion_views.xml',
         'views/hr_embargo_views.xml',
         'views/l10n_co_payroll_annual_params_views.xml',
+        'views/hr_payroll_account_views.xml',
+        'views/hr_contract_deductions_views.xml',
         # Reports
         'report/hr_payslip_ne_report.xml',
         # Wizards
@@ -68,6 +73,7 @@ Funcionalidades principales:
         'wizard/hr_provision_wizard_views.xml',
         'wizard/hr_liquidacion_wizard_views.xml',
         'wizard/hr_pila_wizard_views.xml',
+        'wizard/hr_pila_wizard_v2_views.xml',
     ],
     'installable': True,
     'application': True,
