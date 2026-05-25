@@ -92,6 +92,54 @@ class L10nCoPayrollAnnualParams(models.Model):
             rec.display_name = '%d - %s' % (rec.year, rec.company_id.name or '')
 
     # ──────────────────────────────────────────────────────────────────
+    # CRUD overrides: validar ANTES del INSERT para evitar errores SQL
+    # ──────────────────────────────────────────────────────────────────
+    @api.model_create_multi
+    def create(self, vals_list):
+        """Valida unicidad año+compania ANTES del INSERT.
+
+        Esto evita que Odoo loguee un ERROR de SQL por duplicate key
+        cuando el registro ya existe. La validacion ocurre en Python
+        antes de llegar a la base de datos.
+        """
+        for vals in vals_list:
+            year = vals.get('year', fields.Date.context_today(self).year)
+            company_id = vals.get('company_id', self.env.company.id)
+            existing = self.sudo().search([
+                ('year', '=', year),
+                ('company_id', '=', company_id),
+            ], limit=1)
+            if existing:
+                raise ValidationError(
+                    _('Ya existe un registro de parametros para el ano %(year)s '
+                      'en la compania %(company)s. '
+                      'Modifique el registro existente en lugar de crear uno nuevo.',
+                      year=year,
+                      company=existing.company_id.name)
+                )
+        return super().create(vals_list)
+
+    def write(self, vals):
+        """Valida unicidad si se modifica año o compania."""
+        if 'year' in vals or 'company_id' in vals:
+            for rec in self:
+                new_year = vals.get('year', rec.year)
+                new_company = vals.get('company_id', rec.company_id.id)
+                existing = self.sudo().search([
+                    ('year', '=', new_year),
+                    ('company_id', '=', new_company),
+                    ('id', '!=', rec.id),
+                ], limit=1)
+                if existing:
+                    raise ValidationError(
+                        _('Ya existe un registro de parametros para el ano %(year)s '
+                          'en la compania %(company)s.',
+                          year=new_year,
+                          company=existing.company_id.name)
+                    )
+        return super().write(vals)
+
+    # ──────────────────────────────────────────────────────────────────
     # Validaciones
     # ──────────────────────────────────────────────────────────────────
     @api.constrains('year')
