@@ -91,7 +91,7 @@
     <!-- ============================================================ -->
     <menuitem id="menu_l10n_co_payroll_account_config"
               name="Cuentas Contables"
-              parent="hr_payroll.menu_hr_payroll_configuration"
+              parent="hr_work_entry_contract_enterprise.menu_hr_payroll_configuration"
               action="action_l10n_co_payroll_account_config"
               sequence="50"
               groups="hr_payroll.group_hr_payroll_manager"/>
