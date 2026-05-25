@@ -1,18 +1,49 @@
 # -*- coding: utf-8 -*-
+# Part of InSoTech. See LICENSE file for full copyright and licensing details.
+
+"""
+Parametros Anuales de Nomina Colombiana.
+
+Modelo centralizado para almacenar los valores legales que cambian cada
+ano fiscal: SMMLV, Auxilio de Transporte y UVT.
+
+Estos valores son utilizados por:
+- Reglas salariales (auxilio de transporte, FSP)
+- Calculo de retencion en la fuente (UVT)
+- Provisiones (base prima, cesantias)
+- Liquidacion de contrato
+
+Referencia legal:
+- Decreto anual de SMMLV (Gobierno Nacional, diciembre)
+- Resolucion anual de UVT (DIAN)
+"""
+
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError
+
+# Valores minimos razonables para validacion.
+# El SMMLV mas bajo de Colombia fue $286,000 (2004).
+# El auxilio mas bajo fue $37,500 (2004).
+# La UVT mas baja fue $20,974 (2006).
+_MIN_SMMLV = 200000
+_MIN_AUX_TRANSPORTE = 30000
+_MIN_UVT = 15000
 
 
 class L10nCoPayrollAnnualParams(models.Model):
     _name = 'l10n.co.payroll.annual.params'
     _description = 'Parametros Anuales de Nomina Colombiana'
     _order = 'year desc'
+    _rec_name = 'year'
     _sql_constraints = [
         ('unique_year_company',
          'unique(year, company_id)',
          'Solo puede existir un registro de parametros por ano y compania.'),
     ]
 
+    # ──────────────────────────────────────────────────────────────────
+    # Campos
+    # ──────────────────────────────────────────────────────────────────
     year = fields.Integer(
         string='Ano',
         required=True,
@@ -52,6 +83,17 @@ class L10nCoPayrollAnnualParams(models.Model):
              'Publicado por la DIAN mediante resolucion.',
     )
 
+    # ──────────────────────────────────────────────────────────────────
+    # Display name (Odoo 18: _compute_display_name, no name_get)
+    # ──────────────────────────────────────────────────────────────────
+    @api.depends('year', 'company_id', 'company_id.name')
+    def _compute_display_name(self):
+        for rec in self:
+            rec.display_name = '%d - %s' % (rec.year, rec.company_id.name or '')
+
+    # ──────────────────────────────────────────────────────────────────
+    # Validaciones
+    # ──────────────────────────────────────────────────────────────────
     @api.constrains('year')
     def _check_year(self):
         for rec in self:
@@ -62,20 +104,30 @@ class L10nCoPayrollAnnualParams(models.Model):
 
     @api.constrains('smmlv', 'aux_transporte', 'uvt')
     def _check_positive_values(self):
-        for rec in self:
-            if rec.smmlv <= 0:
-                raise ValidationError(
-                    _('El SMMLV debe ser un valor positivo mayor que cero.')
-                )
-            if rec.aux_transporte <= 0:
-                raise ValidationError(
-                    _('El auxilio de transporte debe ser un valor positivo mayor que cero.')
-                )
-            if rec.uvt <= 0:
-                raise ValidationError(
-                    _('El valor UVT debe ser un valor positivo mayor que cero.')
-                )
+        """Valida que los valores monetarios sean razonables.
 
-    def _compute_display_name(self):
+        No solo deben ser positivos; deben superar un minimo razonable
+        para evitar datos erroneos (por ejemplo, SMMLV=$1.00).
+        """
         for rec in self:
-            rec.display_name = '%d - %s' % (rec.year, rec.company_id.name)
+            if rec.smmlv < _MIN_SMMLV:
+                raise ValidationError(
+                    _('El SMMLV debe ser al menos %(min)s. '
+                      'Valor ingresado: %(val)s.',
+                      min='{:,.0f}'.format(_MIN_SMMLV),
+                      val='{:,.0f}'.format(rec.smmlv))
+                )
+            if rec.aux_transporte < _MIN_AUX_TRANSPORTE:
+                raise ValidationError(
+                    _('El auxilio de transporte debe ser al menos %(min)s. '
+                      'Valor ingresado: %(val)s.',
+                      min='{:,.0f}'.format(_MIN_AUX_TRANSPORTE),
+                      val='{:,.0f}'.format(rec.aux_transporte))
+                )
+            if rec.uvt < _MIN_UVT:
+                raise ValidationError(
+                    _('El valor UVT debe ser al menos %(min)s. '
+                      'Valor ingresado: %(val)s.',
+                      min='{:,.0f}'.format(_MIN_UVT),
+                      val='{:,.0f}'.format(rec.uvt))
+                )
