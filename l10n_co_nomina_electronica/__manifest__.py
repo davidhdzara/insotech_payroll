@@ -47,7 +47,6 @@ Funcionalidades principales:
         'security/ir.model.access.csv',
         # Data
         'data/ir_sequence_data.xml',
-        'data/hr_payroll_params_data.xml',
         'data/hr_payroll_structure_data.xml',
         'data/hr_retefuente_data.xml',
         # Views
@@ -61,6 +60,7 @@ Funcionalidades principales:
         'views/hr_provision_views.xml',
         'views/hr_liquidacion_views.xml',
         'views/hr_embargo_views.xml',
+        'views/l10n_co_payroll_annual_params_views.xml',
         # Reports
         'report/hr_payslip_ne_report.xml',
         # Wizards

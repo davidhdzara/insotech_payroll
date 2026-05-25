@@ -61,22 +61,15 @@
 
                     <group string="Parámetros Nómina Colombia" name="payroll_params">
                         <group>
-                            <field name="l10n_co_ne_smmlv"
-                                   string="SMMLV Vigente"
-                                   widget="monetary"
-                                   options="{'currency_field': 'currency_id'}"/>
-                            <field name="l10n_co_ne_aux_transporte"
-                                   string="Auxilio de Transporte"
-                                   widget="monetary"
-                                   options="{'currency_field': 'currency_id'}"/>
-                        </group>
-                        <group>
-                            <field name="l10n_co_ne_uvt"
-                                   string="Valor UVT"
-                                   widget="monetary"
-                                   options="{'currency_field': 'currency_id'}"/>
                             <field name="l10n_co_ne_exoneration_1607"
                                    string="Exoneración Ley 1607/2012"/>
+                        </group>
+                        <group>
+                            <div class="text-muted">
+                                Los valores de SMMLV, auxilio de transporte y UVT
+                                se configuran por año en
+                                Nómina &gt; Configuración &gt; Parámetros Anuales.
+                            </div>
                         </group>
                     </group>
 

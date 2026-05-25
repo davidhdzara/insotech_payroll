@@ -12,3 +12,4 @@ from . import hr_provision
 from . import hr_liquidacion
 from . import hr_leave_ne
 from . import hr_embargo
+from . import l10n_co_payroll_annual_params

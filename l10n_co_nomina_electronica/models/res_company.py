@@ -124,21 +124,6 @@ class ResCompany(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # Parámetros de Nómina Colombiana
     # ──────────────────────────────────────────────────────────────────
-    l10n_co_ne_smmlv = fields.Float(
-        string='SMMLV Vigente',
-        default=1300000,
-        help='Salario Mínimo Mensual Legal Vigente. Actualizar cada 1 de enero.',
-    )
-    l10n_co_ne_aux_transporte = fields.Float(
-        string='Auxilio de Transporte',
-        default=162000,
-        help='Valor mensual del auxilio de transporte. Actualizar cada 1 de enero.',
-    )
-    l10n_co_ne_uvt = fields.Float(
-        string='Valor UVT',
-        default=47065,
-        help='Unidad de Valor Tributario vigente. Se usa para cálculo de retención en la fuente.',
-    )
     l10n_co_ne_exoneration_1607 = fields.Boolean(
         string='Exoneración Ley 1607/2012',
         default=False,
@@ -146,6 +131,42 @@ class ResCompany(models.Model):
              'queda exonerada de aportes a SENA e ICBF para empleados '
              'con salario inferior a 10 SMMLV (Art. 114-1 ET).',
     )
+
+    def _get_co_payroll_params(self, date):
+        """Obtiene los parámetros anuales de nómina para la fecha dada.
+
+        Busca en l10n.co.payroll.annual.params por año y compañía.
+        Si no existe registro para el año, lanza un error indicando
+        al usuario que debe configurarlo.
+
+        Args:
+            date: Fecha (date, datetime o string YYYY-MM-DD) que
+                  determina el año fiscal a consultar.
+
+        Returns:
+            Registro l10n.co.payroll.annual.params con campos:
+            smmlv, aux_transporte, uvt.
+
+        Raises:
+            UserError: Si no existen parámetros para el año.
+        """
+        from odoo.exceptions import UserError
+        if hasattr(date, 'year'):
+            year = date.year
+        else:
+            year = int(str(date)[:4])
+        params = self.env['l10n.co.payroll.annual.params'].search([
+            ('year', '=', year),
+            ('company_id', '=', self.id),
+        ], limit=1)
+        if not params:
+            raise UserError(
+                'No se encontraron parámetros de nómina para el año %d.\n\n'
+                'Vaya a Nómina > Configuración > Parámetros Anuales y '
+                'configure los valores de SMMLV, auxilio de transporte '
+                'y UVT para el año %d.' % (year, year)
+            )
+        return params
 
     # ──────────────────────────────────────────────────────────────────
     # PILA — Datos del Aportante

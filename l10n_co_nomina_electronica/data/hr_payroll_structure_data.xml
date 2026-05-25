@@ -124,14 +124,14 @@ result = contract.wage / 30 * worked_days['WORK100'].number_of_days if 'WORK100'
             <field name="condition_select">python</field>
             <field name="condition_python">
 # Aplica si salario &lt;= 2 SMMLV y no es salario integral
-_smmlv = employee.company_id.l10n_co_ne_smmlv or 1300000
-result = contract.wage &lt;= _smmlv * 2 and not contract.l10n_co_ne_integral_salary
+_params = employee.company_id._get_co_payroll_params(payslip.date_from)
+result = contract.wage &lt;= _params.smmlv * 2 and not contract.l10n_co_ne_integral_salary
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-# Auxilio de Transporte: valor parametrizado en la empresa
-_aux_trans = employee.company_id.l10n_co_ne_aux_transporte or 162000
-result = _aux_trans / 30 * (worked_days['WORK100'].number_of_days if 'WORK100' in worked_days else 30)
+# Auxilio de Transporte: valor del ano correspondiente
+_params = employee.company_id._get_co_payroll_params(payslip.date_from)
+result = _params.aux_transporte / 30 * (worked_days['WORK100'].number_of_days if 'WORK100' in worked_days else 30)
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Transporte</field>
@@ -740,7 +740,8 @@ result = -abs(ibc * 0.04)
             <field name="condition_select">python</field>
             <field name="condition_python">
 # Aplica desde 4 SMMLV
-SMMLV = employee.company_id.l10n_co_ne_smmlv or 1300000
+_params = employee.company_id._get_co_payroll_params(payslip.date_from)
+SMMLV = _params.smmlv
 ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
@@ -749,7 +750,8 @@ result = ibc &gt;= SMMLV * 4
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # 1% desde 4 SMMLV, escala adicional desde 16 SMMLV
-SMMLV = employee.company_id.l10n_co_ne_smmlv or 1300000
+_params = employee.company_id._get_co_payroll_params(payslip.date_from)
+SMMLV = _params.smmlv
 ibc = categories['DEV_SAL']
 if contract.l10n_co_ne_integral_salary:
     ibc = contract.wage * 0.70
@@ -870,7 +872,8 @@ result = (inputs.get('CO_EMBARGO') and inputs.get('CO_EMBARGO').amount &gt; 0) o
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Embargo con topes legales Art. 155 CST
-_smmlv = employee.company_id.l10n_co_ne_smmlv or 1300000
+_params = employee.company_id._get_co_payroll_params(payslip.date_from)
+_smmlv = _params.smmlv
 _salario = categories['DEV']
 _total_embargo = 0.0
 for embargo in employee.l10n_co_embargo_ids:
@@ -1032,7 +1035,8 @@ result = ibc * 0.04
             <field name="condition_python">
 # Exonerados si son beneficiarios de la Ley 1607/2012 (Art. 114-1 ET)
 # Empleados con salario &lt; 10 SMMLV están exonerados para ciertos empleadores
-SMMLV = employee.company_id.l10n_co_ne_smmlv or 1300000
+_params = employee.company_id._get_co_payroll_params(payslip.date_from)
+SMMLV = _params.smmlv
 if employee.company_id.l10n_co_ne_exoneration_1607:
     ibc = categories['DEV_SAL']
     if contract.l10n_co_ne_integral_salary:

@@ -287,12 +287,10 @@ class L10nCoHrLiquidacion(models.Model):
             if dian_type:
                 self.contract_type = type_map.get(dian_type, 'indefinido')
             # Aux transporte: aplica si salario <= 2 SMMLV y no integral
-            smmlv = self.company_id.l10n_co_ne_smmlv or 1300000
+            params = self.company_id._get_co_payroll_params(self.date_end or self.date_start)
             is_integral = contract.l10n_co_ne_integral_salary
-            if not is_integral and (contract.wage or 0) <= smmlv * 2:
-                self.aux_transporte = (
-                    self.company_id.l10n_co_ne_aux_transporte or 162000
-                )
+            if not is_integral and (contract.wage or 0) <= params.smmlv * 2:
+                self.aux_transporte = params.aux_transporte
             else:
                 self.aux_transporte = 0.0
 
@@ -354,7 +352,8 @@ class L10nCoHrLiquidacion(models.Model):
                 continue
 
             salary = rec.base_salary
-            smmlv = rec.company_id.l10n_co_ne_smmlv or 1300000
+            params = rec.company_id._get_co_payroll_params(rec.date_end)
+            smmlv = params.smmlv
             years = rec.days_worked / 365.0
 
             if rec.contract_type == 'fijo':

@@ -41,7 +41,7 @@ except ImportError:
 # Constantes UGPP
 # ──────────────────────────────────────────────────────────────────────────
 # SMMLV – valor de respaldo si no está configurado en la empresa.
-SMMLV_FALLBACK = 1_300_000
+
 
 # Mapeo de tipo de documento DIAN → código corto UGPP
 _DOC_TYPE_UGPP_MAP = {
@@ -550,7 +550,8 @@ class L10nCoNominaUgpp(models.Model):
         # ── Preparar mapeos ──────────────────────────────────────────
         from ..services import dian_utils
 
-        smmlv = self.company_id.l10n_co_ne_smmlv or SMMLV_FALLBACK
+        params = self.company_id._get_co_payroll_params(self.date_from)
+        smmlv = params.smmlv
         period_start = self.date_from
         period_end = self.date_to
 

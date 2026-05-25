@@ -224,9 +224,12 @@ class L10nCoHrProvision(models.Model):
                 _('No se pueden recalcular provisiones ya contabilizadas.')
             )
 
-        # Obtener parámetros de la compañía
-        smmlv = self.company_id.l10n_co_ne_smmlv or 1300000
-        aux_trans = self.company_id.l10n_co_ne_aux_transporte or 162000
+        # Obtener parametros del ano de la provision
+        from datetime import date
+        ref_date = date(self.year, int(self.month), 1)
+        params = self.company_id._get_co_payroll_params(ref_date)
+        smmlv = params.smmlv
+        aux_trans = params.aux_transporte
 
         # Buscar contratos activos
         contracts = self.env['hr.contract'].search([
