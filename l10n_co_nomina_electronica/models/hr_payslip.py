@@ -224,9 +224,10 @@ class HrPayslip(models.Model):
         self.ensure_one()
         self._validate_ne_prerequisites()
 
-        # Asignar consecutivo
-        if not self.l10n_co_ne_consecutive:
+        # Asignar consecutivo oficial si no tiene uno o si es el temporal PRE-NOM
+        if not self.l10n_co_ne_consecutive or self.l10n_co_ne_consecutive.startswith('PRE-NOM'):
             self.l10n_co_ne_consecutive = self._get_next_ne_consecutive()
+
 
         # Recopilar datos
         payslip_data = self._collect_payslip_data()
@@ -304,7 +305,23 @@ class HrPayslip(models.Model):
         )
         return True
 
+    def action_payslip_done(self):
+        """
+        Sobrescribe la confirmación de la nómina para asignar el consecutivo
+        temporal PRE-NOM al número del payslip en Odoo.
+        """
+        res = super(HrPayslip, self).action_payslip_done()
+        for rec in self:
+            company = rec.company_id
+            if company.l10n_co_ne_pre_sequence_id:
+                if not rec.l10n_co_ne_consecutive or rec.l10n_co_ne_consecutive.startswith('PRE-NOM'):
+                    temporal_number = company.l10n_co_ne_pre_sequence_id.next_by_id()
+                    rec.number = temporal_number
+                    rec.l10n_co_ne_consecutive = temporal_number
+        return res
+
     def action_send_ne_dian(self):
+
         """
         Envía el XML firmado al servicio web de la DIAN.
 
@@ -371,11 +388,14 @@ class HrPayslip(models.Model):
 
         if is_valid:
             self.l10n_co_ne_state = 'accepted'
+            if self.l10n_co_ne_consecutive:
+                self.number = self.l10n_co_ne_consecutive
             _logger.info(
                 'Nómina electrónica %s ACEPTADA por DIAN (CUNE: %s)',
                 self.number or self.name,
                 self.l10n_co_ne_cune,
             )
+
         else:
             self.l10n_co_ne_state = 'rejected'
             error_messages = response.get('ErrorMessages', [])
@@ -658,6 +678,9 @@ class HrPayslip(models.Model):
 
         if is_valid and self.l10n_co_ne_state != 'accepted':
             self.l10n_co_ne_state = 'accepted'
+            if self.l10n_co_ne_consecutive:
+                self.number = self.l10n_co_ne_consecutive
+
 
         return {
             'type': 'ir.actions.client',
@@ -743,9 +766,9 @@ class HrPayslip(models.Model):
             'lugar_generacion': {
                 'Pais': 'CO',
                 'DepartamentoEstado': dian_utils.get_department_code(
-                    company.state_id
+                    company.partner_id.state_id
                 ),
-                'MunicipioCiudad': dian_utils.get_city_code(company.city_id),
+                'MunicipioCiudad': dian_utils.get_city_code(company.partner_id.city_id),
                 'Idioma': 'es',
             },
             'proveedor_xml': {
@@ -765,11 +788,12 @@ class HrPayslip(models.Model):
                 'DV': company_dv,
                 'Pais': 'CO',
                 'DepartamentoEstado': dian_utils.get_department_code(
-                    company.state_id
+                    company.partner_id.state_id
                 ),
-                'MunicipioCiudad': dian_utils.get_city_code(company.city_id),
-                'Direccion': company.street or '',
+                'MunicipioCiudad': dian_utils.get_city_code(company.partner_id.city_id),
+                'Direccion': company.partner_id.street or '',
             },
+
         }
         data['trabajador'] = self._ne_trabajador()
         data['pago'] = {
@@ -848,14 +872,15 @@ class HrPayslip(models.Model):
             'LugarTrabajoDepartamentoEstado': dian_utils.get_department_code(
                 employee.l10n_co_ne_dane_city_id.state_id
                 if employee.l10n_co_ne_dane_city_id
-                else company.state_id
+                else company.partner_id.state_id
             ),
             'LugarTrabajoMunicipioCiudad': dian_utils.get_city_code(
                 employee.l10n_co_ne_dane_city_id
             ) if employee.l10n_co_ne_dane_city_id else dian_utils.get_city_code(
-                company.city_id
+                company.partner_id.city_id
             ),
-            'LugarTrabajoDireccion': employee.work_contact_id.street or company.street or '',
+            'LugarTrabajoDireccion': employee.work_contact_id.street or company.partner_id.street or '',
+
             'SalarioIntegral': (
                 'true' if contract.l10n_co_ne_integral_salary else 'false'
             ),
@@ -1319,18 +1344,32 @@ class HrPayslip(models.Model):
 
     def _get_next_ne_consecutive(self):
         """
-        Genera el siguiente consecutivo de nómina electrónica para la empresa.
-
-        Formato: PREFIJO + número secuencial (ej: NE0001, NA0001).
+        Genera el siguiente consecutivo de nómina electrónica para la empresa
+        utilizando las secuencias configuradas en la compañía.
         """
+        self.ensure_one()
         company = self.company_id
-        prefix = (
-            company.l10n_co_ne_adjust_prefix
-            if self.l10n_co_ne_is_adjustment
-            else company.l10n_co_ne_payroll_prefix
-        )
+        
+        # Si ya tiene un consecutivo asignado que NO es temporal, lo reutilizamos
+        if self.l10n_co_ne_consecutive and not self.l10n_co_ne_consecutive.startswith('PRE-NOM'):
+            return self.l10n_co_ne_consecutive
 
-        # Buscar el último consecutivo con este prefijo
+        if self.l10n_co_ne_is_adjustment:
+            seq = self.env['ir.sequence'].search([
+                ('code', '=', 'l10n_co_nomina.ajuste'),
+                ('|'),
+                ('company_id', '=', company.id),
+                ('company_id', '=', False)
+            ], limit=1)
+            if seq:
+                return seq.next_by_id()
+            prefix = company.l10n_co_ne_adjust_prefix or 'NA'
+        else:
+            if company.l10n_co_ne_sequence_id:
+                return company.l10n_co_ne_sequence_id.next_by_id()
+            prefix = company.l10n_co_ne_payroll_prefix or 'NE'
+
+        # Fallback manual por si no hay secuencia configurada
         last_payslip = self.search(
             [
                 ('company_id', '=', company.id),
@@ -1340,8 +1379,7 @@ class HrPayslip(models.Model):
             order='l10n_co_ne_consecutive desc',
             limit=1,
         )
-
-        if last_payslip and last_payslip.l10n_co_ne_consecutive:
+        if last_payslip and last_payslip.l10n_co_ne_consecutive and not last_payslip.l10n_co_ne_consecutive.startswith('PRE-NOM'):
             last_num_str = last_payslip.l10n_co_ne_consecutive[len(prefix):]
             try:
                 next_num = int(last_num_str) + 1
@@ -1351,6 +1389,7 @@ class HrPayslip(models.Model):
             next_num = 1
 
         return '%s%s' % (prefix, str(next_num).zfill(8))
+
 
     def _get_ne_xml_filename(self):
         """Genera el nombre del archivo XML de nómina electrónica."""

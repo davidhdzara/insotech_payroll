@@ -17,32 +17,33 @@
                         string="Enviar y Procesar"
                         type="action"
                         class="oe_highlight"
-                        invisible="l10n_co_ne_state not in ('draft', 'generated', 'rejected')"
+                        invisible="l10n_co_ne_state not in ('draft', 'generated', 'rejected') or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_generate_ne_xml"
                         string="Generar XML"
                         type="object"
                         class="btn-primary"
-                        invisible="l10n_co_ne_state != 'draft'"
+                        invisible="l10n_co_ne_state != 'draft' or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_send_ne_dian"
                         string="Enviar a DIAN"
                         type="object"
                         class="btn-primary"
-                        invisible="l10n_co_ne_state != 'generated'"
+                        invisible="l10n_co_ne_state != 'generated' or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_check_dian_status"
                         string="Consultar Estado"
                         type="object"
                         class="btn-secondary"
-                        invisible="l10n_co_ne_state not in ('sent', 'generated', 'rejected')"
+                        invisible="l10n_co_ne_state not in ('sent', 'generated', 'rejected') or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_create_adjustment"
                         string="Nota de Ajuste"
                         type="object"
                         class="btn-secondary"
-                        invisible="l10n_co_ne_state != 'accepted'"
+                        invisible="l10n_co_ne_state != 'accepted' or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
+
             </xpath>
 
             <!-- NE Status bar -->

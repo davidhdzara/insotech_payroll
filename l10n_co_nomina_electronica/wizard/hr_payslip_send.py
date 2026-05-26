@@ -124,9 +124,13 @@ class HrPayslipSend(models.TransientModel):
         )
 
         for payslip in self.payslip_ids:
-            # 1. Enviar a la DIAN (XML + SOAP)
-            if self.checkbox_send_dian:
+            # 1. Enviar a la DIAN (XML + SOAP) - Solo si requiere transmisión
+            if self.checkbox_send_dian and payslip.l10n_co_ne_state in ('draft', 'generated', 'rejected'):
                 try:
+                    # Generar XML primero si está en borrador
+                    if payslip.l10n_co_ne_state == 'draft':
+                        payslip.action_generate_ne_xml()
+                    
                     payslip.action_send_ne_dian()
                 except Exception as e:
                     _logger.error(
@@ -139,18 +143,25 @@ class HrPayslipSend(models.TransientModel):
                         message_type='comment'
                     )
 
-            # 2. Enviar por Correo Electrónico (PDF adjunto)
+            # 2. Enviar por Correo Electrónico (PDF adjunto) - Solo si está Aceptado por la DIAN
             if self.checkbox_send_mail and payslip.employee_id.work_email:
-                try:
-                    payslip.action_send_payslip_email(self.mail_template_id)
-                except Exception as e:
-                    _logger.error(
-                        'Fallo en envio de correo para nomina %s: %s',
-                        payslip.number or payslip.name, str(e)
-                    )
-                    payslip.message_post(
-                        body=_('⚠️ <b>Fallo al enviar correo al empleado:</b> %s') % str(e),
-                        message_type='comment'
+                if payslip.l10n_co_ne_state == 'accepted':
+                    try:
+                        payslip.action_send_payslip_email(self.mail_template_id)
+                    except Exception as e:
+                        _logger.error(
+                            'Fallo en envio de correo para nomina %s: %s',
+                            payslip.number or payslip.name, str(e)
+                        )
+                        payslip.message_post(
+                            body=_('⚠️ <b>Fallo al enviar correo al empleado:</b> %s') % str(e),
+                            message_type='comment'
+                        )
+                else:
+                    _logger.warning(
+                        'No se envia correo para la nomina %s porque no ha sido aceptada por la DIAN (Estado actual: %s).',
+                        payslip.number or payslip.name, payslip.l10n_co_ne_state
                     )
 
         return {'type': 'ir.actions.act_window_close'}
+

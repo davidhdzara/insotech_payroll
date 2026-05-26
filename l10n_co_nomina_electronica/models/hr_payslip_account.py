@@ -55,22 +55,11 @@ class HrPayslipAccount(models.Model):
     # Override: confirmar nómina -> crear asiento contable
     # ──────────────────────────────────────────────────────────────────
     def action_payslip_done(self):
-        """Confirma la nómina y genera el asiento contable automáticamente.
-
-        Extiende el método original para crear el asiento contable después
-        de que la nómina ha sido confirmada exitosamente.
+        """Confirma la nómina. El asiento contable se genera automáticamente
+        dentro de la llamada super().action_payslip_done() a través de _create_account_move.
         """
-        res = super().action_payslip_done()
-        for payslip in self:
-            try:
-                payslip._create_account_move()
-            except Exception as e:
-                # Registrar error pero no bloquear la confirmación
-                _logger.error(
-                    'Error al crear asiento contable para nomina %s: %s',
-                    payslip.number or payslip.name, str(e),
-                )
-        return res
+        return super().action_payslip_done()
+
 
     # ──────────────────────────────────────────────────────────────────
     # Override: cancelar nómina -> reversar/eliminar asiento
@@ -90,7 +79,8 @@ class HrPayslipAccount(models.Model):
     # MÉTODOS DE CONTABILIZACIÓN
     # ══════════════════════════════════════════════════════════════════
 
-    def _create_account_move(self):
+    def _create_account_move(self, *args, **kwargs):
+
         """Crea el asiento contable a partir de las líneas de la nómina.
 
         Flujo:
@@ -112,7 +102,7 @@ class HrPayslipAccount(models.Model):
                 self.number or self.name,
                 self.move_id.name,
             )
-            return
+            return self.move_id
 
         # Obtener diario contable
         journal = self._get_payroll_journal()
@@ -122,7 +112,7 @@ class HrPayslipAccount(models.Model):
                 'No se creara asiento contable.',
                 self.number or self.name,
             )
-            return
+            return self.env['account.move']
 
         # Recopilar líneas contables agrupadas
         move_lines_data = self._prepare_account_move_lines()
@@ -132,7 +122,7 @@ class HrPayslipAccount(models.Model):
                 'No se creara asiento contable.',
                 self.number or self.name,
             )
-            return
+            return self.env['account.move']
 
         # Construir referencia del asiento
         ref = _('Nomina: %s - %s') % (
@@ -171,6 +161,8 @@ class HrPayslipAccount(models.Model):
                 self.number or self.name,
                 str(e),
             )
+        return move
+
 
     def _prepare_account_move_lines(self):
         """Prepara las líneas del asiento contable agrupadas por cuenta.
