@@ -210,7 +210,7 @@ class HrPayslipLeaveIntegration(models.Model):
             if days <= 0:
                 continue
 
-            leave_code = (leave.holiday_status_id.code or '').strip().upper()
+            leave_code = (leave.holiday_status_id.work_entry_type_id.code or leave.holiday_status_id.name or '').strip().upper()
             leave_name = leave.holiday_status_id.name or _('Sin nombre')
             category = self._get_leave_category(leave_code)
 

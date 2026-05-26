@@ -22,6 +22,10 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
             'l10n_co_ne_document_type': '13',
             'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00',
+            'l10n_co_ne_payment_method': '1',  # 1 = Transferencia Bancaria
+            'l10n_co_ne_bank_account': '1234567890',
+            'l10n_co_ne_bank_name': 'Bancolombia',
+            'l10n_co_ne_bank_account_type': 'ahorro',
         })
         self.structure_type = self.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura',
@@ -40,16 +44,32 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
             'state': 'open',
         })
         # Crear tipos de ausencias
-        self.leave_type_sick = self.env['hr.leave.type'].create({
+        self.work_entry_type_sick = self.env['hr.work.entry.type'].create({
             'name': 'Incapacidad Común',
             'code': 'INC_COMUN',
+            'is_leave': True,
+        })
+        self.leave_type_sick = self.env['hr.leave.type'].create({
+            'name': 'Incapacidad Común',
+            'work_entry_type_id': self.work_entry_type_sick.id,
             'requires_allocation': 'no',
+        })
+        self.work_entry_type_vac = self.env['hr.work.entry.type'].create({
+            'name': 'Vacaciones',
+            'code': 'VACACIONES',
+            'is_leave': True,
         })
         self.leave_type_vac = self.env['hr.leave.type'].create({
             'name': 'Vacaciones',
-            'code': 'VACACIONES',
+            'work_entry_type_id': self.work_entry_type_vac.id,
             'requires_allocation': 'no',
         })
+        self.rule_category = self.env['hr.salary.rule.category'].search([('code', '=', 'ALW')], limit=1)
+        if not self.rule_category:
+            self.rule_category = self.env['hr.salary.rule.category'].create({
+                'name': 'Allowances',
+                'code': 'ALW',
+            })
 
     def test_payslip_leave_autodetection_and_xml_mapping(self):
         """Prueba que el compute_sheet() detecta automáticamente las ausencias y
@@ -109,6 +129,7 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
             'l10n_co_ne_dian_concept': 'Incapacidad',
             'l10n_co_ne_is_deduction': False,
             'struct_id': self.structure.id,
+            'category_id': self.rule_category.id,
         })
         self.env['hr.payslip.line'].create({
             'slip_id': payslip.id,
@@ -128,6 +149,7 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
             'l10n_co_ne_dian_concept': 'VacacionesComunes',
             'l10n_co_ne_is_deduction': False,
             'struct_id': self.structure.id,
+            'category_id': self.rule_category.id,
         })
         self.env['hr.payslip.line'].create({
             'slip_id': payslip.id,

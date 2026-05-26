@@ -1016,7 +1016,7 @@ class HrPayslip(models.Model):
     def _get_overlapping_leaves_data(self):
         """Busca ausencias validadas del empleado en el periodo y las organiza por categoria."""
         def get_leave_category(leave):
-            code = (leave.holiday_status_id.code or '').strip().upper()
+            code = (leave.holiday_status_id.work_entry_type_id.code or leave.holiday_status_id.name or '').strip().upper()
             if hasattr(self, '_LEAVE_CODE_MAP'):
                 return self._LEAVE_CODE_MAP.get(code)
             local_map = {
@@ -1137,7 +1137,7 @@ class HrPayslip(models.Model):
                     period_start = max(leave_start, self.date_from)
                     period_end = min(leave_end, self.date_to)
                     
-                    leave_code = (leave.holiday_status_id.code or '').strip().upper()
+                    leave_code = (leave.holiday_status_id.work_entry_type_id.code or leave.holiday_status_id.name or '').strip().upper()
                     inc_type = '1'
                     if 'PROFESIONAL' in leave_code or 'INC_PROF' in leave_code:
                         inc_type = '2'
