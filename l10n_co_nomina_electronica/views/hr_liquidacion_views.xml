@@ -205,6 +205,7 @@
                 <field name="name"/>
                 <field name="employee_id"/>
                 <field name="contract_id"/>
+                <field name="company_id" groups="base.group_multi_company"/>
                 <separator/>
                 <filter name="filter_draft"
                         string="Borrador"
@@ -223,6 +224,8 @@
                         string="Año Actual"
                         domain="[('date_end', '&gt;=', (context_today()).strftime('%Y-01-01')),
                                  ('date_end', '&lt;=', (context_today()).strftime('%Y-12-31'))]"/>
+                <separator/>
+                <filter name="date_end_filter" string="Fecha de Retiro" date="date_end"/>
                 <group expand="0" string="Agrupar por">
                     <filter name="group_employee"
                             string="Empleado"
@@ -236,6 +239,10 @@
                     <filter name="group_date_end"
                             string="Fecha de Retiro"
                             context="{'group_by': 'date_end:month'}"/>
+                    <filter name="group_company"
+                            string="Compañía"
+                            context="{'group_by': 'company_id'}"
+                            groups="base.group_multi_company"/>
                 </group>
             </search>
         </field>

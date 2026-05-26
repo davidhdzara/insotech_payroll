@@ -167,6 +167,7 @@
             <search string="Buscar Provisiones">
                 <field name="name"/>
                 <field name="year"/>
+                <field name="company_id" groups="base.group_multi_company"/>
                 <separator/>
                 <filter name="filter_draft"
                         string="Borrador"
@@ -191,6 +192,10 @@
                     <filter name="group_state"
                             string="Estado"
                             context="{'group_by': 'state'}"/>
+                    <filter name="group_company"
+                            string="Compañía"
+                            context="{'group_by': 'company_id'}"
+                            groups="base.group_multi_company"/>
                 </group>
             </search>
         </field>

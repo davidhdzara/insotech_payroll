@@ -41,6 +41,22 @@
         </field>
     </record>
 
+    <!-- Search View -->
+    <record id="l10n_co_payroll_annual_params_search" model="ir.ui.view">
+        <field name="name">l10n.co.payroll.annual.params.search</field>
+        <field name="model">l10n.co.payroll.annual.params</field>
+        <field name="arch" type="xml">
+            <search string="Buscar Parámetros Anuales">
+                <field name="year"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <group expand="0" string="Agrupar por">
+                    <filter string="Año" name="group_by_year" context="{'group_by': 'year'}"/>
+                    <filter string="Compañía" name="group_by_company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
     <!-- Action -->
     <record id="action_l10n_co_payroll_annual_params" model="ir.actions.act_window">
         <field name="name">Parametros Anuales</field>

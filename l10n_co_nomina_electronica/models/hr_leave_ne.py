@@ -133,6 +133,16 @@ class HrPayslipLeaveIntegration(models.Model):
         return max(days, 0)
 
     # ------------------------------------------------------------------
+    # Cálculo automático
+    # ------------------------------------------------------------------
+
+    def compute_sheet(self):
+        res = super(HrPayslipLeaveIntegration, self).compute_sheet()
+        for payslip in self:
+            payslip.action_detect_leaves()
+        return res
+
+    # ------------------------------------------------------------------
     # Acción principal
     # ------------------------------------------------------------------
 

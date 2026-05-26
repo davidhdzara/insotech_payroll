@@ -79,6 +79,7 @@
                 <field name="name"/>
                 <field name="employee_id"/>
                 <field name="juzgado"/>
+                <field name="company_id" groups="base.group_multi_company"/>
                 <filter name="filter_active" string="Activos"
                         domain="[('state', '=', 'active')]"/>
                 <filter name="filter_suspended" string="Suspendidos"
@@ -99,6 +100,8 @@
                             context="{'group_by': 'tipo_embargo'}"/>
                     <filter name="group_state" string="Estado"
                             context="{'group_by': 'state'}"/>
+                    <filter name="group_company" string="Compañía"
+                            context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
                 </group>
             </search>
         </field>

@@ -142,6 +142,32 @@
     </record>
 
     <!-- ═══════════════════════════════════════════════════════════════
+         VISTA SEARCH — Búsqueda y agrupación de UVT
+         ═══════════════════════════════════════════════════════════════ -->
+    <record id="l10n_co_retefuente_uvt_search" model="ir.ui.view">
+        <field name="name">l10n.co.retefuente.uvt.search</field>
+        <field name="model">l10n.co.retefuente.uvt</field>
+        <field name="arch" type="xml">
+            <search string="Buscar Retención en la Fuente — UVT">
+                <field name="year" string="Año"/>
+                <field name="procedure" string="Procedimiento"/>
+                <field name="company_id" string="Compañía" groups="base.group_multi_company"/>
+                <separator/>
+                <filter string="Procedimiento 1" name="proc_1" domain="[('procedure', '=', '1')]"/>
+                <filter string="Procedimiento 2" name="proc_2" domain="[('procedure', '=', '2')]"/>
+                <separator/>
+                <filter string="Activo" name="active" domain="[('active', '=', True)]"/>
+                <filter string="Archivado" name="inactive" domain="[('active', '=', False)]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter string="Año" name="group_by_year" context="{'group_by': 'year'}"/>
+                    <filter string="Procedimiento" name="group_by_procedure" context="{'group_by': 'procedure'}"/>
+                    <filter string="Compañía" name="group_by_company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════════════════
          ACCIÓN DE VENTANA
          ═══════════════════════════════════════════════════════════════ -->
     <record id="l10n_co_retefuente_uvt_action" model="ir.actions.act_window">

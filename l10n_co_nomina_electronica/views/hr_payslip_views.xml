@@ -102,6 +102,22 @@
                                    readonly="1"/>
                         </group>
                     </group>
+                    <group string="Novedades y Ausencias (DIAN)">
+                        <group>
+                            <field name="l10n_co_ne_dias_incapacidad"/>
+                            <field name="l10n_co_ne_dias_licencia_mat"/>
+                            <field name="l10n_co_ne_dias_licencia_rem"/>
+                        </group>
+                        <group>
+                            <field name="l10n_co_ne_dias_vacaciones"/>
+                            <field name="l10n_co_ne_dias_licencia_nr"/>
+                            <button name="action_detect_leaves"
+                                    string="Detectar Novedades"
+                                    type="object"
+                                    class="btn-secondary"/>
+                        </group>
+                        <field name="l10n_co_ne_leave_summary" readonly="1" colspan="2"/>
+                    </group>
                     <group string="Nota de Ajuste"
                            invisible="not l10n_co_ne_is_adjustment">
                         <field name="l10n_co_ne_is_adjustment"
@@ -145,6 +161,37 @@
                 <field name="l10n_co_ne_cune"
                        string="CUNE"
                        optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- Payslip Search View                                           -->
+    <!-- ============================================================ -->
+    <record id="view_hr_payslip_filter_ne" model="ir.ui.view">
+        <field name="name">hr.payslip.select.ne</field>
+        <field name="model">hr.payslip</field>
+        <field name="inherit_id" ref="hr_payroll.view_hr_payslip_filter"/>
+        <field name="priority">99</field>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <field name="l10n_co_ne_state" string="Estado NE"/>
+                <field name="l10n_co_ne_consecutive" string="Consecutivo NE"/>
+                <separator/>
+                <filter string="NE Borrador" name="ne_draft" domain="[('l10n_co_ne_state', '=', 'draft')]"/>
+                <filter string="NE Generado" name="ne_generated" domain="[('l10n_co_ne_state', '=', 'generated')]"/>
+                <filter string="NE Transmitido" name="ne_sent" domain="[('l10n_co_ne_state', '=', 'sent')]"/>
+                <filter string="NE Aceptado" name="ne_accepted" domain="[('l10n_co_ne_state', '=', 'accepted')]"/>
+                <filter string="NE Rechazado" name="ne_rejected" domain="[('l10n_co_ne_state', '=', 'rejected')]"/>
+                <separator/>
+                <filter string="Es Nota de Ajuste" name="ne_is_adjustment" domain="[('l10n_co_ne_is_adjustment', '=', True)]"/>
+                <separator/>
+                <filter name="date_filter" string="Fecha Desde" date="date_from"/>
+                <filter name="date_to_filter" string="Fecha Hasta" date="date_to"/>
+            </xpath>
+            <xpath expr="//group" position="inside">
+                <filter string="Estado NE" name="group_by_l10n_co_ne_state" context="{'group_by': 'l10n_co_ne_state'}"/>
+                <filter string="Es Nota de Ajuste" name="group_by_l10n_co_ne_is_adjustment" context="{'group_by': 'l10n_co_ne_is_adjustment'}"/>
             </xpath>
         </field>
     </record>

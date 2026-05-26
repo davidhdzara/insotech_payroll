@@ -1013,6 +1013,47 @@ class HrPayslip(models.Model):
                     })
                 devengados[container_key] = items
 
+    def _get_overlapping_leaves_data(self):
+        """Busca ausencias validadas del empleado en el periodo y las organiza por categoria."""
+        def get_leave_category(leave):
+            code = (leave.holiday_status_id.code or '').strip().upper()
+            if hasattr(self, '_LEAVE_CODE_MAP'):
+                return self._LEAVE_CODE_MAP.get(code)
+            local_map = {
+                'INCAPACIDAD': 'incapacidad', 'SICK': 'incapacidad', 'INC_COMUN': 'incapacidad', 'INC_LABORAL': 'incapacidad',
+                'MATERNIDAD': 'licencia_mat', 'MATERNITY': 'licencia_mat', 'PATERNIDAD': 'licencia_mat', 'PATERNITY': 'licencia_mat', 'LIC_MAT': 'licencia_mat', 'LIC_PAT': 'licencia_mat',
+                'VACACIONES': 'vacaciones', 'VACATION': 'vacaciones', 'VAC': 'vacaciones',
+                'LICENCIA_REM': 'licencia_rem', 'LIC_REM': 'licencia_rem', 'PERMISO': 'licencia_rem',
+                'LICENCIA_NR': 'licencia_nr', 'LIC_NR': 'licencia_nr', 'UNPAID': 'licencia_nr', 'SIN_SUELDO': 'licencia_nr',
+            }
+            return local_map.get(code)
+
+        leaves = self.env['hr.leave'].search([
+            ('employee_id', '=', self.employee_id.id),
+            ('state', '=', 'validate'),
+            ('date_from', '<=', self.date_to),
+            ('date_to', '>=', self.date_from),
+        ])
+
+        category_leaves = defaultdict(list)
+        category_leave_days = defaultdict(dict)  # leave.id -> days in period
+        category_total_days = defaultdict(int)    # category -> total days in period
+        
+        for leave in leaves:
+            leave_start = leave.date_from.date() if isinstance(leave.date_from, datetime) else leave.date_from
+            leave_end = leave.date_to.date() if isinstance(leave.date_to, datetime) else leave.date_to
+            period_start = max(leave_start, self.date_from)
+            period_end = min(leave_end, self.date_to)
+            days = (period_end - period_start).days + 1
+            if days > 0:
+                category = get_leave_category(leave)
+                if category:
+                    category_leaves[category].append(leave)
+                    category_leave_days[category][leave.id] = days
+                    category_total_days[category] += days
+
+        return category_leaves, category_leave_days, category_total_days
+
     def _dev_prestaciones(self, concept_lines, devengados):
         """Devengados: vacaciones, primas, cesantías e intereses."""
         # Vacaciones
@@ -1021,12 +1062,33 @@ class HrPayslip(models.Model):
         if vac_comunes or vac_compensadas:
             vacaciones = {}
             if vac_comunes:
-                vacaciones['VacacionesComunes'] = [{
-                    'FechaInicio': str(self.date_from),
-                    'FechaFin': str(self.date_to),
-                    'Cantidad': str(int(sum(l.quantity for l in vac_comunes))),
-                    'Pago': '%.2f' % sum(l.total for l in vac_comunes),
-                }]
+                category_leaves, category_leave_days, category_total_days = self._get_overlapping_leaves_data()
+                actual_vac_leaves = category_leaves.get('vacaciones', [])
+                if actual_vac_leaves:
+                    items = []
+                    total_pago = sum(l.total for l in vac_comunes)
+                    total_days = category_total_days['vacaciones']
+                    for leave in actual_vac_leaves:
+                        days = category_leave_days['vacaciones'][leave.id]
+                        pago = total_pago * (days / total_days) if total_days > 0 else 0.0
+                        leave_start = leave.date_from.date() if isinstance(leave.date_from, datetime) else leave.date_from
+                        leave_end = leave.date_to.date() if isinstance(leave.date_to, datetime) else leave.date_to
+                        period_start = max(leave_start, self.date_from)
+                        period_end = min(leave_end, self.date_to)
+                        items.append({
+                            'FechaInicio': str(period_start),
+                            'FechaFin': str(period_end),
+                            'Cantidad': str(int(days)),
+                            'Pago': '%.2f' % pago,
+                        })
+                    vacaciones['VacacionesComunes'] = items
+                else:
+                    vacaciones['VacacionesComunes'] = [{
+                        'FechaInicio': str(self.date_from),
+                        'FechaFin': str(self.date_to),
+                        'Cantidad': str(int(sum(l.quantity for l in vac_comunes))),
+                        'Pago': '%.2f' % sum(l.total for l in vac_comunes),
+                    }]
             if vac_compensadas:
                 vacaciones['VacacionesCompensadas'] = [{
                     'Cantidad': str(int(sum(l.quantity for l in vac_compensadas))),
@@ -1058,18 +1120,49 @@ class HrPayslip(models.Model):
 
     def _dev_novedades(self, concept_lines, devengados):
         """Devengados: incapacidades y licencias."""
+        category_leaves, category_leave_days, category_total_days = self._get_overlapping_leaves_data()
+
         # Incapacidades
         if 'Incapacidad' in concept_lines:
-            items = []
-            for line in concept_lines['Incapacidad']:
-                items.append({
-                    'FechaInicio': str(self.date_from),
-                    'FechaFin': str(self.date_to),
-                    'Cantidad': str(int(line.quantity)) if line.quantity else '0',
-                    'Tipo': '1',  # 1=Común, se puede extender
-                    'Pago': '%.2f' % line.total,
-                })
-            devengados['Incapacidades'] = items
+            actual_inc_leaves = category_leaves.get('incapacidad', [])
+            if actual_inc_leaves:
+                items = []
+                total_pago = sum(l.total for l in concept_lines['Incapacidad'])
+                total_days = category_total_days['incapacidad']
+                for leave in actual_inc_leaves:
+                    days = category_leave_days['incapacidad'][leave.id]
+                    pago = total_pago * (days / total_days) if total_days > 0 else 0.0
+                    leave_start = leave.date_from.date() if isinstance(leave.date_from, datetime) else leave.date_from
+                    leave_end = leave.date_to.date() if isinstance(leave.date_to, datetime) else leave.date_to
+                    period_start = max(leave_start, self.date_from)
+                    period_end = min(leave_end, self.date_to)
+                    
+                    leave_code = (leave.holiday_status_id.code or '').strip().upper()
+                    inc_type = '1'
+                    if 'PROFESIONAL' in leave_code or 'INC_PROF' in leave_code:
+                        inc_type = '2'
+                    elif 'LABORAL' in leave_code or 'INC_LAB' in leave_code:
+                        inc_type = '3'
+
+                    items.append({
+                        'FechaInicio': str(period_start),
+                        'FechaFin': str(period_end),
+                        'Cantidad': str(int(days)),
+                        'Tipo': inc_type,
+                        'Pago': '%.2f' % pago,
+                    })
+                devengados['Incapacidades'] = items
+            else:
+                items = []
+                for line in concept_lines['Incapacidad']:
+                    items.append({
+                        'FechaInicio': str(self.date_from),
+                        'FechaFin': str(self.date_to),
+                        'Cantidad': str(int(line.quantity)) if line.quantity else '0',
+                        'Tipo': '1',  # 1=Común, se puede extender
+                        'Pago': '%.2f' % line.total,
+                    })
+                devengados['Incapacidades'] = items
 
         # Licencias
         licencia_concepts = {
@@ -1077,9 +1170,40 @@ class HrPayslip(models.Model):
             'LicenciaR': 'LicenciaR',
             'LicenciaNR': 'LicenciaNR',
         }
+        lic_concept_to_category = {
+            'LicenciaMP': 'licencia_mat',
+            'LicenciaR': 'licencia_rem',
+            'LicenciaNR': 'licencia_nr',
+        }
         licencias = {}
         for concept_key, xml_key in licencia_concepts.items():
-            if concept_key in concept_lines:
+            category = lic_concept_to_category[concept_key]
+            actual_leaves = category_leaves.get(category, [])
+            
+            if actual_leaves:
+                items = []
+                total_pago = sum(l.total for l in concept_lines.get(concept_key, []))
+                total_days = category_total_days[category]
+                
+                for leave in actual_leaves:
+                    days = category_leave_days[category][leave.id]
+                    pago = total_pago * (days / total_days) if total_days > 0 else 0.0
+                    
+                    leave_start = leave.date_from.date() if isinstance(leave.date_from, datetime) else leave.date_from
+                    leave_end = leave.date_to.date() if isinstance(leave.date_to, datetime) else leave.date_to
+                    period_start = max(leave_start, self.date_from)
+                    period_end = min(leave_end, self.date_to)
+                    
+                    lic_data = {
+                        'FechaInicio': str(period_start),
+                        'FechaFin': str(period_end),
+                        'Cantidad': str(int(days)),
+                    }
+                    if concept_key != 'LicenciaNR':
+                        lic_data['Pago'] = '%.2f' % pago
+                    items.append(lic_data)
+                licencias[xml_key] = items
+            elif concept_key in concept_lines:
                 lic_data = {
                     'FechaInicio': str(self.date_from),
                     'FechaFin': str(self.date_to),
