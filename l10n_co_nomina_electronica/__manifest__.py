@@ -53,6 +53,7 @@ Funcionalidades principales:
         'data/hr_salary_rule_auto_deductions.xml',
         'data/hr_retefuente_data.xml',
         # Views
+        'wizard/hr_payslip_send_views.xml',
         'views/res_company_views.xml',
         'views/hr_employee_views.xml',
         'views/hr_contract_views.xml',

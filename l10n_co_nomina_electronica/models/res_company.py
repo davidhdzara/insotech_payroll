@@ -91,6 +91,18 @@ class ResCompany(models.Model):
         help='Prefijo utilizado en el consecutivo de notas de ajuste '
              'de nómina electrónica (ej: NA0001).',
     )
+    l10n_co_ne_sequence_id = fields.Many2one(
+        comodel_name='ir.sequence',
+        string='Secuencia Nómina Electrónica',
+        default=lambda self: self.env.ref('l10n_co_nomina_electronica.seq_l10n_co_nomina_electronica', raise_if_not_found=False),
+        help='Secuencia definitiva utilizada para generar los consecutivos de transmisión DIAN (ej: NE-00001).',
+    )
+    l10n_co_ne_pre_sequence_id = fields.Many2one(
+        comodel_name='ir.sequence',
+        string='Secuencia Nómina Temporal',
+        default=lambda self: self.env.ref('l10n_co_nomina_electronica.seq_l10n_co_nomina_temporal', raise_if_not_found=False),
+        help='Secuencia temporal utilizada para borradores y nóminas pendientes de validación (ej: PRE-NOM-00001).',
+    )
 
     # ──────────────────────────────────────────────────────────────────
     # Campos UGPP – Clasificación del aportante

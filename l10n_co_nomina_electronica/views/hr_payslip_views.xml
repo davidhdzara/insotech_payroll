@@ -13,6 +13,12 @@
 
             <!-- Header buttons -->
             <xpath expr="//header" position="inside">
+                <button name="%(action_hr_payslip_send)d"
+                        string="Enviar y Procesar"
+                        type="action"
+                        class="oe_highlight"
+                        invisible="l10n_co_ne_state not in ('draft', 'generated', 'rejected')"
+                        groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_generate_ne_xml"
                         string="Generar XML"
                         type="object"
@@ -46,6 +52,24 @@
                            widget="statusbar"
                            statusbar_visible="draft,generated,sent,accepted"
                            readonly="1"/>
+                </div>
+
+                <!-- Banner de Pendiente de Procesamiento -->
+                <div class="alert alert-warning text-center mb-0"
+                     role="alert"
+                     invisible="l10n_co_ne_state != 'sent'">
+                    <strong><i class="fa fa-clock-o"/> Pendiente de validación DIAN</strong>
+                    <br/>
+                    La nómina electrónica ha sido transmitida y está en espera de la validación del webservice.
+                </div>
+
+                <!-- Banner de Rechazo de la DIAN -->
+                <div class="alert alert-danger text-center mb-0"
+                     role="alert"
+                     invisible="l10n_co_ne_state != 'rejected'">
+                    <strong><i class="fa fa-exclamation-triangle"/> Nómina Rechazada por la DIAN</strong>
+                    <br/>
+                    Revise los detalles del error en el chatter a continuación. Corrija los datos correspondientes en el empleado, contrato o compañía, y vuelva a hacer clic en <b>"Enviar y Procesar"</b> para retransmitir con el mismo consecutivo (sin desperdiciar números).
                 </div>
             </xpath>
 

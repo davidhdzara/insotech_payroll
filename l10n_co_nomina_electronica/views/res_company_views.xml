@@ -28,6 +28,10 @@
                                    string="Prefijo Nómina"/>
                             <field name="l10n_co_ne_adjust_prefix"
                                    string="Prefijo Nota de Ajuste"/>
+                            <field name="l10n_co_ne_sequence_id"
+                                   string="Secuencia Nómina"/>
+                            <field name="l10n_co_ne_pre_sequence_id"
+                                   string="Secuencia Temporal"/>
                         </group>
                     </group>
 

@@ -3,3 +3,5 @@ from . import hr_provision_wizard
 from . import hr_liquidacion_wizard
 from . import hr_pila_wizard
 from . import hr_pila_wizard_v2
+from . import hr_payslip_send
+

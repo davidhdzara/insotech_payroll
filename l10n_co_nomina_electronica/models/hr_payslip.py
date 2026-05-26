@@ -379,13 +379,99 @@ class HrPayslip(models.Model):
         else:
             self.l10n_co_ne_state = 'rejected'
             error_messages = response.get('ErrorMessages', [])
+            detail = '; '.join(error_messages) if error_messages else response.get('ErrorMessage', 'Sin detalle')
             _logger.warning(
                 'Nómina electrónica %s RECHAZADA por DIAN. Errores: %s',
                 self.number or self.name,
-                '; '.join(error_messages) if error_messages else
-                response.get('ErrorMessage', 'Sin detalle'),
+                detail,
+            )
+            
+            # Diagnóstico Inteligente para el Chatter
+            diagnosis = "Ocurrió un error general de validación con el webservice de la DIAN."
+            links = ""
+            detail_lower = detail.lower()
+            
+            if 'nit' in detail_lower or 'documento' in detail_lower or 'identificacion' in detail_lower:
+                diagnosis = "El número o tipo de identificación del trabajador o del empleador contiene caracteres inválidos o no está registrado."
+                links = f'<br/>🔗 <a href="/odoo/hr.employee/{self.employee_id.id}">Abrir ficha del empleado para corregir</a>'
+            elif 'correo' in detail_lower or 'email' in detail_lower:
+                diagnosis = "El correo electrónico de trabajo del empleado falta o tiene un formato incorrecto."
+                links = f'<br/>🔗 <a href="/odoo/hr.employee/{self.employee_id.id}">Corregir correo en ficha de empleado</a>'
+            elif 'cuenta' in detail_lower or 'banco' in detail_lower or 'metodo' in detail_lower:
+                diagnosis = "La información bancaria o método de pago del trabajador contiene datos erróneos o incompletos."
+                links = f'<br/>🔗 <a href="/odoo/hr.contract/{self.contract_id.id}">Revisar contrato para corregir información bancaria</a>'
+            elif 'salario' in detail_lower or 'ibc' in detail_lower or 'minimo' in detail_lower:
+                diagnosis = "El salario base o el ingreso base de cotización (IBC) reportado presenta discrepancias matemáticas o de ley."
+                links = f'<br/>🔗 <a href="/odoo/hr.contract/{self.contract_id.id}">Revisar salario en el contrato</a>'
+
+            body = (
+                f'❌ <b>Nómina rechazada por la DIAN</b><br/>'
+                f'Consecutivo utilizado: <b>{self.l10n_co_ne_consecutive}</b><br/><br/>'
+                f'📋 <b>Diagnóstico de Corrección:</b><br/>'
+                f'{diagnosis}{links}<br/><br/>'
+                f'<details>'
+                f'<summary>🔧 Detalle técnico de la DIAN</summary>'
+                f'<pre>{detail}</pre>'
+                f'</details><br/>'
+                f'Por favor corrija el dato y use <b>"Enviar y Procesar"</b> para retransmitir con el mismo consecutivo.'
+            )
+            
+            self.message_post(
+                body=body,
+                message_type='comment',
+                subtype_xmlid='mail.mt_note'
             )
 
+        return True
+
+    def action_send_payslip_email(self, template=None):
+        """Genera el PDF del comprobante y lo envía por correo al empleado.
+
+        Args:
+            template: Plantilla de correo (mail.template). Si es omitido,
+                      busca la primera plantilla disponible para el modelo hr.payslip.
+        """
+        self.ensure_one()
+        if not self.employee_id.work_email:
+            raise UserError(_('El empleado %s no tiene correo electrónico de trabajo configurado.') % self.employee_id.name)
+
+        if not template:
+            template = self.env['mail.template'].search([('model', '=', 'hr.payslip')], limit=1)
+            if not template:
+                raise UserError(_('No se encontró ninguna plantilla de correo configurada para el modelo de nómina.'))
+
+        # 1. Renderizar el reporte PDF del recibo
+        report = self.env.ref('l10n_co_nomina_electronica.action_report_payslip_ne', raise_if_not_found=False)
+        if not report:
+            report = self.env.ref('hr_payroll.action_report_payslip', raise_if_not_found=False)
+
+        attachment_ids = []
+        if report:
+            pdf_content, _report_type = self.env['ir.actions.report'].sudo()._render_qweb_pdf(report.id, [self.id])
+            pdf_name = f"{self.number or self.name or 'Recibo_Nomina'}.pdf"
+            attachment = self.env['ir.attachment'].create({
+                'name': pdf_name,
+                'type': 'binary',
+                'datas': base64.b64encode(pdf_content),
+                'res_model': 'hr.payslip',
+                'res_id': self.id,
+                'mimetype': 'application/pdf',
+            })
+            attachment_ids.append(attachment.id)
+
+        # 2. Enviar el correo electrónico con el PDF adjunto
+        email_values = {
+            'email_to': self.employee_id.work_email,
+            'attachment_ids': [(6, 0, attachment_ids)] if attachment_ids else False,
+        }
+        template.send_mail(self.id, force_send=True, email_values=email_values)
+
+        _logger.info(
+            'Comprobante de nomina %s enviado por correo electrónico al empleado %s (%s).',
+            self.number or self.name,
+            self.employee_id.name,
+            self.employee_id.work_email,
+        )
         return True
 
     def action_create_adjustment(self):
