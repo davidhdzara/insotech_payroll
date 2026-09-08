@@ -521,6 +521,27 @@ def t19():
 test("Liquidacion: aux transporte del periodo correcto", t19)
 
 # ================================================================
+# TEST 20: Tablas huerfanas de modelos eliminados realmente se
+# borraron (migracion 18.0.3.0.1). No basta con que el modulo instale
+# sin traceback -- ir.model._drop_table() no ejecuta el DROP TABLE si
+# el modelo ya no existe en el registro (ver docstring de
+# migrations/18.0.3.0.1/post-migrate.py), y ese fallo solo deja un log
+# nivel 'runbot', invisible a cualquier grep de ERROR/CRITICAL. Este
+# test es la unica forma automatizada de detectarlo -- confirmado que
+# hacia falta viendolo pasar por alto una vez en staging_produccion.
+# ================================================================
+def t20():
+    orphaned_tables = (
+        'l10n_co_payroll_annual_params',
+        'l10n_co_payroll_time_params',
+    )
+    for table in orphaned_tables:
+        cr.execute("SELECT to_regclass(%s)", (table,))
+        exists = cr.fetchone()[0] is not None
+        assert not exists, f"La tabla {table} deberia haberse eliminado (DROP TABLE), pero sigue existiendo"
+test("Tablas huerfanas (annual_params/time_params) realmente eliminadas", t20)
+
+# ================================================================
 # RESULTADOS
 # ================================================================
 print()
