@@ -144,41 +144,41 @@ class ResCompany(models.Model):
              'con salario inferior a 10 SMMLV (Art. 114-1 ET).',
     )
 
-    def _get_co_payroll_params(self, date):
-        """Obtiene los parámetros anuales de nómina para la fecha dada.
+    def _is_exonerado_parafiscales(self, ibc, date):
+        """Determina si un IBC está exonerado de SENA/ICBF/Salud Empleador.
 
-        Busca en l10n.co.payroll.annual.params por año y compañía.
-        Si no existe registro para el año, lanza un error indicando
-        al usuario que debe configurarlo.
+        Único criterio del Art. 114-1 ET (Ley 1607/2012): la compañía debe
+        tener activada la exoneración (`l10n_co_ne_exoneration_1607`) y el
+        IBC del empleado debe ser menor a `tope_exoneracion_smmlv` SMMLV
+        del año de `date`.
+
+        Antes de esto, este criterio estaba duplicado por separado en las
+        reglas salariales de CO_SENA_CIA/CO_ICBF_CIA/CO_SALUD_CIA y el
+        wizard de PILA tenía una cuarta versión desconectada (un booleano
+        manual en el contrato) -- este método es ahora la única fuente de
+        verdad, para que nómina y PILA no puedan divergir para el mismo
+        empleado en el mismo periodo.
+
+        SMMLV y el tope se leen del framework nativo hr.rule.parameter
+        (doc 13, reemplaza l10n.co.payroll.annual.params).
 
         Args:
-            date: Fecha (date, datetime o string YYYY-MM-DD) que
-                  determina el año fiscal a consultar.
+            ibc: float - IBC ya ajustado por el llamador (p.ej. con el
+                factor de salario integral si aplica) -- este método no
+                conoce el contrato, solo aplica el criterio de la norma.
+            date: Fecha (date, datetime o string YYYY-MM-DD) que determina
+                el SMMLV vigente.
 
         Returns:
-            Registro l10n.co.payroll.annual.params con campos:
-            smmlv, aux_transporte, uvt.
-
-        Raises:
-            UserError: Si no existen parámetros para el año.
+            bool - True si el IBC está exonerado.
         """
-        from odoo.exceptions import UserError
-        if hasattr(date, 'year'):
-            year = date.year
-        else:
-            year = int(str(date)[:4])
-        params = self.env['l10n.co.payroll.annual.params'].search([
-            ('year', '=', year),
-            ('company_id', '=', self.id),
-        ], limit=1)
-        if not params:
-            raise UserError(
-                'No se encontraron parámetros de nómina para el año %d.\n\n'
-                'Vaya a Nómina > Configuración > Parámetros Anuales y '
-                'configure los valores de SMMLV, auxilio de transporte '
-                'y UVT para el año %d.' % (year, year)
-            )
-        return params
+        if not self.l10n_co_ne_exoneration_1607:
+            return False
+        RuleParameter = self.env['hr.rule.parameter']
+        smmlv = RuleParameter._get_parameter_from_code('l10n_co_smmlv', date)
+        tope = RuleParameter._get_parameter_from_code(
+            'l10n_co_tope_exoneracion_smmlv', date)
+        return ibc < smmlv * tope
 
     # ──────────────────────────────────────────────────────────────────
     # PILA — Datos del Aportante

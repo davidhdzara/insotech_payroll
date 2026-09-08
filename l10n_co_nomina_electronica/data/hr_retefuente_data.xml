@@ -15,7 +15,6 @@
              ═══════════════════════════════════════════════════════════ -->
         <record id="l10n_co_retefuente_uvt_2024" model="l10n.co.retefuente.uvt">
             <field name="year">2024</field>
-            <field name="uvt_value">47065.0</field>
             <field name="procedure">1</field>
             <field name="percentage_procedure2">0.0</field>
             <field name="active" eval="True"/>
@@ -27,7 +26,6 @@
              ═══════════════════════════════════════════════════════════ -->
         <record id="l10n_co_retefuente_uvt_2025" model="l10n.co.retefuente.uvt">
             <field name="year">2025</field>
-            <field name="uvt_value">49799.0</field>
             <field name="procedure">1</field>
             <field name="percentage_procedure2">0.0</field>
             <field name="active" eval="True"/>

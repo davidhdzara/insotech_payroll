@@ -208,14 +208,15 @@ class L10nCoHrProvision(models.Model):
         Fórmulas aplicadas (base mensual):
         - Prima de servicios: base_prestacional / 12
         - Cesantías: base_prestacional / 12
-        - Intereses a las cesantías: cesantías × 12% (anual)
+        - Intereses a las cesantías: cesantías × pct_intereses_cesantias (anual)
         - Vacaciones: salario_base / 24
 
         Donde:
         - base_prestacional = salario + auxilio_de_transporte
         - Auxilio de transporte aplica solo si salario <= 2 SMMLV
           y el contrato no es integral.
-        - Para salario integral: base_prestacional = salario × 70%.
+        - Para salario integral: base_prestacional = salario × factor_integral_salary
+          (Parámetros Anuales, 70% por defecto).
         """
         self.ensure_one()
 
@@ -227,9 +228,15 @@ class L10nCoHrProvision(models.Model):
         # Obtener parametros del ano de la provision
         from datetime import date
         ref_date = date(int(self.year), int(self.month), 1)
-        params = self.company_id._get_co_payroll_params(ref_date)
-        smmlv = params.smmlv
-        aux_trans = params.aux_transporte
+        RuleParameter = self.env['hr.rule.parameter']
+
+        def _p(code):
+            return RuleParameter._get_parameter_from_code(code, ref_date)
+
+        smmlv = _p('l10n_co_smmlv')
+        aux_trans = _p('l10n_co_aux_transporte')
+        factor_integral_salary = _p('l10n_co_factor_integral_salary')
+        pct_intereses_cesantias = _p('l10n_co_pct_intereses_cesantias')
 
         # Buscar contratos activos
         contracts = self.env['hr.contract'].search([
@@ -252,7 +259,7 @@ class L10nCoHrProvision(models.Model):
                 # Salario integral: 70% del salario para prestaciones.
                 # No aplica auxilio de transporte.
                 emp_aux = 0.0
-                base = wage * 0.70
+                base = wage * factor_integral_salary
             else:
                 # Auxilio de transporte: solo si salario <= 2 SMMLV
                 emp_aux = aux_trans if wage <= (smmlv * 2) else 0.0
@@ -261,7 +268,7 @@ class L10nCoHrProvision(models.Model):
             # Cálculo de provisiones mensuales
             prima = base / 12.0
             cesantias = base / 12.0
-            intereses = cesantias * 0.12  # 12% anual sobre cesantías
+            intereses = cesantias * (pct_intereses_cesantias / 100)
             vacaciones = wage / 24.0  # Solo salario base, 15 días/año
 
             lines.append((0, 0, {

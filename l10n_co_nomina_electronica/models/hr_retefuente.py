@@ -62,13 +62,16 @@ class L10nCoRetefuenteUvt(models.Model):
         help='Año gravable al que corresponde el valor de la UVT. '
              'Ejemplo: 2024.',
     )
-    uvt_value = fields.Float(
+    uvt_value = fields.Monetary(
         string='Valor UVT ($)',
-        required=True,
-        digits=(12, 2),
+        compute='_compute_uvt_value',
+        store=True,
+        readonly=True,
+        currency_field='currency_id',
         help='Valor de la Unidad de Valor Tributario (UVT) fijado por la '
-             'DIAN para el año fiscal correspondiente. '
-             'Ejemplo para 2024: $47.065.',
+             'DIAN para el año fiscal correspondiente. Se toma del '
+             'parámetro nativo l10n_co_uvt (hr.rule.parameter) — única '
+             'fuente de verdad para el UVT (doc 13).',
     )
     procedure = fields.Selection(
         selection=[
@@ -165,6 +168,24 @@ class L10nCoRetefuenteUvt(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # Display name
     # ──────────────────────────────────────────────────────────────────
+    @api.depends('year')
+    def _compute_uvt_value(self):
+        """Toma el valor de UVT del parámetro nativo l10n_co_uvt.
+
+        `hr.rule.parameter` no tiene `company_id` (solo `country_id`,
+        ver doc 13) por lo que este lookup no depende de la compañía del
+        registro — el UVT es un valor nacional único por año fiscal.
+        """
+        RuleParameter = self.env['hr.rule.parameter']
+        for rec in self:
+            if not rec.year or not rec.year.isdigit():
+                rec.uvt_value = 0.0
+                continue
+            value = RuleParameter._get_parameter_from_code(
+                'l10n_co_uvt', '%s-01-01' % rec.year,
+                raise_if_not_found=False)
+            rec.uvt_value = value or 0.0
+
     @api.depends('year', 'uvt_value', 'procedure')
     def _compute_display_name(self):
         """Nombre descriptivo: 'UVT 2024 — $47,065.00 (Proc. 1)'."""
@@ -215,8 +236,12 @@ class L10nCoRetefuenteUvt(models.Model):
                 }
         """
         self.ensure_one()
-        company = company or self.env.company
         uvt = self.uvt_value
+        _ref_date = '%s-01-01' % self.year
+        RuleParameter = self.env['hr.rule.parameter']
+
+        def _p(code):
+            return RuleParameter._get_parameter_from_code(code, _ref_date)
 
         if uvt <= 0:
             raise UserError(_(
@@ -228,36 +253,41 @@ class L10nCoRetefuenteUvt(models.Model):
         # ── 1. Ingreso bruto mensual ─────────────────────────────────
         ingreso_bruto = gross_salary
 
-        # ── 2. Aportes obligatorios salud empleado (4% del IBC salud) ─
-        aporte_salud = round(ibc_salud * 0.04, 2)
+        # ── 2. Aportes obligatorios salud empleado ────────────────────
+        aporte_salud = round(
+            ibc_salud * _p('l10n_co_pct_salud_empleado') / 100, 2)
 
-        # ── 3. Aportes obligatorios pensión empleado (4% del IBC pensión)
-        aporte_pension = round(ibc_pension * 0.04, 2)
+        # ── 3. Aportes obligatorios pensión empleado ──────────────────
+        aporte_pension = round(
+            ibc_pension * _p('l10n_co_pct_pension_empleado') / 100, 2)
 
         # ── 4. Aportes voluntarios a pensión (si aplica) ─────────────
-        #     Límite: hasta 25% del ingreso bruto
+        #     Límite: hasta max_vol_pension_pct% del ingreso bruto
         aporte_vol_pension = 0.0
         if hasattr(employee, 'l10n_co_ne_voluntary_pension'):
             raw = employee.l10n_co_ne_voluntary_pension or 0.0
-            max_vol = ingreso_bruto * 0.25
+            max_vol = ingreso_bruto * _p('l10n_co_max_vol_pension_pct') / 100
             aporte_vol_pension = min(raw, max_vol)
 
         # ── 5. AFC — Ahorro para el Fomento de la Construcción ───────
-        #     Límite: hasta 30% del ingreso bruto
+        #     Límite: hasta max_afc_pct% del ingreso bruto
         afc = 0.0
         if hasattr(employee, 'l10n_co_ne_afc'):
             raw_afc = employee.l10n_co_ne_afc or 0.0
-            max_afc = ingreso_bruto * 0.30
+            max_afc = ingreso_bruto * _p('l10n_co_max_afc_pct') / 100
             afc = min(raw_afc, max_afc)
 
-        # ── 6. Deducción por dependientes (10%, máx 32.5 UVT/mes) ───
+        # ── 6. Deducción por dependientes ─────────────────────────────
+        #     pct_deduccion_dependientes%, máx max_dependientes_uvt UVT/mes
         deduccion_dep = 0.0
         has_dependientes = False
         if hasattr(employee, 'l10n_co_ne_dependientes'):
             has_dependientes = employee.l10n_co_ne_dependientes
         if has_dependientes:
-            dep_calc = ingreso_bruto * 0.10
-            dep_max = 32.5 * uvt
+            dep_calc = (
+                ingreso_bruto * _p('l10n_co_pct_deduccion_dependientes')
+                / 100)
+            dep_max = _p('l10n_co_max_dependientes_uvt') * uvt
             deduccion_dep = min(dep_calc, dep_max)
 
         # ── Subtotal depurado (antes de renta exenta 25%) ────────────
@@ -271,8 +301,10 @@ class L10nCoRetefuenteUvt(models.Model):
         )
         subtotal = max(subtotal, 0.0)
 
-        # ── 7. Renta exenta 25% (máximo 240 UVT/mes) ────────────────
-        renta_exenta_25 = min(subtotal * 0.25, 240 * uvt)
+        # ── 7. Renta exenta (máximo max_renta_exenta_uvt UVT/mes) ────
+        renta_exenta_25 = min(
+            subtotal * _p('l10n_co_pct_renta_exenta') / 100,
+            _p('l10n_co_max_renta_exenta_uvt') * uvt)
 
         # ── 8. Base gravable ─────────────────────────────────────────
         base_gravable = max(subtotal - renta_exenta_25, 0.0)
