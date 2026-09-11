@@ -1,7 +1,9 @@
 #!/bin/bash
 # ================================================================
 # Test exhaustivo: config de Nomina Electronica movida de la ficha de
-# compania (Ajustes Generales) a Ajustes > Nomina (doc 19).
+# compania (Ajustes Generales) a Ajustes > Nomina (doc 19), mas los
+# fixes de UX de doc 21 (T6: domain= explicito en Consecutivos/
+# Certificado, antes traian registros de otros modulos).
 #
 # El dato real sigue en res.company -- res.config.settings solo lo
 # expone en otro lugar via related + readonly=False (mismo patron que
@@ -10,14 +12,17 @@
 # que el mecanismo de related+readonly=False funciona de verdad: leer
 # el valor actual de la compania a traves del settings wizard, y
 # escribir un valor nuevo a traves del settings wizard y confirmar que
-# persiste en res.company.
+# persiste en res.company. T6 (doc 21) tambien prueba el domain= de
+# forma funcional, no solo declarativa -- resolviendolo con
+# get_domain_list() y confirmando que no matchea registros de otros
+# modulos.
 #
 # Mismas lecciones aprendidas de los scripts anteriores:
 # - odoo-bin se invoca directo, el wrapper() de pruebas hace
 #   cr.rollback() defensivo en el except.
 #
 # NOTA: /tmp/ne_params.tar.gz debe estar actualizado con el diff de
-# doc 19 antes de correr este script.
+# doc 19 + doc 21 antes de correr este script.
 # ================================================================
 set -e
 
@@ -157,6 +162,47 @@ def t5():
         f"La vista deberia heredar de hr_payroll.res_config_settings_view_form, hereda de {view.inherit_id.name}"
     assert view.model == 'res.config.settings'
 test("Nueva vista de Ajustes > Nomina hereda del punto correcto (hr_payroll)", t5)
+
+# ================================================================
+# TEST 6 (doc 21): domain= explicito en los 3 campos Many2one related
+# que antes traian registros de otros modulos (Consecutivos/
+# Certificado) -- related NO hereda domain= del campo destino en
+# res.company, hay que declararlo aparte en cada related.
+# ================================================================
+def t6():
+    expected_seq_domain = "[('code', 'like', 'l10n_co_nomina.')]"
+    for fname in ('l10n_co_ne_sequence_id', 'l10n_co_ne_pre_sequence_id'):
+        field = Settings._fields[fname]
+        assert field.domain, f"{fname} deberia tener domain= explicito"
+        assert str(field.domain) == expected_seq_domain, \
+            f"{fname}.domain es {field.domain!r}, se esperaba {expected_seq_domain!r}"
+
+    # Prueba funcional, no solo declarativa: abrir el wizard y confirmar
+    # que el picker de secuencia NO trae secuencias de otros modulos.
+    settings = Settings.create({'company_id': company.id})
+
+    cert_field = Settings._fields['l10n_co_ne_certificate_id']
+    assert cert_field.domain, "l10n_co_ne_certificate_id deberia tener domain= explicito"
+    # El domain original en res.company usa `id` (id de la compania,
+    # porque el campo vive ahi). Copiado tal cual a res.config.settings,
+    # `id` pasaria a ser el id del TransientModel (un numero sin relacion
+    # con ninguna compania real) -- resolverlo aqui confirma que de verdad
+    # usa company_id y apunta al id de la compania real, no al del wizard.
+    resolved_cert_domain = cert_field.get_domain_list(settings)
+    assert resolved_cert_domain == [('company_id', '=', company.id)], \
+        f"l10n_co_ne_certificate_id.domain deberia resolver a company_id={company.id}, resolvio {resolved_cert_domain}"
+    assert settings.id != company.id, \
+        "El id del wizard y el de la compania coinciden por casualidad -- esta prueba no es concluyente, ajustar"
+    Sequence = env['ir.sequence']
+    other_module_seq = Sequence.search([('code', 'not like', 'l10n_co_nomina.')], limit=1)
+    assert other_module_seq, "No hay ninguna secuencia de otro modulo para probar el negativo"
+    matches = Sequence.search(
+        settings._fields['l10n_co_ne_sequence_id'].get_domain_list(settings) +
+        [('id', '=', other_module_seq.id)]
+    )
+    assert not matches, \
+        f"El domain de l10n_co_ne_sequence_id NO deberia matchear una secuencia de otro modulo ({other_module_seq.code})"
+test("Domain explicito en Consecutivos/Certificado -- ya no trae registros de otros modulos", t6)
 
 # ================================================================
 # RESULTADOS
