@@ -150,7 +150,23 @@ test("Escribir Modo de Operacion en res.config.settings persiste en l10n.co.ne.o
 # ================================================================
 def t4():
     original_env = company.l10n_co_ne_environment
+    mode = company.l10n_co_ne_operation_mode_ids
+    original_test_set_id = mode.test_set_id if mode else None
     try:
+        # El write de environment 1->2 mas abajo SI es un cambio real de
+        # valor (a diferencia del primero, que deja el mismo '2' que ya
+        # tenia la compania real) -- dispara _check_test_set_id de
+        # verdad. La compania real (Guapante) tiene operation_mode con
+        # software configurado pero test_set_id vacio (dato preexistente
+        # incompleto, documentado en post-migrate.py) -- sin esto, el
+        # segundo write de esta prueba chocaria con esa validacion real,
+        # no con un bug de esta prueba. Hallazgo de Tech Lead corrido
+        # contra el servidor: T4 fallaba por esto, no por el mecanismo
+        # computed+inverse (que si funciona, la traduccion 2->1 ya pasaba).
+        if mode and not mode.test_set_id:
+            mode.write({'test_set_id': 'TEST-SET-ID-T4'})
+            cr.commit()
+
         company.write({'l10n_co_ne_environment': '2'})
         cr.commit()
         settings = Settings.create({'company_id': company.id})
@@ -171,6 +187,8 @@ def t4():
             f"Escribir test_environment=True deberia dejar environment='2', quedo '{company.l10n_co_ne_environment}'"
     finally:
         company.write({'l10n_co_ne_environment': original_env})
+        if mode and original_test_set_id != mode.test_set_id:
+            mode.write({'test_set_id': original_test_set_id})
         cr.commit()
 test("l10n_co_ne_test_environment computed+inverse traduce correctamente en ambas direcciones", t4)
 
