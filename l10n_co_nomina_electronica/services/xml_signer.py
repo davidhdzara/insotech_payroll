@@ -269,7 +269,13 @@ def sign_xml(
     )
 
     # --- SignatureValue (placeholder, se llena después) ---
-    sig_value = etree.SubElement(sig, '{%s}SignatureValue' % NS_DS)
+    # AUD-DIAN-34 (2026-09-14): Id agregado para calzar con la
+    # implementacion nativa de Facturacion Electronica (l10n_co_dian),
+    # que siempre le pone Id a SignatureValue -- opcional segun XML-DSIG,
+    # pero se iguala por si la DIAN lo espera.
+    sig_value = etree.SubElement(
+        sig, '{%s}SignatureValue' % NS_DS, Id='%s-sigvalue' % sig_id,
+    )
 
     # --- KeyInfo ---
     key_info = etree.SubElement(
@@ -350,6 +356,20 @@ def sign_xml(
         sp_id_elem, '{%s}Identifier' % NS_XADES,
     )
     sp_identifier.text = SIGNATURE_POLICY_URL
+    # AUD-DIAN-34 (2026-09-14): xades:Description es opcional segun el
+    # esquema XAdES (minOccurs=0), pero la implementacion nativa de
+    # Facturacion Electronica (l10n_co_dian, en produccion) SIEMPRE lo
+    # incluye con este texto exacto -- la DIAN rechaza la firma (ZE02,
+    # "Valor de la firma invalido") sin dar mas detalle, y este es el
+    # unico hueco estructural real encontrado al comparar contra la
+    # implementacion nativa que si funciona.
+    sp_description = etree.SubElement(
+        sp_id_elem, '{%s}Description' % NS_XADES,
+    )
+    sp_description.text = (
+        'Política de firma para facturas electrónicas de la '
+        'República de Colombia.'
+    )
 
     sp_hash = etree.SubElement(
         sp_elem, '{%s}SigPolicyHash' % NS_XADES,
