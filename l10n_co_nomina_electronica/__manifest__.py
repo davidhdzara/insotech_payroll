@@ -1,6 +1,6 @@
 {
     'name': 'Nómina Electrónica Colombia - DIAN',
-    'version': '18.0.3.0.28',
+    'version': '18.0.3.0.29',
     'category': 'Human Resources/Payroll',
     'summary': 'Generación y envío de Nómina Electrónica a la DIAN (Resolución 000013 de 2021)',
     'description': """
@@ -71,6 +71,7 @@ Funcionalidades principales:
         'views/hr_retefuente_views.xml',
         'views/hr_salary_attachment_views.xml',
         'views/hr_contract_deductions_views.xml',
+        'views/hr_contract_retefuente_views.xml',
         # Reports
         'report/hr_payslip_ne_report.xml',
         # Wizards

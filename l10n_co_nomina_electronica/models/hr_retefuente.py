@@ -19,6 +19,7 @@ Referencia legal:
 """
 
 import logging
+from datetime import timedelta
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
@@ -65,7 +66,6 @@ class L10nCoRetefuenteUvt(models.Model):
     uvt_value = fields.Monetary(
         string='Valor UVT ($)',
         compute='_compute_uvt_value',
-        store=True,
         readonly=True,
         currency_field='currency_id',
         help='Valor de la Unidad de Valor Tributario (UVT) fijado por la '
@@ -175,6 +175,18 @@ class L10nCoRetefuenteUvt(models.Model):
         `hr.rule.parameter` no tiene `company_id` (solo `country_id`,
         ver doc 13) por lo que este lookup no depende de la compañía del
         registro — el UVT es un valor nacional único por año fiscal.
+
+        Doc 06 (2026-09-12): deliberadamente NO ``store=True``. La única
+        dependencia declarable con ``@api.depends`` es ``year`` -- Odoo no
+        puede rastrear automáticamente cambios en
+        ``hr.rule.parameter.value`` (modelo distinto, sin relación directa)
+        para invalidar un valor cacheado. Verificado empíricamente: con
+        ``store=True`` este campo quedaba con el valor viejo (stale) si el
+        parámetro real ``l10n_co_uvt`` se corregía después de creado el
+        registro de retención -- exactamente las "2 fuentes de UVT sin
+        relacionar entre sí" que motivó este punto del backlog. Sin
+        ``store``, el lookup se recalcula en cada lectura (barato, un solo
+        ``_get_parameter_from_code``), sin riesgo de desincronización.
         """
         RuleParameter = self.env['hr.rule.parameter']
         for rec in self:
@@ -202,7 +214,8 @@ class L10nCoRetefuenteUvt(models.Model):
     # MÉTODO PRINCIPAL: compute_retefuente
     # ══════════════════════════════════════════════════════════════════
     def compute_retefuente(self, employee, gross_salary, ibc_pension,
-                           ibc_salud, company=None):
+                           ibc_salud, company=None, contract=None,
+                           payslip=None, force_procedure=None):
         """Calcula la retención en la fuente mensual para un empleado.
 
         Ejecuta la depuración de la base gravable según la normatividad
@@ -215,6 +228,24 @@ class L10nCoRetefuenteUvt(models.Model):
         :param ibc_salud: float — IBC para aportes a salud ($)
         :param company: recordset ``res.company`` (opcional; si no se
             pasa se usa ``self.env.company``)
+        :param contract: recordset ``hr.contract`` (opcional -- fuente de
+            ``l10n_co_ne_pension_voluntaria``/``l10n_co_ne_afc`` para el
+            tope combinado del 30%%, AUD-05/doc 32. Sin contrato, esos
+            aportes se tratan como 0 -- mismo comportamiento que antes de
+            AUD-05 cuando el empleado no tenia los campos configurados)
+        :param payslip: recordset ``hr.payslip`` (opcional -- necesario
+            para el techo anual de 3.800 UVT combinado, AUD-05/doc 32:
+            consulta cuanto se trato como exento en meses anteriores del
+            mismo año calendario via ``payslip._sum('CO_EXENTO_PENSION_AFC',
+            ...)``. Sin payslip, se omite el techo anual -- solo aplica el
+            tope mensual)
+        :param force_procedure: str '1'/'2' (opcional -- doc 08). Si se
+            pasa, ignora ``self.procedure`` (el de la config anual,
+            compartido) y fuerza esa rama. Lo usa
+            ``hr.contract.action_calculate_retention_procedure2()`` para
+            aplicar SIEMPRE la tabla marginal Art. 383 (fuerza '1') sobre
+            el ingreso PROMEDIO al derivar el % fijo semestral, sin
+            importar qué procedimiento tenga configurado el año en curso.
         :returns: dict con el detalle de la depuración y el valor final
             de retención en pesos, con la siguiente estructura::
 
@@ -261,21 +292,65 @@ class L10nCoRetefuenteUvt(models.Model):
         aporte_pension = round(
             ibc_pension * _p('l10n_co_pct_pension_empleado') / 100, 2)
 
-        # ── 4. Aportes voluntarios a pensión (si aplica) ─────────────
-        #     Límite: hasta max_vol_pension_pct% del ingreso bruto
-        aporte_vol_pension = 0.0
-        if hasattr(employee, 'l10n_co_ne_voluntary_pension'):
-            raw = employee.l10n_co_ne_voluntary_pension or 0.0
-            max_vol = ingreso_bruto * _p('l10n_co_max_vol_pension_pct') / 100
-            aporte_vol_pension = min(raw, max_vol)
+        # ── 4/5. Pensión voluntaria + AFC — tope COMBINADO del 30%% ──
+        #     AUD-05/doc 32: Art. 126-1 ET (mod. Ley 1819/2016) + Art.
+        #     126-4 ET dan un tope UNICO combinado, no 2 topes
+        #     independientes -- un aporte que sume mas del limite entre
+        #     ambos conceptos se reduce PROPORCIONALMENTE (sin prelacion
+        #     normativa entre los 2, decision de diseño confirmada).
+        #     Fuente de los montos: contract.l10n_co_ne_pension_voluntaria/
+        #     l10n_co_ne_afc -- la misma fuente que alimenta la deduccion
+        #     real del payslip (reglas CO_PENSION_VOL/CO_AFC), no un campo
+        #     de empleado desconectado (el que existia antes se eliminó).
+        raw_vol_pension = (contract.l10n_co_ne_pension_voluntaria or 0.0) if contract else 0.0
+        raw_afc = (contract.l10n_co_ne_afc or 0.0) if contract else 0.0
+        total_raw_vol_afc = raw_vol_pension + raw_afc
 
-        # ── 5. AFC — Ahorro para el Fomento de la Construcción ───────
-        #     Límite: hasta max_afc_pct% del ingreso bruto
-        afc = 0.0
-        if hasattr(employee, 'l10n_co_ne_afc'):
-            raw_afc = employee.l10n_co_ne_afc or 0.0
-            max_afc = ingreso_bruto * _p('l10n_co_max_afc_pct') / 100
-            afc = min(raw_afc, max_afc)
+        max_combinado_pct = _p('l10n_co_max_vol_pension_afc_combinado_pct')
+        max_combinado_mes = ingreso_bruto * max_combinado_pct / 100
+
+        if total_raw_vol_afc > max_combinado_mes and total_raw_vol_afc > 0:
+            _factor = max_combinado_mes / total_raw_vol_afc
+            exento_vol_pension_mes = raw_vol_pension * _factor
+            exento_afc_mes = raw_afc * _factor
+        else:
+            exento_vol_pension_mes = raw_vol_pension
+            exento_afc_mes = raw_afc
+
+        exento_vol_afc_mes = exento_vol_pension_mes + exento_afc_mes
+
+        # ── Techo anual adicional: 3.800 UVT combinados (mismo Art.) ──
+        #     Requiere saber cuanto ya se trato como exento en meses
+        #     ANTERIORES del mismo año calendario -- se consulta sobre la
+        #     regla invisible CO_EXENTO_PENSION_AFC de payslips ya
+        #     confirmados (state in done/paid), mismo criterio que
+        #     payslip._sum() ya usa en el resto del modulo (helper nativo
+        #     de hr_payroll Enterprise). Sin payslip (ej. accion de
+        #     ejemplo/demo), se omite el techo anual.
+        if payslip is not None:
+            techo_anual = _p('l10n_co_max_vol_pension_afc_anual_uvt') * uvt
+            _year_start = payslip.date_from.replace(month=1, day=1)
+            _dia_anterior = payslip.date_from - timedelta(days=1)
+            if _dia_anterior >= _year_start:
+                acumulado_previo = payslip._sum(
+                    'CO_EXENTO_PENSION_AFC', _year_start, _dia_anterior,
+                )
+            else:
+                acumulado_previo = 0.0
+            disponible_anual = max(0.0, techo_anual - acumulado_previo)
+            exento_vol_afc_mes = min(exento_vol_afc_mes, disponible_anual)
+
+        # Reparto proporcional del exento FINAL (ya con tope mensual y techo
+        # anual aplicados) entre los 2 conceptos, en la misma proporcion de
+        # sus montos brutos originales -- mantiene aporte_voluntario_pension/
+        # afc como cifras separadas en el dict de retorno (para reportes/
+        # accion de ejemplo), consistente pase lo que pase con el escalado.
+        if total_raw_vol_afc > 0:
+            aporte_vol_pension = exento_vol_afc_mes * (raw_vol_pension / total_raw_vol_afc)
+            afc = exento_vol_afc_mes * (raw_afc / total_raw_vol_afc)
+        else:
+            aporte_vol_pension = 0.0
+            afc = 0.0
 
         # ── 6. Deducción por dependientes ─────────────────────────────
         #     pct_deduccion_dependientes%, máx max_dependientes_uvt UVT/mes
@@ -313,11 +388,46 @@ class L10nCoRetefuenteUvt(models.Model):
         base_uvt = base_gravable / uvt
 
         # ── 10. Aplicar tabla marginal o porcentaje fijo ─────────────
-        if self.procedure == '1':
+        # Doc 08: el procedimiento real es POR CONTRATO
+        # (contract.l10n_co_ne_retention_procedure), no el ``self.procedure``
+        # de esta config anual compartida (queda solo como fallback legado
+        # si no se pasa contrato). ``force_procedure`` (doc 08) tiene
+        # prioridad sobre ambos -- lo usa
+        # ``action_calculate_retention_procedure2()`` para forzar tabla
+        # marginal sobre el ingreso promedio al derivar el % fijo.
+        effective_procedure = (
+            force_procedure
+            or (contract.l10n_co_ne_retention_procedure if contract else None)
+            or self.procedure
+        )
+        if effective_procedure == '1':
             retencion_uvt = self._apply_marginal_table(base_uvt)
         else:
-            # Procedimiento 2: porcentaje fijo sobre la base gravable
-            retencion_uvt = base_uvt * (self.percentage_procedure2 / 100.0)
+            # Procedimiento 2 (Art. 384 ET): % fijo del semestre vigente,
+            # calculado por contrato (doc 08) -- ``percentage_procedure2``
+            # (compartido) queda solo como fallback si no hay contrato o
+            # no se ha calculado el semestre todavia.
+            pct = self.percentage_procedure2
+            if contract:
+                _ref = payslip.date_from if payslip else fields.Date.context_today(self)
+                semester_start = _ref.replace(month=1, day=1) if _ref.month <= 6 else _ref.replace(month=7, day=1)
+                proc2 = self.env['l10n.co.retefuente.procedure2'].search([
+                    ('contract_id', '=', contract.id),
+                    ('semester_start', '=', semester_start),
+                ], limit=1)
+                if proc2:
+                    pct = proc2.fixed_percentage
+                else:
+                    raise UserError(_(
+                        'El contrato de %(employee)s está en Procedimiento '
+                        '2 pero no tiene el porcentaje fijo calculado para '
+                        'el semestre que inicia %(semester)s. Use el botón '
+                        '"Calcular Procedimiento 2" en el contrato antes de '
+                        'generar esta nómina.',
+                        employee=employee.name,
+                        semester=semester_start,
+                    ))
+            retencion_uvt = base_uvt * (pct / 100.0)
 
         # ── 11. Convertir resultado a pesos ──────────────────────────
         retencion_pesos = round(retencion_uvt * uvt, 0)
@@ -328,6 +438,7 @@ class L10nCoRetefuenteUvt(models.Model):
             'aporte_pension': aporte_pension,
             'aporte_voluntario_pension': aporte_vol_pension,
             'afc': afc,
+            'exento_vol_pension_afc': aporte_vol_pension + afc,
             'deduccion_dependientes': deduccion_dep,
             'subtotal_depurado': subtotal,
             'renta_exenta_25': renta_exenta_25,
