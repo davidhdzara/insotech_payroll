@@ -124,3 +124,52 @@ class ResConfigSettings(models.TransientModel):
             structure = self.env.ref(xmlid, raise_if_not_found=False)
             if structure:
                 structure.journal_id = self[fname]
+
+    def action_iniciar_habilitacion_nomina(self):
+        """Habilitación DIAN en 1 clic, sin el modal intermedio del wizard.
+
+        2026-09-14: David pidió (con captura) que el link "Abrir Asistente
+        de Habilitación" dispare el proceso directo, igual que el patrón de
+        1 solo clic de Facturación Electrónica (Odoo 19) que mostró como
+        referencia -- antes abría el wizard (`target=new`) y exigía un
+        segundo clic adentro en "Iniciar Proceso de Habilitación".
+
+        El wizard (`l10n.co.ne.certification.wizard`) sigue existiendo tal
+        cual, sin cambios -- este método solo crea una instancia nueva
+        (TransientModel) y llama a su `action_iniciar_habilitacion()`
+        directo, sin mostrar el formulario. Como el wizard es transient
+        (no sobrevive entre clics), este método rehidrata sus 2 campos de
+        seguimiento (`payslip_individual_ids`/`_ajuste_ids`) buscando
+        payslips de habilitación reales ya preparados en corridas
+        anteriores (mismo período/nombre determinístico que usa
+        `_auto_select_period()`) -- si no se hiciera esto, cada clic
+        volvería a preparar y generar XML para todos los empleados desde
+        cero, duplicando documentos y gastando cupo real de la DIAN
+        (`action_prepare_individual()`/`_ajuste()` solo se saltan la
+        preparación cuando el wizard YA trae `payslip_individual_ids`/
+        `_ajuste_ids` cargados).
+        """
+        self.ensure_one()
+        wizard = self.env['l10n.co.ne.certification.wizard'].create({
+            'company_id': self.company_id.id,
+        })
+        date_from, date_to = wizard._auto_select_period()
+        existing_individual = self.env['hr.payslip'].search([
+            ('company_id', '=', wizard.company_id.id),
+            ('date_from', '=', date_from),
+            ('date_to', '=', date_to),
+            ('l10n_co_ne_is_adjustment', '=', False),
+            ('name', 'like', 'Habilitación DIAN - %'),
+        ])
+        existing_ajuste = self.env['hr.payslip'].search([
+            ('company_id', '=', wizard.company_id.id),
+            ('l10n_co_ne_is_adjustment', '=', True),
+            ('name', 'like', 'Ajuste Habilitación DIAN - %'),
+        ])
+        wizard.write({
+            'date_from': date_from,
+            'date_to': date_to,
+            'payslip_individual_ids': [(6, 0, existing_individual.ids)],
+            'payslip_ajuste_ids': [(6, 0, existing_ajuste.ids)],
+        })
+        return wizard.action_iniciar_habilitacion()

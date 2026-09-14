@@ -681,6 +681,15 @@ class HrPayslip(models.Model):
         )
 
         zip_key = response.get('ZipKey', '')
+        # AUD-DIAN-34 (2026-09-14): antes no se persistia el ZipKey real
+        # devuelto por SendTestSetAsync ni se marcaba 'sent' -- accion_
+        # check_dian_status() caia a usar el CUNE como trackId (formato
+        # distinto), y GetStatusZip lo rechazaba con StatusCode 89
+        # "Formato trackId invalido" en el 100% de los casos reales.
+        records.write({
+            'l10n_co_ne_zip_key': zip_key,
+            'l10n_co_ne_state': 'sent',
+        })
         _logger.info(
             'Set de pruebas enviado: %d documentos. ZipKey: %s',
             len(xml_files), zip_key,
