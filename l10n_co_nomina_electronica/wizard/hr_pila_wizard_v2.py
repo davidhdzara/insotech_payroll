@@ -324,10 +324,9 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
 
         # Calcular total nómina
         total_nomina = sum(
-            p.line_ids.filtered(
-                lambda l: l.code == 'CO_NETO'
-            ).mapped('total')
+            l.total
             for p in payslips
+            for l in p.line_ids.filtered(lambda l: l.code == 'CO_NETO')
         )
 
         # Preparar valores de actualización
@@ -547,10 +546,9 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
 
         # Total nómina
         total_nomina = sum(
-            p.line_ids.filtered(
-                lambda l: l.code == 'CO_NETO'
-            ).mapped('total')
+            l.total
             for p in payslips
+            for l in p.line_ids.filtered(lambda l: l.code == 'CO_NETO')
         )
 
         return {

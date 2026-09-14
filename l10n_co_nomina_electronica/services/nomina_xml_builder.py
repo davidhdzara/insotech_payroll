@@ -22,6 +22,8 @@ import math
 from typing import Any, Optional, Union
 from lxml import etree
 
+from ._dict_to_xml import dict_to_xml
+
 # =====================================================================
 # Namespaces
 # =====================================================================
@@ -1153,3 +1155,794 @@ def _build_eliminar(
 
     # Empleador
     _add_empleador(elim, data.get('empleador', {}))
+
+
+# =====================================================================
+# doc 24 -- Fase 1: migración a dict_to_xml (secciones simples)
+#
+# Funciones nuevas, en paralelo a las _add_X() de arriba (que siguen
+# siendo las que realmente usa build_nomina_individual()/
+# build_nota_ajuste() por ahora) -- NO están todavía conectadas al
+# flujo público. Cubren las 9 secciones "simples" del documento raíz
+# (Periodo, NumeroSecuenciaXML, LugarGeneracionXML, ProveedorXML,
+# InformacionGeneral, Empleador, Trabajador, Pago, FechasPagos).
+# Devengados/Deducciones (la parte grande y de mayor riesgo, ~380
+# líneas combinadas) quedan para la Fase 2, doc 24 §8.
+#
+# Patrón: 1 función _get_X_node(data) -> dict por cada _add_X(parent,
+# data) existente, mismo criterio que _add_invoice_header_nodes en
+# account_edi_ubl_cii/models/account_edi_xml_ubl_20.py (la referencia
+# elegida en doc 24 §2). _fmt()/_get() no cambian -- siguen
+# produciendo los mismos strings, solo que ahora van a valores de dict
+# en vez de argumentos de _el()/_attr().
+# =====================================================================
+
+def _get_periodo_node(data: dict) -> dict:
+    """Equivalente dict de _add_periodo(). data = sub-dict 'periodo'."""
+    node = {
+        'FechaIngreso': data.get('FechaIngreso', ''),
+        'FechaLiquidacionInicio': data.get('FechaLiquidacionInicio', ''),
+        'FechaLiquidacionFin': data.get('FechaLiquidacionFin', ''),
+        'TiempoLaborado': str(data.get('TiempoLaborado', '0')),
+        'FechaGen': data.get('FechaGen', ''),
+    }
+    if data.get('FechaRetiro'):
+        node['FechaRetiro'] = data['FechaRetiro']
+    return node
+
+
+def _get_numero_secuencia_node(data: dict) -> dict:
+    """Equivalente dict de _add_numero_secuencia(). data = sub-dict 'numero_secuencia'."""
+    node = {
+        'Consecutivo': str(data.get('Consecutivo', '')),
+        'Numero': str(data.get('Numero', '')),
+    }
+    if data.get('Prefijo'):
+        node['Prefijo'] = data['Prefijo']
+    if data.get('CodigoTrabajador'):
+        node['CodigoTrabajador'] = str(data['CodigoTrabajador'])
+    return node
+
+
+def _get_lugar_generacion_node(data: dict) -> dict:
+    """Equivalente dict de _add_lugar_generacion(). data = sub-dict 'lugar_generacion'."""
+    return {
+        'Pais': data.get('Pais', 'CO'),
+        'DepartamentoEstado': str(data.get('DepartamentoEstado', '')),
+        'MunicipioCiudad': str(data.get('MunicipioCiudad', '')),
+        'Idioma': data.get('Idioma', 'es'),
+    }
+
+
+def _get_proveedor_xml_node(data: dict) -> dict:
+    """Equivalente dict de _add_proveedor_xml(). data = sub-dict 'proveedor_xml'."""
+    node = {
+        'NIT': str(data.get('NIT', '')),
+        'DV': str(data.get('DV', '')),
+        'SoftwareID': data.get('SoftwareID', ''),
+        'SoftwareSC': data.get('SoftwareSC', ''),
+    }
+    for campo in ('RazonSocial', 'PrimerApellido', 'SegundoApellido',
+                  'PrimerNombre', 'OtrosNombres'):
+        if data.get(campo):
+            node[campo] = data[campo]
+    return node
+
+
+def _get_informacion_general_node(data: dict) -> dict:
+    """Equivalente dict de _add_informacion_general(). data = sub-dict 'informacion_general'."""
+    node = {
+        'Version': data.get(
+            'Version',
+            'V1.0: Documento Soporte de Pago de Nómina Electrónica',
+        ),
+        'Ambiente': str(data.get('Ambiente', '2')),
+        'TipoXML': str(data.get('TipoXML', '102')),
+        'CUNE': data.get('CUNE', ''),
+        'EncripCUNE': data.get('EncripCUNE', 'CUNE-SHA384'),
+        'FechaGen': data.get('FechaGen', ''),
+        'HoraGen': data.get('HoraGen', ''),
+        'PeriodoNomina': str(data.get('PeriodoNomina', '5')),
+        'TipoMoneda': data.get('TipoMoneda', 'COP'),
+    }
+    if data.get('TRM'):
+        node['TRM'] = str(data['TRM'])
+    return node
+
+
+def _get_empleador_node(data: dict) -> dict:
+    """Equivalente dict de _add_empleador(). data = sub-dict 'empleador'."""
+    node = {
+        'NIT': str(data.get('NIT', '')),
+        'DV': str(data.get('DV', '')),
+        'Pais': data.get('Pais', 'CO'),
+        'DepartamentoEstado': str(data.get('DepartamentoEstado', '')),
+        'MunicipioCiudad': str(data.get('MunicipioCiudad', '')),
+        'Direccion': data.get('Direccion', ''),
+    }
+    for campo in ('RazonSocial', 'PrimerApellido', 'SegundoApellido',
+                  'PrimerNombre', 'OtrosNombres'):
+        if data.get(campo):
+            node[campo] = data[campo]
+    return node
+
+
+def _get_trabajador_node(data: dict) -> dict:
+    """Equivalente dict de _add_trabajador(). data = sub-dict 'trabajador'."""
+    node = {
+        'TipoTrabajador': str(data.get('TipoTrabajador', '01')),
+        'SubTipoTrabajador': str(data.get('SubTipoTrabajador', '00')),
+        'AltoRiesgoPension': str(data.get('AltoRiesgoPension', 'false')).lower(),
+        'TipoDocumento': str(data.get('TipoDocumento', '13')),
+        'NumeroDocumento': str(data.get('NumeroDocumento', '')),
+        'PrimerApellido': data.get('PrimerApellido', ''),
+        'SegundoApellido': data.get('SegundoApellido', ''),
+        'PrimerNombre': data.get('PrimerNombre', ''),
+        'LugarTrabajoPais': data.get('LugarTrabajoPais', 'CO'),
+        'LugarTrabajoDepartamentoEstado': str(
+            data.get('LugarTrabajoDepartamentoEstado', '')),
+        'LugarTrabajoMunicipioCiudad': str(
+            data.get('LugarTrabajoMunicipioCiudad', '')),
+        'LugarTrabajoDireccion': data.get('LugarTrabajoDireccion', ''),
+        'SalarioIntegral': str(data.get('SalarioIntegral', 'false')).lower(),
+        'TipoContrato': str(data.get('TipoContrato', '1')),
+        'Sueldo': _fmt(data.get('Sueldo', 0)),
+    }
+    if data.get('OtrosNombres'):
+        node['OtrosNombres'] = data['OtrosNombres']
+    if data.get('CodigoTrabajador'):
+        node['CodigoTrabajador'] = str(data['CodigoTrabajador'])
+    return node
+
+
+def _get_pago_node(data: dict) -> dict:
+    """Equivalente dict de _add_pago(). data = sub-dict 'pago'."""
+    node = {
+        'Forma': str(data.get('Forma', '1')),
+        'Metodo': str(data.get('Metodo', '1')),
+    }
+    for campo in ('Banco', 'TipoCuenta', 'NumeroCuenta'):
+        if data.get(campo):
+            node[campo] = data[campo]
+    return node
+
+
+def _get_fechas_pagos_node(fechas: list[str]) -> dict:
+    """Equivalente dict de _add_fechas_pagos(). fechas = lista 'fechas_pagos'."""
+    return {
+        'FechaPago': [{'_text': str(fecha)} for fecha in fechas],
+    }
+
+
+# =====================================================================
+# Devengados / Deducciones / HorasExtra -- Fase 2 (doc 24 SS8, paso 3)
+#
+# Mismo patron que las 9 secciones simples de arriba: 1 funcion
+# _get_X_node(data) -> dict por cada _add_X(parent, data) equivalente
+# de mas arriba en este archivo (las funciones viejas, sin tocar, siguen
+# siendo las que usa build_nomina_individual()/build_nota_ajuste() hoy).
+#
+# Regla clave para traducir "si no hay dato, no se genera el elemento"
+# (el patron `if attribs: _attr(...)` / `if items: _el(...)` de las
+# funciones viejas): dict_to_xml() YA hace esto automaticamente -- al
+# final de renderizar cada nodo, si no tiene atributos, texto NI hijos,
+# devuelve None en vez del elemento (ver dict_to_xml() en _dict_to_xml.py,
+# ultima linea antes de `return element`), y el padre lo omite solo. Por
+# eso aqui NO hace falta replicar manualmente los "if" que crean el
+# wrapper solo si hay contenido -- basta con construir el dict completo
+# (con None en los campos ausentes, que dict_to_xml tambien omite como
+# atributo) y dejar que el mecanismo de poda automatica haga el resto.
+# =====================================================================
+
+def _get_horas_extra_items(items: list[dict]) -> list[dict]:
+    """Equivalente dict de _add_horas_extra(). items = lista de horas extra
+    de un tipo (HEDs/HENs/etc, cada item con Cantidad/Porcentaje/Pago/
+    HoraInicio/HoraFin)."""
+    result = []
+    for item in items:
+        node = {
+            'Cantidad': str(item.get('Cantidad', '0')),
+            'Porcentaje': _fmt(item.get('Porcentaje', 0)),
+            'Pago': _fmt(item.get('Pago', 0)),
+        }
+        if item.get('HoraInicio'):
+            node['HoraInicio'] = item['HoraInicio']
+        if item.get('HoraFin'):
+            node['HoraFin'] = item['HoraFin']
+        result.append(node)
+    return result
+
+
+def _get_transporte_items(transporte) -> list[dict]:
+    """Equivalente dict del bloque Transporte de _add_devengados()."""
+    if not transporte:
+        return []
+    if isinstance(transporte, dict):
+        transporte = [transporte]
+    items = []
+    for t in transporte:
+        items.append({
+            'AuxilioTransporte': (
+                _fmt(t['AuxilioTransporte'])
+                if t.get('AuxilioTransporte') is not None else None
+            ),
+            'ViaticoManuAlojS': (
+                _fmt(t['ViaticoManuAlojS'])
+                if t.get('ViaticoManuAlojS') is not None else None
+            ),
+            'ViaticoManuAlojNS': (
+                _fmt(t['ViaticoManuAlojNS'])
+                if t.get('ViaticoManuAlojNS') is not None else None
+            ),
+        })
+    return items
+
+
+def _get_vacaciones_node(vac_data: dict) -> dict:
+    """Equivalente dict del bloque Vacaciones de _add_devengados()."""
+    if not vac_data:
+        return {}
+    comunes = []
+    for vc in vac_data.get('VacacionesComunes', []):
+        node = {
+            'Cantidad': str(vc.get('Cantidad', '0')),
+            'Pago': _fmt(vc.get('Pago', 0)),
+        }
+        if vc.get('FechaInicio'):
+            node['FechaInicio'] = vc['FechaInicio']
+        if vc.get('FechaFin'):
+            node['FechaFin'] = vc['FechaFin']
+        comunes.append(node)
+
+    compensadas = [
+        {
+            'Cantidad': str(vcomp.get('Cantidad', '0')),
+            'Pago': _fmt(vcomp.get('Pago', 0)),
+        }
+        for vcomp in vac_data.get('VacacionesCompensadas', [])
+    ]
+
+    return {
+        'VacacionesComunes': comunes,
+        'VacacionesCompensadas': compensadas,
+    }
+
+
+def _get_primas_node(primas: dict) -> dict:
+    """Equivalente dict del bloque Primas de _add_devengados()."""
+    if not primas:
+        return {}
+    node = {
+        'Cantidad': str(primas.get('Cantidad', '0')),
+        'Pago': _fmt(primas.get('Pago', 0)),
+    }
+    if primas.get('PagoNS') is not None:
+        node['PagoNS'] = _fmt(primas['PagoNS'])
+    return node
+
+
+def _get_cesantias_node(ces: dict) -> dict:
+    """Equivalente dict del bloque Cesantias de _add_devengados()."""
+    if not ces:
+        return {}
+    return {
+        'Pago': _fmt(ces.get('Pago', 0)),
+        'Porcentaje': _fmt(ces.get('Porcentaje', 0)),
+        'PagoIntereses': _fmt(ces.get('PagoIntereses', 0)),
+    }
+
+
+def _get_incapacidades_items(incap_list: list[dict]) -> list[dict]:
+    """Equivalente dict del bloque Incapacidades de _add_devengados()."""
+    result = []
+    for inc in incap_list:
+        node = {
+            'Cantidad': str(inc.get('Cantidad', '0')),
+            'Tipo': str(inc.get('Tipo', '1')),
+            'Pago': _fmt(inc.get('Pago', 0)),
+        }
+        if inc.get('FechaInicio'):
+            node['FechaInicio'] = inc['FechaInicio']
+        if inc.get('FechaFin'):
+            node['FechaFin'] = inc['FechaFin']
+        result.append(node)
+    return result
+
+
+def _get_licencias_node(lic_data: dict) -> dict:
+    """Equivalente dict del bloque Licencias de _add_devengados()."""
+    if not lic_data:
+        return {}
+
+    def _con_fechas(items, campos_extra=()):
+        result = []
+        for it in items:
+            node = {'Cantidad': str(it.get('Cantidad', '0'))}
+            for campo in campos_extra:
+                node[campo] = _fmt(it.get(campo, 0))
+            if it.get('FechaInicio'):
+                node['FechaInicio'] = it['FechaInicio']
+            if it.get('FechaFin'):
+                node['FechaFin'] = it['FechaFin']
+            result.append(node)
+        return result
+
+    return {
+        'LicenciaMP': _con_fechas(lic_data.get('LicenciaMP', []), ('Pago',)),
+        'LicenciaR': _con_fechas(lic_data.get('LicenciaR', []), ('Pago',)),
+        'LicenciaNR': _con_fechas(lic_data.get('LicenciaNR', [])),
+    }
+
+
+def _get_bonificaciones_items(bonif_list: list[dict]) -> list[dict]:
+    """Equivalente dict del bloque Bonificaciones de _add_devengados()."""
+    result = []
+    for b in bonif_list:
+        result.append({
+            'BonificacionS': (
+                _fmt(b['BonificacionS']) if b.get('BonificacionS') is not None else None
+            ),
+            'BonificacionNS': (
+                _fmt(b['BonificacionNS']) if b.get('BonificacionNS') is not None else None
+            ),
+        })
+    return result
+
+
+def _get_auxilios_items(aux_list: list[dict]) -> list[dict]:
+    """Equivalente dict del bloque Auxilios de _add_devengados()."""
+    result = []
+    for a in aux_list:
+        result.append({
+            'AuxilioS': _fmt(a['AuxilioS']) if a.get('AuxilioS') is not None else None,
+            'AuxilioNS': _fmt(a['AuxilioNS']) if a.get('AuxilioNS') is not None else None,
+        })
+    return result
+
+
+def _get_huelgas_legales_items(huelgas: list[dict]) -> list[dict]:
+    """Equivalente dict del bloque HuelgasLegales de _add_devengados()."""
+    result = []
+    for h in huelgas:
+        node = {'Cantidad': str(h.get('Cantidad', '0'))}
+        if h.get('FechaInicio'):
+            node['FechaInicio'] = h['FechaInicio']
+        if h.get('FechaFin'):
+            node['FechaFin'] = h['FechaFin']
+        result.append(node)
+    return result
+
+
+def _get_otros_conceptos_items(otros: list[dict]) -> list[dict]:
+    """Equivalente dict del bloque OtrosConceptos de _add_devengados()."""
+    result = []
+    for o in otros:
+        result.append({
+            'DescripcionConcepto': o.get('DescripcionConcepto', ''),
+            'ConceptoS': _fmt(o['ConceptoS']) if o.get('ConceptoS') is not None else None,
+            'ConceptoNS': _fmt(o['ConceptoNS']) if o.get('ConceptoNS') is not None else None,
+        })
+    return result
+
+
+def _get_compensaciones_items(comp_list: list[dict]) -> list[dict]:
+    """Equivalente dict del bloque Compensaciones de _add_devengados()."""
+    return [
+        {
+            'CompensacionO': _fmt(c.get('CompensacionO', 0)),
+            'CompensacionE': _fmt(c.get('CompensacionE', 0)),
+        }
+        for c in comp_list
+    ]
+
+
+def _get_bono_epctv_items(bonos: list[dict]) -> list[dict]:
+    """Equivalente dict del bloque BonoEPCTVs de _add_devengados()."""
+    result = []
+    for bn in bonos:
+        result.append({
+            'PagoS': _fmt(bn['PagoS']) if bn.get('PagoS') is not None else None,
+            'PagoNS': _fmt(bn['PagoNS']) if bn.get('PagoNS') is not None else None,
+            'PagoAlimentacionS': (
+                _fmt(bn['PagoAlimentacionS'])
+                if bn.get('PagoAlimentacionS') is not None else None
+            ),
+            'PagoAlimentacionNS': (
+                _fmt(bn['PagoAlimentacionNS'])
+                if bn.get('PagoAlimentacionNS') is not None else None
+            ),
+        })
+    return result
+
+
+def _get_valor_simple_items(valores: list) -> list[dict]:
+    """Equivalente dict de los bloques Comisiones/PagosTerceros/Anticipos/
+    OtrasDeducciones de _add_devengados()/_add_deducciones() -- listas de
+    valores simples, cada uno un elemento con solo texto (_fmt)."""
+    return [{'_text': _fmt(v)} for v in valores]
+
+
+def _get_devengados_node(data: dict) -> dict:
+    """Equivalente dict de _add_devengados(). data = sub-dict 'devengados'."""
+    basico = data.get('Basico', {})
+    node = {
+        'Basico': {
+            'DiasTrabajados': str(basico.get('DiasTrabajados', '30')),
+            'SueldoTrabajado': _fmt(basico.get('SueldoTrabajado', 0)),
+        },
+        'Transporte': _get_transporte_items(data.get('Transporte')),
+        'HEDs': {'HED': _get_horas_extra_items(data.get('HEDs', []))},
+        'HENs': {'HEN': _get_horas_extra_items(data.get('HENs', []))},
+        'HRNs': {'HRN': _get_horas_extra_items(data.get('HRNs', []))},
+        'HEDDFs': {'HEDDF': _get_horas_extra_items(data.get('HEDDFs', []))},
+        'HRDDFs': {'HRDDF': _get_horas_extra_items(data.get('HRDDFs', []))},
+        'HENDFs': {'HENDF': _get_horas_extra_items(data.get('HENDFs', []))},
+        'HRNDFs': {'HRNDF': _get_horas_extra_items(data.get('HRNDFs', []))},
+        'Vacaciones': _get_vacaciones_node(data.get('Vacaciones')),
+        'Primas': _get_primas_node(data.get('Primas')),
+        'Cesantias': _get_cesantias_node(data.get('Cesantias')),
+        'Incapacidades': {
+            'Incapacidad': _get_incapacidades_items(data.get('Incapacidades', [])),
+        },
+        'Licencias': _get_licencias_node(data.get('Licencias')),
+        'Bonificaciones': {
+            'Bonificacion': _get_bonificaciones_items(data.get('Bonificaciones', [])),
+        },
+        'Auxilios': {'Auxilio': _get_auxilios_items(data.get('Auxilios', []))},
+        'HuelgasLegales': {
+            'HuelgaLegal': _get_huelgas_legales_items(data.get('HuelgasLegales', [])),
+        },
+        'OtrosConceptos': {
+            'OtroConcepto': _get_otros_conceptos_items(data.get('OtrosConceptos', [])),
+        },
+        'Compensaciones': {
+            'Compensacion': _get_compensaciones_items(data.get('Compensaciones', [])),
+        },
+        'BonoEPCTVs': {
+            'BonoEPCTV': _get_bono_epctv_items(data.get('BonoEPCTVs', [])),
+        },
+        'Comisiones': {
+            'Comision': _get_valor_simple_items(data.get('Comisiones', [])),
+        },
+        'PagosTerceros': {
+            'PagoTercero': _get_valor_simple_items(data.get('PagosTerceros', [])),
+        },
+        'Anticipos': {
+            'Anticipo': _get_valor_simple_items(data.get('Anticipos', [])),
+        },
+    }
+
+    for campo in ('Dotacion', 'ApoyoSost', 'Teletrabajo',
+                  'BonifRetiro', 'Indemnizacion', 'Reintegro'):
+        val = data.get(campo)
+        if val is not None:
+            node[campo] = {'_text': _fmt(val)}
+
+    return node
+
+
+def _get_deducciones_node(data: dict) -> dict:
+    """Equivalente dict de _add_deducciones(). data = sub-dict 'deducciones'."""
+    salud = data.get('Salud', {})
+    pension = data.get('FondoPension', {})
+    fsp = data.get('FondoSP') or {}
+
+    node = {
+        'Salud': {
+            'Porcentaje': _fmt(salud.get('Porcentaje', 4)),
+            'Deduccion': _fmt(salud.get('Deduccion', 0)),
+        },
+        'FondoPension': {
+            'Porcentaje': _fmt(pension.get('Porcentaje', 4)),
+            'Deduccion': _fmt(pension.get('Deduccion', 0)),
+        },
+        'FondoSP': {
+            'Porcentaje': _fmt(fsp['Porcentaje']) if fsp.get('Porcentaje') is not None else None,
+            'DeduccionSP': (
+                _fmt(fsp['DeduccionSP']) if fsp.get('DeduccionSP') is not None else None
+            ),
+            'PorcentajeSub': (
+                _fmt(fsp['PorcentajeSub']) if fsp.get('PorcentajeSub') is not None else None
+            ),
+            'DeduccionSub': (
+                _fmt(fsp['DeduccionSub']) if fsp.get('DeduccionSub') is not None else None
+            ),
+        },
+        'Sindicatos': {
+            'Sindicato': [
+                {
+                    'Porcentaje': _fmt(s.get('Porcentaje', 0)),
+                    'Deduccion': _fmt(s.get('Deduccion', 0)),
+                }
+                for s in data.get('Sindicatos', [])
+            ],
+        },
+        'Sanciones': {
+            'Sancion': [
+                {
+                    'SancionPublic': _fmt(s.get('SancionPublic', 0)),
+                    'SancionPriv': _fmt(s.get('SancionPriv', 0)),
+                }
+                for s in data.get('Sanciones', [])
+            ],
+        },
+        'Libranzas': {
+            'Libranza': [
+                {
+                    'Descripcion': l.get('Descripcion', ''),
+                    'Deduccion': _fmt(l.get('Deduccion', 0)),
+                }
+                for l in data.get('Libranzas', [])
+            ],
+        },
+        'PagosTerceros': {
+            'PagoTercero': _get_valor_simple_items(data.get('PagosTerceros', [])),
+        },
+        'Anticipos': {
+            'Anticipo': _get_valor_simple_items(data.get('Anticipos', [])),
+        },
+        'OtrasDeducciones': {
+            'OtraDeduccion': _get_valor_simple_items(data.get('OtrasDeducciones', [])),
+        },
+    }
+
+    for campo in ('PensionVoluntaria', 'RetencionFuente', 'AFC',
+                  'Cooperativa', 'EmbargoFiscal', 'PlanComplementarios',
+                  'Educacion', 'Reintegro', 'Deuda'):
+        val = data.get(campo)
+        if val is not None:
+            node[campo] = {'_text': _fmt(val)}
+
+    return node
+
+
+# Template parcial -- SOLO las 9 secciones simples de esta fase, en el
+# mismo orden en que build_nomina_individual() las agrega hoy (pasos
+# 3-13 salvo CodigoQR/Notas, que son valores simples sin sub-estructura
+# y no necesitan node-builder propio). Uso exclusivo del harness de
+# comparación de abajo -- NO es el template completo del documento
+# (ese se arma en la Fase 2, cuando Devengados/Deducciones también
+# tengan su propio _get_X_node()).
+_TEMPLATE_SECCIONES_SIMPLES = {
+    'Periodo': {},
+    'NumeroSecuenciaXML': {},
+    'LugarGeneracionXML': {},
+    'ProveedorXML': {},
+    'InformacionGeneral': {},
+    'Empleador': {},
+    'Trabajador': {},
+    'Pago': {},
+    'FechasPagos': {'FechaPago': {}},
+}
+
+
+def _build_secciones_simples_node(data: dict) -> dict:
+    """Arma el fragmento de las 9 secciones simples como un solo dict.
+
+    Uso exclusivo del harness de comparación Fase 1 -- compone las 9
+    secciones bajo un tag contenedor ficticio para poder renderizarlas
+    con dict_to_xml() de forma aislada, sin necesitar todavía el
+    documento NominaIndividual completo (que requiere Devengados/
+    Deducciones, Fase 2).
+    """
+    return {
+        '_tag': 'SeccionesSimplesTest',
+        'Periodo': _get_periodo_node(data.get('periodo', {})),
+        'NumeroSecuenciaXML': _get_numero_secuencia_node(
+            data.get('numero_secuencia', {})),
+        'LugarGeneracionXML': _get_lugar_generacion_node(
+            data.get('lugar_generacion', {})),
+        'ProveedorXML': _get_proveedor_xml_node(data.get('proveedor_xml', {})),
+        'InformacionGeneral': _get_informacion_general_node(
+            data.get('informacion_general', {})),
+        'Empleador': _get_empleador_node(data.get('empleador', {})),
+        'Trabajador': _get_trabajador_node(data.get('trabajador', {})),
+        'Pago': _get_pago_node(data.get('pago', {})),
+        'FechasPagos': _get_fechas_pagos_node(data.get('fechas_pagos', [])),
+    }
+
+
+# =====================================================================
+# Orquestador real (doc 24 SS8, paso 1, cerrado al final por orden de
+# riesgo) -- build_nomina_individual_v2()/build_nota_ajuste_v2().
+#
+# TODAVIA NO CONECTADO AL FLUJO REAL: hr_payslip.py sigue llamando a
+# build_nomina_individual()/build_nota_ajuste() (las funciones viejas,
+# sin tocar). Este bloque es codigo nuevo en paralelo, pendiente de que
+# Tech Lead de luz verde al corte tras revisar la verificacion XSD+C14N
+# del DOCUMENTO COMPLETO (no solo de las secciones sueltas de las Fases
+# 1/2), ver doc 24 SS13.
+#
+# Decision de diseno: CodigoQR y ext:UBLExtensions NO se arman via
+# dict_to_xml aunque tengan una funcion _get_X_node equivalente en las
+# fases anteriores -- son elementos "placeholder", requeridos por el
+# XSD pero legitimamente vacios en la primera pasada (CUNE/QR se
+# calculan e insertan DESPUES via re-parseo, ver doc 24 SS6; la firma
+# digital se inserta en UBLExtensions todavia mas tarde). dict_to_xml
+# omite automaticamente cualquier elemento sin atributos/texto/hijos
+# (la poda automatica que simplifico Devengados/Deducciones en la Fase
+# 2) -- exactamente el comportamiento CORRECTO para secciones opcionales
+# de verdad, pero INCORRECTO aqui: silenciaria <CodigoQR></CodigoQR> y
+# <ext:UBLExtensions></ext:UBLExtensions> en la primera pasada, dejando
+# esos 2 elementos requeridos (minOccurs=1) sin generar, y el
+# post-procesamiento de CUNE/firma no tendria donde insertar el valor
+# despues. Por eso se mantienen con los helpers viejos _el()/
+# _add_ubl_extensions() sin cambios (mismo criterio que Notas/Redondeo/
+# los 3 totales, que tampoco tienen esa ambiguedad -- _fmt(0) nunca es
+# '', y Notas/Redondeo ya son opcionales de verdad, se omiten a
+# proposito cuando no hay dato).
+# =====================================================================
+
+def _append_dict_section(parent: etree._Element, tag: str, node: dict, nsmap: dict) -> None:
+    """Renderiza `node` con dict_to_xml() bajo `tag` y lo agrega a `parent`
+    en el namespace por defecto de `nsmap` -- o no agrega nada si
+    dict_to_xml() poda el nodo por estar vacio (mismo criterio ya
+    verificado en Fases 1/2)."""
+    node = dict(node)
+    node['_tag'] = tag
+    element = dict_to_xml(node, nsmap=nsmap)
+    if element is not None:
+        parent.append(element)
+
+
+def build_nomina_individual_v2(data: dict) -> bytes:
+    """Equivalente a build_nomina_individual(), migrado a dict_to_xml()
+    para las secciones estructuradas (Fases 1 y 2). Ver nota de diseno
+    arriba sobre por que UBLExtensions/CodigoQR/Notas/Redondeo/totales
+    siguen usando los helpers viejos _el()/_attr()/_add_ubl_extensions().
+
+    NO esta conectada al flujo real todavia -- ver doc 24 SS13."""
+    root = etree.Element('{%s}NominaIndividual' % NS_NOMINA, nsmap=_NSMAP_NOMINA)
+    root.set('SchemaLocation', '')
+    root.set('{%s}schemaLocation' % NS_XSD,
+             '%s NominaIndividualElectronicaXSD.xsd' % NS_NOMINA)
+
+    _add_ubl_extensions(root)
+
+    novedad = data.get('novedad')
+    if novedad:
+        _el(root, 'Novedad', text=str(novedad.get('value', 'false')).lower(),
+            CUNENov=novedad.get('CUNENov', ''))
+
+    _append_dict_section(root, 'Periodo', _get_periodo_node(data.get('periodo', {})), _NSMAP_NOMINA)
+    _append_dict_section(root, 'NumeroSecuenciaXML',
+                          _get_numero_secuencia_node(data.get('numero_secuencia', {})), _NSMAP_NOMINA)
+    _append_dict_section(root, 'LugarGeneracionXML',
+                          _get_lugar_generacion_node(data.get('lugar_generacion', {})), _NSMAP_NOMINA)
+    _append_dict_section(root, 'ProveedorXML',
+                          _get_proveedor_xml_node(data.get('proveedor_xml', {})), _NSMAP_NOMINA)
+
+    _el(root, 'CodigoQR', text=data.get('codigo_qr', ''))
+
+    _append_dict_section(root, 'InformacionGeneral',
+                          _get_informacion_general_node(data.get('informacion_general', {})), _NSMAP_NOMINA)
+
+    notas = data.get('notas')
+    if notas:
+        if isinstance(notas, str):
+            notas = [notas]
+        for nota in notas:
+            _el(root, 'Notas', text=nota)
+
+    _append_dict_section(root, 'Empleador', _get_empleador_node(data.get('empleador', {})), _NSMAP_NOMINA)
+    _append_dict_section(root, 'Trabajador', _get_trabajador_node(data.get('trabajador', {})), _NSMAP_NOMINA)
+    _append_dict_section(root, 'Pago', _get_pago_node(data.get('pago', {})), _NSMAP_NOMINA)
+    _append_dict_section(root, 'FechasPagos',
+                          _get_fechas_pagos_node(data.get('fechas_pagos', [])), _NSMAP_NOMINA)
+    _append_dict_section(root, 'Devengados', _get_devengados_node(data.get('devengados', {})), _NSMAP_NOMINA)
+    _append_dict_section(root, 'Deducciones', _get_deducciones_node(data.get('deducciones', {})), _NSMAP_NOMINA)
+
+    if data.get('redondeo') is not None:
+        _el(root, 'Redondeo', text=_fmt(data['redondeo']))
+
+    _el(root, 'DevengadosTotal', text=_fmt(data.get('devengados_total', 0)))
+    _el(root, 'DeduccionesTotal', text=_fmt(data.get('deducciones_total', 0)))
+    _el(root, 'ComprobanteTotal', text=_fmt(data.get('comprobante_total', 0)))
+
+    return etree.tostring(root, xml_declaration=True, encoding='UTF-8', pretty_print=True)
+
+
+def _build_reemplazar_v2(parent: etree._Element, data: dict) -> None:
+    """Equivalente a _build_reemplazar(), migrado -- ver build_nomina_individual_v2()."""
+    remp = _el(parent, 'Reemplazar')
+
+    pred = data.get('predecesor', {})
+    _attr(remp, 'ReemplazandoPredecesor',
+          NumeroPred=str(pred.get('NumeroPred', '')),
+          CUNEPred=str(pred.get('CUNEPred', '')),
+          FechaGenPred=str(pred.get('FechaGenPred', '')))
+
+    _append_dict_section(remp, 'Periodo', _get_periodo_node(data.get('periodo', {})), _NSMAP_AJUSTE)
+    _append_dict_section(remp, 'NumeroSecuenciaXML',
+                          _get_numero_secuencia_node(data.get('numero_secuencia', {})), _NSMAP_AJUSTE)
+    _append_dict_section(remp, 'LugarGeneracionXML',
+                          _get_lugar_generacion_node(data.get('lugar_generacion', {})), _NSMAP_AJUSTE)
+    _append_dict_section(remp, 'ProveedorXML',
+                          _get_proveedor_xml_node(data.get('proveedor_xml', {})), _NSMAP_AJUSTE)
+
+    _el(remp, 'CodigoQR', text=data.get('codigo_qr', ''))
+
+    _append_dict_section(remp, 'InformacionGeneral',
+                          _get_informacion_general_node(data.get('informacion_general', {})), _NSMAP_AJUSTE)
+
+    notas = data.get('notas')
+    if notas:
+        if isinstance(notas, str):
+            notas = [notas]
+        for nota in notas:
+            _el(remp, 'Notas', text=nota)
+
+    _append_dict_section(remp, 'Empleador', _get_empleador_node(data.get('empleador', {})), _NSMAP_AJUSTE)
+    _append_dict_section(remp, 'Trabajador', _get_trabajador_node(data.get('trabajador', {})), _NSMAP_AJUSTE)
+    _append_dict_section(remp, 'Pago', _get_pago_node(data.get('pago', {})), _NSMAP_AJUSTE)
+    _append_dict_section(remp, 'FechasPagos',
+                          _get_fechas_pagos_node(data.get('fechas_pagos', [])), _NSMAP_AJUSTE)
+    _append_dict_section(remp, 'Devengados', _get_devengados_node(data.get('devengados', {})), _NSMAP_AJUSTE)
+    _append_dict_section(remp, 'Deducciones', _get_deducciones_node(data.get('deducciones', {})), _NSMAP_AJUSTE)
+
+    if data.get('redondeo') is not None:
+        _el(remp, 'Redondeo', text=_fmt(data['redondeo']))
+
+    _el(remp, 'DevengadosTotal', text=_fmt(data.get('devengados_total', 0)))
+    _el(remp, 'DeduccionesTotal', text=_fmt(data.get('deducciones_total', 0)))
+    _el(remp, 'ComprobanteTotal', text=_fmt(data.get('comprobante_total', 0)))
+
+
+def _build_eliminar_v2(parent: etree._Element, data: dict) -> None:
+    """Equivalente a _build_eliminar(), migrado -- ver build_nomina_individual_v2().
+
+    Nota (doc 31): hereda tal cual el bug preexistente de atributos invalidos
+    contra el XSD de Ajuste (CodigoTrabajador/PeriodoNomina) -- no se corrige
+    aqui, doc 24 migra la construccion del XML, no corrige bugs normativos
+    independientes encontrados en el camino."""
+    elim = _el(parent, 'Eliminar')
+
+    pred = data.get('predecesor', {})
+    _attr(elim, 'EliminandoPredecesor',
+          NumeroPred=str(pred.get('NumeroPred', '')),
+          CUNEPred=str(pred.get('CUNEPred', '')),
+          FechaGenPred=str(pred.get('FechaGenPred', '')))
+
+    _append_dict_section(elim, 'NumeroSecuenciaXML',
+                          _get_numero_secuencia_node(data.get('numero_secuencia', {})), _NSMAP_AJUSTE)
+    _append_dict_section(elim, 'LugarGeneracionXML',
+                          _get_lugar_generacion_node(data.get('lugar_generacion', {})), _NSMAP_AJUSTE)
+    _append_dict_section(elim, 'ProveedorXML',
+                          _get_proveedor_xml_node(data.get('proveedor_xml', {})), _NSMAP_AJUSTE)
+
+    _el(elim, 'CodigoQR', text=data.get('codigo_qr', ''))
+
+    _append_dict_section(elim, 'InformacionGeneral',
+                          _get_informacion_general_node(data.get('informacion_general', {})), _NSMAP_AJUSTE)
+
+    notas = data.get('notas')
+    if notas:
+        if isinstance(notas, str):
+            notas = [notas]
+        for nota in notas:
+            _el(elim, 'Notas', text=nota)
+
+    _append_dict_section(elim, 'Empleador', _get_empleador_node(data.get('empleador', {})), _NSMAP_AJUSTE)
+
+
+def build_nota_ajuste_v2(data: dict) -> bytes:
+    """Equivalente a build_nota_ajuste(), migrado -- ver build_nomina_individual_v2().
+
+    NO esta conectada al flujo real todavia -- ver doc 24 SS13."""
+    root = etree.Element('{%s}NominaIndividualDeAjuste' % NS_NOMINA_AJUSTE, nsmap=_NSMAP_AJUSTE)
+    root.set('SchemaLocation', '')
+    root.set('{%s}schemaLocation' % NS_XSD,
+             '%s NominaIndividualDeAjusteElectronicaXSD.xsd' % NS_NOMINA_AJUSTE)
+
+    _add_ubl_extensions(root)
+    _el(root, 'TipoNota', text=str(data.get('tipo_nota', '1')))
+
+    reemplazar = data.get('reemplazar')
+    if reemplazar:
+        _build_reemplazar_v2(root, reemplazar)
+
+    eliminar = data.get('eliminar')
+    if eliminar:
+        _build_eliminar_v2(root, eliminar)
+
+    return etree.tostring(root, xml_declaration=True, encoding='UTF-8', pretty_print=True)

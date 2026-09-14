@@ -5,11 +5,22 @@
 #
 # Reemplaza l10n_co_ne_cert_file/_filename/_password (.p12 propio de
 # nomina, nunca usado en produccion segun doc 17 SS2.3) por
-# l10n_co_ne_certificate_id = Many2one('certificate.certificate'),
+# l10n_co_ne_certificate_ids = One2many('certificate.certificate'),
 # reutilizando el certificado de facturacion electronica que la
 # compania ya tiene cargado. services/xml_signer.py ya no desempaqueta
 # PKCS12 (load_p12 eliminada) -- ahora sign_xml recibe el material ya
 # cargado via xml_signer.load_from_certificate().
+#
+# ACTUALIZADO 2026-09-12: se retiro l10n_co_ne_certificate_id (Many2one
+# de seleccion explicita) -- paridad real con Facturacion Electronica
+# (l10n_co_dian), que no tiene equivalente y toma siempre el ultimo
+# certificado de la lista (certificates_sudo[-1]). res.company ahora
+# expone _get_ne_certificate() (= l10n_co_ne_certificate_ids[-1:]) en
+# vez del campo. T3 (sin certificado) ya no puede simularse escribiendo
+# False sobre un Many2one -- se usa una compania temporal sin
+# certificados en vez de tocar company_id del certificado real (evita
+# cualquier riesgo sobre el certificado que David va a usar para la
+# habilitacion real ante la DIAN).
 #
 # Mismas lecciones aprendidas de test_annual_params.sh / test_embargo.sh:
 # - odoo-bin se invoca directo (no "python odoo-bin"), el wrapper() de
@@ -87,24 +98,25 @@ if not real_cert:
     )
 
 # ================================================================
-# SETUP: apuntar l10n_co_ne_certificate_id al certificado real, y
-# garantizar software_id/software_pin, para el resto de las pruebas.
-# Sin esto, T3/T4 podrian fallar por el motivo equivocado --
-# _validate_company_ne_config junta TODOS los campos faltantes en un
-# solo UserError antes de llegar al chequeo de vigencia, asi que si
-# software_id/pin tambien faltaran, el mensaje de T4 no mencionaria
-# "vencido" y la asercion fallaria por una razon distinta a la que se
-# quiere probar (misma leccion que T7 de test_embargo.sh: aislar la
-# variable bajo prueba). Se restaura solo l10n_co_ne_certificate_id al
-# valor original al final -- software_id/pin no se tocan si ya
-# existian.
+# SETUP: real_cert ya pertenece a la compania (company_id=company.id,
+# via el mismo search de arriba) -- con el Many2one retirado no hace
+# falta "apuntar" nada, _get_ne_certificate() ya lo va a devolver
+# porque es el unico/ultimo de la lista. Solo falta garantizar que
+# exista un l10n.co.ne.operation_mode con software_id/software_pin,
+# para el resto de las pruebas. Sin esto, T3/T4 podrian fallar por el
+# motivo equivocado -- _validate_company_ne_config junta TODOS los
+# campos faltantes en un solo UserError antes de llegar al chequeo de
+# vigencia, asi que si software_id/pin tambien faltaran, el mensaje de
+# T4 no mencionaria "vencido" y la asercion fallaria por una razon
+# distinta a la que se quiere probar (misma leccion que T7 de
+# test_embargo.sh: aislar la variable bajo prueba).
 # ================================================================
-_original_certificate_id = company.l10n_co_ne_certificate_id.id
-company.write({
-    'l10n_co_ne_certificate_id': real_cert.id,
-    'l10n_co_ne_software_id': company.l10n_co_ne_software_id or 'TEST-SOFTWARE-ID',
-    'l10n_co_ne_software_pin': company.l10n_co_ne_software_pin or 'TEST-PIN',
-})
+if not company.l10n_co_ne_operation_mode_ids:
+    env['l10n.co.ne.operation_mode'].create({
+        'company_id': company.id,
+        'software_id': 'TEST-SOFTWARE-ID',
+        'software_pin': 'TEST-PIN',
+    })
 cr.commit()
 
 # ================================================================
@@ -148,24 +160,31 @@ test("sign_xml: firma XAdES-BES con material cargado via load_from_certificate",
 
 # ================================================================
 # TEST 3: _validate_company_ne_config bloquea sin certificado
-# configurado (campo eliminado l10n_co_ne_cert_file ya no existe --
-# ahora es simplemente que l10n_co_ne_certificate_id este vacio).
+# configurado. Con el Many2one retirado, "sin certificado" ahora
+# significa "l10n_co_ne_certificate_ids esta vacio" -- no se puede
+# simular escribiendo False sobre un campo que ya no existe, y NO se
+# debe tocar company_id del certificado real (es el que David va a usar
+# para la habilitacion real ante la DIAN). Se usa una compania temporal
+# EN MEMORIA (`.new()`, nunca persistida/insertada) en vez de
+# `.create()` -- corregido tras un primer intento real: `.create()`
+# sobre res.company dispara los hooks de hr_payroll que crean
+# hr.payroll.note ligadas a la compania, y el `.unlink()` posterior
+# fallaba por la FK (hr_payroll_note_company_id_fkey). `.new()` no
+# inserta nada en la base -- alcanza porque _validate_company_ne_config
+# solo LEE campos de la compania, no escribe.
 # ================================================================
 def t3():
-    company.write({'l10n_co_ne_certificate_id': False})
-    cr.commit()
+    empty_company = env['res.company'].new({'name': 'NE Test Sin Certificado (en memoria)'})
+    assert not empty_company.l10n_co_ne_certificate_ids, \
+        "La compania en memoria no deberia tener certificados"
+    raised = False
     try:
-        raised = False
-        try:
-            env['hr.payslip']._validate_company_ne_config(company)
-        except UserError as e:
-            raised = True
-            assert 'Certificado Digital' in str(e), \
-                f"Mensaje de error no menciona el certificado: {e}"
-        assert raised, "_validate_company_ne_config no lanzo UserError sin certificado configurado"
-    finally:
-        company.write({'l10n_co_ne_certificate_id': real_cert.id})
-        cr.commit()
+        env['hr.payslip']._validate_company_ne_config(empty_company)
+    except UserError as e:
+        raised = True
+        assert 'Certificado Digital' in str(e), \
+            f"Mensaje de error no menciona el certificado: {e}"
+    assert raised, "_validate_company_ne_config no lanzo UserError sin certificado configurado"
 test("_validate_company_ne_config: bloquea sin certificado configurado", t3)
 
 # ================================================================
@@ -216,18 +235,14 @@ test("_validate_company_ne_config: bloquea con certificado vencido", t4)
 # rota de otra forma, ej. lanzando UserError siempre).
 # ================================================================
 def t5():
-    company.write({'l10n_co_ne_certificate_id': real_cert.id})
-    cr.commit()
     env['hr.payslip']._validate_company_ne_config(company)  # no debe lanzar
 test("_validate_company_ne_config: no lanza con certificado vigente y configuracion completa", t5)
 
 # ================================================================
-# LIMPIEZA FINAL: restaurar el valor original del campo en la
-# compania de prueba (antes del setup era None en todos los ambientes
-# verificados, doc 17 SS2.3).
+# LIMPIEZA FINAL: nada que restaurar -- el certificado real de la
+# compania de prueba nunca se toco (T3 usa una compania temporal
+# aparte, ya borrada en su propio finally).
 # ================================================================
-company.write({'l10n_co_ne_certificate_id': _original_certificate_id})
-cr.commit()
 
 # ================================================================
 # RESULTADOS

@@ -201,7 +201,12 @@ result = -abs(_valor) if _valor &gt; 0 else 0
             <field name="name">Neto Prima de Servicios</field>
             <field name="code">CO_PRIMA_NETO</field>
             <field name="sequence">100</field>
-            <field name="category_id" ref="hr_salary_rule_category_devengados"/>
+            <!-- Recategorizado preventivamente a TOT_DISPLAY (mismo criterio que CO_BRUTO,
+                 doc 23): esta regla lee categories['PREST']/['DEDU'] para mostrar un total, pero
+                 su propio category_id era DEV, lo cual es inofensivo hoy porque es la ultima
+                 regla de esta estructura (nada vuelve a leer DEV despues), pero fragil ante
+                 cualquier regla nueva que se agregue despues y lea esa categoria. -->
+            <field name="category_id" ref="hr_salary_rule_category_totales_display"/>
             <field name="struct_id" ref="hr_payroll_structure_co_prima"/>
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
@@ -502,7 +507,23 @@ if _tipo_contrato in ('1', '3'):
             'el asistente e indique los dias restantes.'
         )
     _dias_restantes = _indemniz_input.amount
-    result = _valor_dia * _dias_restantes
+    _indemnizacion_base = _valor_dia * _dias_restantes
+
+    if _tipo_contrato == '3':
+        # Piso de 15 dias, SOLO obra/labor (Art. 64 CST, doc 20 SS10,
+        # texto legal aportado por David) -- termino fijo NO tiene este
+        # piso. Las otras 3 condiciones del pseudocodigo de David ya
+        # estan cubiertas sin dato nuevo: causal 'sin_justa_causa' (ya
+        # exigido por el condition_python de esta regla) implica obra NO
+        # finalizada (si hubiera finalizado, la causal real seria
+        # 'fin_obra', que ya existe y es mutuamente excluyente en
+        # l10n_co_ne_liquidacion_cause) -- no hace falta modelar un
+        # campo aparte de "obra finalizada".
+        _indemnizacion_minima = _valor_dia * 15
+        result = max(_indemnizacion_base, _indemnizacion_minima)
+    else:
+        # Termino fijo (1): sin piso, formula original sin cambios.
+        result = _indemnizacion_base
 
 else:
     # ── Contrato a termino indefinido (Art. 64 CST) ──
@@ -530,6 +551,7 @@ else:
             <field name="note">Indemnizacion por despido sin justa causa (Art. 64 CST).
 Se activa cuando la causa de retiro del payslip (l10n_co_ne_liquidacion_cause) es "sin_justa_causa" -- la asigna el asistente de liquidacion.
 Para contrato fijo/obra: ademas requiere el input CO_LIQ_INDEMNIZ con el numero de dias restantes (el asistente lo inyecta si se indico).
+Para obra/labor especificamente (doc 20 SS10): piso de 15 dias de salario si el calculo por dias restantes da menos -- termino fijo NO tiene este piso.
 Para contrato indefinido: no requiere ningun input, el calculo diferencia entre salarios menores y mayores o iguales a 10 SMMLV.</field>
         </record>
 
@@ -631,7 +653,9 @@ result = -abs(_valor) if _valor &gt; 0 else 0
             <field name="name">Neto Liquidacion</field>
             <field name="code">CO_LIQ_NETO</field>
             <field name="sequence">200</field>
-            <field name="category_id" ref="hr_salary_rule_category_devengados"/>
+            <!-- Recategorizado preventivamente a TOT_DISPLAY (mismo criterio que CO_BRUTO,
+                 doc 23), ver mismo comentario en CO_PRIMA_NETO mas arriba. -->
+            <field name="category_id" ref="hr_salary_rule_category_totales_display"/>
             <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
@@ -786,7 +810,9 @@ result = -abs(_valor) if _valor &gt; 0 else 0
             <field name="name">Neto Bonificacion</field>
             <field name="code">CO_BON_NETO</field>
             <field name="sequence">100</field>
-            <field name="category_id" ref="hr_salary_rule_category_devengados"/>
+            <!-- Recategorizado preventivamente a TOT_DISPLAY (mismo criterio que CO_BRUTO,
+                 doc 23), ver mismo comentario en CO_PRIMA_NETO mas arriba. -->
+            <field name="category_id" ref="hr_salary_rule_category_totales_display"/>
             <field name="struct_id" ref="hr_payroll_structure_co_bonificacion"/>
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>

@@ -162,20 +162,14 @@ class HrEmployee(models.Model):
              'derecho a deducir el 10%% del ingreso bruto mensual, '
              'con un máximo de 32.5 UVT por mes.',
     )
-    l10n_co_ne_voluntary_pension = fields.Float(
-        string='Aporte Voluntario Pensión',
-        default=0,
-        help='Aporte mensual voluntario a fondo de pensiones. '
-             'Deducible hasta el 25%% del ingreso bruto mensual '
-             '(Art. 126-1 ET).',
-    )
-    l10n_co_ne_afc = fields.Float(
-        string='AFC Mensual',
-        default=0,
-        help='Ahorro mensual para Fomento de la Construcción (AFC). '
-             'Deducible hasta el 30%% del ingreso bruto mensual '
-             '(Art. 126-4 ET).',
-    )
+    # Nota (AUD-05, doc 32): l10n_co_ne_voluntary_pension/l10n_co_ne_afc que vivian
+    # aqui se eliminaron -- eran una segunda fuente de datos desconectada de
+    # contract.l10n_co_ne_pension_voluntaria/contract.l10n_co_ne_afc (la que
+    # realmente alimenta la deduccion del payslip). Su unico consumidor era
+    # hr_retefuente.py, que ahora lee del contrato -- misma fuente de verdad
+    # que la deduccion real. Ningun empleado real tenia estos campos
+    # configurados (verificado antes del cambio), no hace falta migracion de
+    # datos.
 
     # ──────────────────────────────────────────────────────────────────
     # PILA — Administradoras de Seguridad Social
@@ -206,6 +200,34 @@ class HrEmployee(models.Model):
     )
     l10n_co_pila_fecha_radicacion_ext = fields.Date(
         string='Fecha Radicación Exterior',
+    )
+
+    # ──────────────────────────────────────────────────────────────────
+    # Ficha Consolidada (doc 11) -- campos related de solo lectura, puro
+    # passthrough para mostrar en la pestaña "Nómina Colombia" datos que
+    # ya viven en el contrato/compañía (mismo patrón que
+    # res_config_settings.py usa en todo el módulo: no son un dato nuevo,
+    # solo un acceso de lectura conveniente).
+    # ──────────────────────────────────────────────────────────────────
+    l10n_co_ne_contract_type_display = fields.Selection(
+        related='contract_id.l10n_co_ne_contract_type',
+        string='Tipo de Contrato',
+        readonly=True,
+    )
+    l10n_co_ne_analytic_account_id = fields.Many2one(
+        related='contract_id.analytic_account_id',
+        string='Centro de Costo',
+        readonly=True,
+    )
+    l10n_co_pila_clase_riesgo_display = fields.Selection(
+        related='contract_id.l10n_co_pila_clase_riesgo',
+        string='Clase de Riesgo ARL',
+        readonly=True,
+    )
+    l10n_co_pila_arl_name_display = fields.Char(
+        related='company_id.l10n_co_pila_arl_name',
+        string='ARL',
+        readonly=True,
     )
 
     # ──────────────────────────────────────────────────────────────────

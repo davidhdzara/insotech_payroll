@@ -21,20 +21,38 @@ necesite (doc 21 §1.2/1.3) -- a diferencia de `help=`, un related NO
 hereda el `domain=` del campo destino en res.company. Sin esto, el
 picker del campo trae CUALQUIER registro del modelo (verificado: sin
 domain, `l10n_co_ne_sequence_id` mostraba secuencias de otros módulos
-como Batch Transfer o Blanket Order). El domain de
-`l10n_co_ne_certificate_id` cambia además de `id` (id de la compañía en
-res.company) a `company_id` (el campo real que existe en este wizard).
+como Batch Transfer o Blanket Order).
 
 Doc 22: "Software DIAN" (3 Char planos) y "Ambiente" (Selection) se
 reemplazaron por la tabla `l10n_co_ne_operation_mode_ids` y los 2
 checkboxes `l10n_co_ne_test_environment`/`_certification_process`, para
 replicar la estructura de Facturación Electrónica (CO). Se agregó
 también `l10n_co_ne_certificate_ids` (O2M, paridad literal con
-`l10n_co_dian_certificate_ids`) -- ver res_company.py para por qué NO
-reemplaza a `l10n_co_ne_certificate_id` como fuente de verdad funcional.
+`l10n_co_dian_certificate_ids`).
+
+2026-09-12: retirado `l10n_co_ne_certificate_id` (Many2one de selección
+explícita) -- verificado que Facturación Electrónica no tiene equivalente,
+toma siempre el último certificado de la lista. `res.company._get_ne_certificate()`
+reemplaza su uso en el flujo de firma con el mismo criterio.
+
+2026-09-12 (doc 36 v2): "Cuentas Predeterminadas" -- 4 campos de diario
+contable, uno por estructura salarial colombiana (`journal_id` de
+`hr.payroll.structure`, company_dependent). NO son `related=`: `journal_id`
+vive en hr.payroll.structure, no hay cadena de relación simple desde
+company_id hasta ahí (a diferencia de todos los campos de arriba, que sí
+cuelgan de res.company). Se exponen con el mecanismo nativo de Odoo para
+este caso -- override de get_values()/set_values() -- mismo patron que usa
+`account` para varios de sus propios campos de "Default Accounts".
 """
 
-from odoo import api, fields, models
+from odoo import fields, models
+
+_NE_STRUCTURE_JOURNAL_FIELDS = {
+    'l10n_co_ne_journal_nomina_id': 'l10n_co_nomina_electronica.hr_payroll_structure_co_nomina',
+    'l10n_co_ne_journal_prima_id': 'l10n_co_nomina_electronica.hr_payroll_structure_co_prima',
+    'l10n_co_ne_journal_liquidacion_id': 'l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion',
+    'l10n_co_ne_journal_bonificacion_id': 'l10n_co_nomina_electronica.hr_payroll_structure_co_bonificacion',
+}
 
 
 class ResConfigSettings(models.TransientModel):
@@ -58,29 +76,17 @@ class ResConfigSettings(models.TransientModel):
     # Ambiente (doc 22 §3)
     l10n_co_ne_test_environment = fields.Boolean(related='company_id.l10n_co_ne_test_environment', readonly=False)
     l10n_co_ne_certification_process = fields.Boolean(related='company_id.l10n_co_ne_certification_process', readonly=False)
+    l10n_co_ne_demo_mode = fields.Boolean(related='company_id.l10n_co_ne_demo_mode', readonly=False)
+    l10n_co_ne_num_nomina_certificar = fields.Integer(related='company_id.l10n_co_ne_num_nomina_certificar', readonly=False)
+    l10n_co_ne_num_ajuste_certificar = fields.Integer(related='company_id.l10n_co_ne_num_ajuste_certificar', readonly=False)
 
-    # Certificado Digital (doc 22 §2, Opción B)
-    l10n_co_ne_certificate_id = fields.Many2one(
-        related='company_id.l10n_co_ne_certificate_id', readonly=False,
-        # Domain original en res.company usa `id` (id de la propia
-        # compañía, porque el campo vive ahí) -- aquí `id` seria el id de
-        # este TransientModel, hay que usar `company_id` (doc 21 §1.3).
-        domain="[('company_id', '=', company_id)]",
-    )
+    # Certificado Digital -- retirado el Many2one de selección explícita
+    # 2026-09-12 (paridad real con Facturación Electrónica, que no tiene
+    # ninguno; ver res_company.py: _get_ne_certificate()). Queda solo la
+    # lista, gestionable desde esta pantalla.
     l10n_co_ne_certificate_ids = fields.One2many(
         related='company_id.l10n_co_ne_certificate_ids', readonly=False,
     )
-
-    @api.onchange('l10n_co_ne_certificate_ids')
-    def _onchange_l10n_co_ne_certificate_ids(self):
-        """Autoselecciona el certificado si hay exactamente 1 en la lista.
-
-        Evita la ambigüedad de DIAN (que toma "el último de la lista" sin
-        ningún campo que marque el activo, doc 22 §2) sin obligar al
-        usuario a elegir manualmente cuando solo hay una opción real.
-        """
-        if not self.l10n_co_ne_certificate_id and len(self.l10n_co_ne_certificate_ids) == 1:
-            self.l10n_co_ne_certificate_id = self.l10n_co_ne_certificate_ids
 
     # UGPP
     l10n_co_ugpp_legal_nature = fields.Selection(related='company_id.l10n_co_ugpp_legal_nature', readonly=False)
@@ -93,7 +99,28 @@ class ResConfigSettings(models.TransientModel):
     # PILA
     l10n_co_pila_tipo_aportante = fields.Selection(related='company_id.l10n_co_pila_tipo_aportante', readonly=False)
     l10n_co_pila_arl_code = fields.Char(related='company_id.l10n_co_pila_arl_code', readonly=False)
+    l10n_co_pila_arl_name = fields.Char(related='company_id.l10n_co_pila_arl_name', readonly=False)
     l10n_co_pila_forma_presentacion = fields.Selection(related='company_id.l10n_co_pila_forma_presentacion', readonly=False)
     l10n_co_pila_codigo_sucursal = fields.Char(related='company_id.l10n_co_pila_codigo_sucursal', readonly=False)
     l10n_co_pila_nombre_sucursal = fields.Char(related='company_id.l10n_co_pila_nombre_sucursal', readonly=False)
     l10n_co_pila_operador_code = fields.Char(related='company_id.l10n_co_pila_operador_code', readonly=False)
+
+    # Cuentas Predeterminadas -- Diarios por Estructura Salarial (doc 36 v2)
+    l10n_co_ne_journal_nomina_id = fields.Many2one('account.journal', string='Diario — Nómina General')
+    l10n_co_ne_journal_prima_id = fields.Many2one('account.journal', string='Diario — Prima de Servicios')
+    l10n_co_ne_journal_liquidacion_id = fields.Many2one('account.journal', string='Diario — Liquidación de Contrato')
+    l10n_co_ne_journal_bonificacion_id = fields.Many2one('account.journal', string='Diario — Bonificaciones Extraordinarias')
+
+    def get_values(self):
+        res = super().get_values()
+        for fname, xmlid in _NE_STRUCTURE_JOURNAL_FIELDS.items():
+            structure = self.env.ref(xmlid, raise_if_not_found=False)
+            res[fname] = structure.journal_id.id if structure else False
+        return res
+
+    def set_values(self):
+        super().set_values()
+        for fname, xmlid in _NE_STRUCTURE_JOURNAL_FIELDS.items():
+            structure = self.env.ref(xmlid, raise_if_not_found=False)
+            if structure:
+                structure.journal_id = self[fname]

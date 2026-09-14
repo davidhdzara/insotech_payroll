@@ -138,14 +138,19 @@ def t4():
     })
     assert wizard.state == 'draft'
 
-    wizard.action_validate()
+    wizard.action_validate()  # antes del fix: TypeError, sum() sobre .mapped() (lista)
     assert wizard.state == 'validated', \
         f"El wizard deberia avanzar a 'validated', esta {wizard.state}"
     assert wizard.summary_total_employees >= 1, \
         "El resumen deberia contar al menos 1 empleado (el payslip recien confirmado)"
 
+    neto_line = ps.line_ids.filtered(lambda l: l.code == 'CO_NETO')
+    assert neto_line and neto_line.total > 0, "CO_NETO deberia tener un monto > 0 para probar el total"
+    assert abs(wizard.summary_total_nomina - neto_line.total) < 0.01, \
+        f"summary_total_nomina ({wizard.summary_total_nomina}) deberia coincidir con CO_NETO ({neto_line.total})"
+
     if wizard.validation_ok:
-        wizard.action_generate_pila()
+        wizard.action_generate_pila()  # antes del fix: mismo TypeError en _build_aportante_data
         assert wizard.state == 'generated', \
             f"El wizard deberia avanzar a 'generated', esta {wizard.state}"
         assert wizard.file_data, "Deberia haberse generado el archivo PILA"
@@ -159,6 +164,48 @@ def t4():
             f"errores: {wizard.validation_errors!r} -- dato preexistente, no relacionado a doc 25"
         )
 test("Flujo real v2: borrador -> validado -> (generado si los datos del empleado ya estan completos)", t4)
+
+# ================================================================
+# TEST 5: cubre action_generate_pila() de forma determinista,
+# independiente de si el empleado real de prueba tiene o no completos
+# los codigos PILA (t4 ya lo cubre SI validation_ok sale True, pero
+# eso depende de datos reales que pueden variar) -- fuerza
+# validation_ok=True sobre un wizard ya validado para ejercitar
+# _build_aportante_data() (la segunda ocurrencia del mismo bug de
+# sum()/.mapped(), reportada por Tech Lead) de forma garantizada.
+# ================================================================
+def t5():
+    struct_regular = env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
+    contract = env['hr.contract'].search([
+        ('state', '=', 'open'), ('company_id', '=', company.id),
+    ], limit=1)
+    assert contract, "No hay contrato abierto real -- no se puede probar"
+    emp = contract.employee_id
+    today = datetime.date.today()
+
+    ps = env['hr.payslip'].create({
+        'name': 'TEST PILA v2 T5',
+        'employee_id': emp.id,
+        'contract_id': contract.id,
+        'struct_id': struct_regular.id,
+        'date_from': today.replace(day=1),
+        'date_to': today,
+    })
+    ps.compute_sheet()
+    ps.action_payslip_done()
+
+    wizard = env['l10n.co.hr.pila.wizard.v2'].create({
+        'year': str(today.year),
+        'month': '%02d' % today.month,
+        'company_id': company.id,
+    })
+    wizard.action_validate()
+    wizard.write({'validation_ok': True})  # fuerza el paso, independiente de datos reales del empleado
+
+    wizard.action_generate_pila()  # antes del fix: TypeError en _build_aportante_data
+    assert wizard.state == 'generated', f"El wizard deberia avanzar a 'generated', esta {wizard.state}"
+    assert wizard.file_data, "Deberia haberse generado el archivo PILA"
+test("action_generate_pila() (_build_aportante_data) no revienta con el fix de sum()/.mapped()", t5)
 
 # ================================================================
 # RESULTADOS

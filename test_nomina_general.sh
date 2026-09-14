@@ -32,6 +32,11 @@
 #
 # NOTA: /tmp/ne_params.tar.gz debe estar actualizado con el diff del
 # fix de CO_BRUTO antes de correr este script.
+#
+# 2026-09-12: agregados T5-T7, formalizando como test automatizado la
+# verificacion manual de AUD-01/AUD-02 (doc 27, cronograma de jornada
+# Ley 2101/2021 y de recargos dominical/festivo Ley 2466/2025) que
+# hasta ahora solo se habia corrido a mano contra staging_produccion.
 # ================================================================
 set -e
 
@@ -192,6 +197,145 @@ def t3():
         contract.write({'wage': original_wage, 'l10n_co_ne_integral_salary': original_integral})
         cr.commit()
 test("CO_NETO coincide con DEV+DEDU reconstruido, sin duplicar CO_BRUTO", t3)
+
+# ================================================================
+# TEST 4: las 7 reglas de Horas Extra y Recargos (CO_HED/CO_HEN/CO_HRN/
+# CO_HEDDF/CO_HENDF/CO_HRDDF/CO_HRNDF) tienen su hr.payslip.input.type
+# registrado y disponible en input_line_type_ids de la estructura --
+# hallazgo de Tech Lead corriendo la matriz de QA (casos JR-04/EMB-09):
+# ninguna tenia input type, asi que RRHH no podia capturar horas extra
+# reales desde la UI a pesar de que las reglas ya sabian leerlas.
+# Ademas confirma el caso end-to-end: cargar CO_HED como input real
+# genera una linea CO_HED con monto > 0.
+# ================================================================
+def t4():
+    HORAS_EXTRA_CODES = (
+        'CO_HED', 'CO_HEN', 'CO_HRN', 'CO_HEDDF',
+        'CO_HENDF', 'CO_HRDDF', 'CO_HRNDF',
+    )
+    InputType = env['hr.payslip.input.type']
+    for code in HORAS_EXTRA_CODES:
+        input_type = InputType.search([('code', '=', code)], limit=1)
+        assert input_type, f"No existe hr.payslip.input.type para {code}"
+        assert input_type.country_id.code == 'CO', \
+            f"{code} deberia tener country_id=CO, tiene {input_type.country_id.code}"
+        assert input_type.id in struct_regular.input_line_type_ids.ids, \
+            f"{code} deberia estar en input_line_type_ids de la estructura Nomina Colombia General"
+
+    # Caso end-to-end: CO_HED cargado como input real produce una
+    # linea CO_HED con monto > 0.
+    original_wage = contract.wage
+    original_integral = contract.l10n_co_ne_integral_salary
+    contract.write({'wage': _SMMLV * 1.5, 'l10n_co_ne_integral_salary': False})
+    cr.commit()
+    hed_input_type = InputType.search([('code', '=', 'CO_HED')], limit=1)
+    ps = _make_payslip('Test Nomina General - Horas Extra')
+    try:
+        ps.write({'input_line_ids': [(0, 0, {
+            'input_type_id': hed_input_type.id,
+            'amount': 10,  # 10 horas extra diurnas
+        })]})
+        ps.compute_sheet()
+        hed_line = ps.line_ids.filtered(lambda l: l.code == 'CO_HED')
+        assert hed_line and hed_line.total > 0, \
+            "CO_HED deberia generar una linea con monto > 0 al cargar el input real"
+    finally:
+        ps.write({'state': 'draft'})
+        ps.unlink()
+        contract.write({'wage': original_wage, 'l10n_co_ne_integral_salary': original_integral})
+        cr.commit()
+test("Los 7 input types de Horas Extra y Recargos existen y funcionan de punta a punta", t4)
+
+# ================================================================
+# TEST 5 (AUD-01, doc 27): cronograma de jornada legal Ley 2101/2021
+# -- 3 tramos (46h/230 desde 2024-07-15, 44h/220 desde 2025-07-15,
+# 42h/210 desde 2026-07-15), 5 fronteras exactas sin huecos ni
+# solapes. Formaliza como test automatizado la verificacion manual
+# de doc 27 (antes solo corrida a mano contra staging_produccion).
+# ================================================================
+def t5():
+    boundaries = [
+        (date(2024, 7, 15), 46, 230),
+        (date(2025, 7, 14), 46, 230),
+        (date(2025, 7, 15), 44, 220),
+        (date(2026, 7, 14), 44, 220),
+        (date(2026, 7, 15), 42, 210),
+    ]
+    for d, expected_semanales, expected_mensuales in boundaries:
+        semanales = get_param('l10n_co_horas_semanales', d)
+        mensuales = get_param('l10n_co_horas_mensuales', d)
+        assert semanales == expected_semanales, \
+            f"{d}: horas_semanales={semanales}, esperado {expected_semanales}"
+        assert mensuales == expected_mensuales, \
+            f"{d}: horas_mensuales={mensuales}, esperado {expected_mensuales}"
+test("AUD-01: cronograma jornada 46/230 -> 44/220 -> 42/210, 5 fronteras exactas", t5)
+
+# ================================================================
+# TEST 6 (AUD-02, doc 27): cronograma de recargos dominical/festivo
+# Ley 2466/2025 -- 4 factores (hrddf/heddf/hendf/hrndf), cada uno
+# con 3 tramos (2025-07-01 / 2026-07-01 / 2027-07-01), verificados
+# en 5 fronteras cada uno (incluye el dia anterior a cada corte para
+# confirmar que no hay solape). Formaliza la verificacion manual de
+# doc 27 (la tabla original solo cubria hrddf explicitamente).
+# ================================================================
+def t6():
+    factores = {
+        'l10n_co_factor_hrddf': [
+            (date(2025, 7, 1), 1.80), (date(2026, 6, 30), 1.80),
+            (date(2026, 7, 1), 1.90), (date(2027, 6, 30), 1.90),
+            (date(2027, 7, 1), 2.00),
+        ],
+        'l10n_co_factor_heddf': [
+            (date(2025, 7, 1), 2.05), (date(2026, 6, 30), 2.05),
+            (date(2026, 7, 1), 2.15), (date(2027, 6, 30), 2.15),
+            (date(2027, 7, 1), 2.25),
+        ],
+        'l10n_co_factor_hendf': [
+            (date(2025, 7, 1), 2.55), (date(2026, 6, 30), 2.55),
+            (date(2026, 7, 1), 2.65), (date(2027, 6, 30), 2.65),
+            (date(2027, 7, 1), 2.75),
+        ],
+        'l10n_co_factor_hrndf': [
+            (date(2025, 7, 1), 2.15), (date(2026, 6, 30), 2.15),
+            (date(2026, 7, 1), 2.25), (date(2027, 6, 30), 2.25),
+            (date(2027, 7, 1), 2.35),
+        ],
+    }
+    for code, checks in factores.items():
+        for d, expected in checks:
+            val = get_param(code, d)
+            assert abs(val - expected) < 0.001, \
+                f"{code} en {d} = {val}, esperado {expected}"
+test("AUD-02: cronograma recargos dominical/festivo (4 factores x 5 fronteras) exacto", t6)
+
+# ================================================================
+# TEST 7 (AUD-01+AUD-02, doc 27): verificacion end-to-end contra un
+# payslip real con periodo de marzo 2026 -- confirma que
+# payslip._rule_parameter() (el que de verdad usa el motor de
+# calculo dentro de amount_python_compute, no solo la consulta
+# estatica de arriba) resuelve los mismos 6 valores para ese
+# periodo. Mismo caso exacto verificado a mano en doc 27.
+# ================================================================
+def t7():
+    ps = _make_payslip('Test AUD-01-02 - Marzo 2026')
+    ps.write({'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
+    try:
+        checks = {
+            'l10n_co_horas_semanales': 44,
+            'l10n_co_horas_mensuales': 220,
+            'l10n_co_factor_hrddf': 1.80,
+            'l10n_co_factor_heddf': 2.05,
+            'l10n_co_factor_hendf': 2.55,
+            'l10n_co_factor_hrndf': 2.15,
+        }
+        for code, expected in checks.items():
+            val = ps._rule_parameter(code, ps.date_from)
+            assert abs(val - expected) < 0.001, \
+                f"{code} via payslip real marzo 2026 = {val}, esperado {expected}"
+    finally:
+        ps.write({'state': 'draft'})
+        ps.unlink()
+test("AUD-01/AUD-02: payslip real marzo 2026 resuelve los 6 valores via _rule_parameter", t7)
 
 # ================================================================
 # RESULTADOS

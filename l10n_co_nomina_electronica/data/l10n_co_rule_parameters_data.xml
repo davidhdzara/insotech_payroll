@@ -18,6 +18,19 @@
         actualización del módulo (ej. nuevo SMMLV/UVT por Decreto/Resolución)
         se refleja agregando un nuevo hr.rule.parameter.value con su propio
         External ID, nunca se edita un registro ya publicado.
+
+        2026-09-12 (backlog UX, pedido de David): "Formato del dato" de las
+        50 fichas reescrito, en vez de jerga de tipo de dato ("Float"),
+        cada una dice explícitamente en qué escala se ingresa el valor con
+        un ejemplo real concreto (ej. "escriba 4 para 4%, no 0.04"). Se
+        evaluó agregar una validación @api.constrains de rango para los
+        parámetros de porcentaje, pero se descartó: rule_parameter_pct_arl_default
+        tiene un valor real legítimo de 0.522 (0.522%, tarifa mínima ARL),
+        cualquier regla de rango que marque valores menores a 1 como
+        sospechosos para parámetros "_pct_" generaría un falso positivo
+        exacto contra este parámetro real. La defensa queda en la
+        descripción explícita con ejemplo, no en una validación automática
+        que fallaría en este caso.
     -->
 
     <!-- ════════════════════════════════════════════════════════════════
@@ -33,8 +46,9 @@
 Gobierno Nacional (Art. 8 Ley 278/1996).</p>
 <h3 class="mt-5">Fuente</h3>
 <p>correcciones_normativas_2026/00_INDICE.md</p>
-<h3 class="mt-5">Formato del dato</h3>
-<pre><em>Valor</em> -&gt; <strong>Int ($)</strong></pre>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el valor en pesos colombianos (COP), sin decimales ni separadores de miles.
+Ejemplo real vigente (2026): <strong>1750905</strong>.</p>
         </field>
     </record>
     <record id="rule_parameter_smmlv_2024" model="hr.rule.parameter.value">
@@ -62,8 +76,9 @@ Gobierno Nacional (Art. 8 Ley 278/1996).</p>
 trabajadores con salario &lt;= 2 SMMLV que no devenguen salario integral.</p>
 <h3 class="mt-5">Fuente</h3>
 <p>correcciones_normativas_2026/00_INDICE.md</p>
-<h3 class="mt-5">Formato del dato</h3>
-<pre><em>Valor</em> -&gt; <strong>Int ($)</strong></pre>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el valor en pesos colombianos (COP), sin decimales ni separadores de miles.
+Ejemplo real vigente (2026): <strong>249095</strong>.</p>
         </field>
     </record>
     <record id="rule_parameter_aux_transporte_2024" model="hr.rule.parameter.value">
@@ -92,8 +107,10 @@ tabla marginal de retención en la fuente (Art. 383 ET) y de varios topes
 de depuración (Art. 387 ET).</p>
 <h3 class="mt-5">Fuente</h3>
 <p>correcciones_normativas_2026/00_INDICE.md</p>
-<h3 class="mt-5">Formato del dato</h3>
-<pre><em>Valor</em> -&gt; <strong>Int ($)</strong></pre>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el valor en pesos colombianos (COP), sin decimales ni separadores de miles --
+esto es el valor de 1 UVT en pesos, no una cantidad de UVT.
+Ejemplo real vigente (2026): <strong>52374</strong>.</p>
         </field>
     </record>
     <record id="rule_parameter_uvt_2024" model="hr.rule.parameter.value">
@@ -121,7 +138,10 @@ de depuración (Art. 387 ET).</p>
         <field name="code">l10n_co_pct_salud_empleado</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje de aporte a salud a cargo del empleado (Ley 100/1993).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>4</strong> para representar 4% (no 0.04).
+Valor vigente: <strong>4.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_salud_empleado_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">4.0</field>
@@ -135,7 +155,10 @@ de depuración (Art. 387 ET).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje de aporte a salud a cargo del empleador (Ley 100/1993). Sujeto
 a exoneración Art. 114-1 ET para salarios &lt; 10 SMMLV.</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>8.5</strong> para representar 8.5% (no 0.085).
+Valor vigente: <strong>8.5</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_salud_empleador_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">8.5</field>
@@ -148,7 +171,10 @@ a exoneración Art. 114-1 ET para salarios &lt; 10 SMMLV.</p>
         <field name="code">l10n_co_pct_pension_empleado</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje de aporte a pensión a cargo del empleado (Ley 100/1993).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>4</strong> para representar 4% (no 0.04).
+Valor vigente: <strong>4.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_pension_empleado_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">4.0</field>
@@ -161,7 +187,10 @@ a exoneración Art. 114-1 ET para salarios &lt; 10 SMMLV.</p>
         <field name="code">l10n_co_pct_pension_empleador</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje de aporte a pensión a cargo del empleador (Ley 100/1993).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>12</strong> para representar 12% (no 0.12).
+Valor vigente: <strong>12.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_pension_empleador_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">12.0</field>
@@ -176,7 +205,10 @@ a exoneración Art. 114-1 ET para salarios &lt; 10 SMMLV.</p>
         <field name="description" type="html"><p>Tarifa mínima de cotización ARL para Clase de Riesgo I (Decreto
 1772/1994). Las reglas salariales usan la cotización real de la línea de
 nómina cuando existe; este valor es el fallback.</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número del porcentaje, <strong>NO</strong> la fracción decimal equivalente:
+escriba <strong>0.522</strong> para representar 0.522% (no 52.2%) -- esta tarifa es
+legítimamente menor a 1, no es un error de escala. Valor vigente: <strong>0.522</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_arl_default_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">0.522</field>
@@ -190,7 +222,10 @@ nómina cuando existe; este valor es el fallback.</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje de aporte parafiscal a la CCF (Ley 21/1982). No está sujeto
 a la exoneración Art. 114-1 ET.</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>4</strong> para representar 4% (no 0.04).
+Valor vigente: <strong>4.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_ccf_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">4.0</field>
@@ -204,7 +239,10 @@ a la exoneración Art. 114-1 ET.</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje de aporte parafiscal al SENA. Sujeto a exoneración Art.
 114-1 ET (Ley 1607/2012) para salarios &lt; 10 SMMLV.</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>2</strong> para representar 2% (no 0.02).
+Valor vigente: <strong>2.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_sena_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">2.0</field>
@@ -218,7 +256,10 @@ a la exoneración Art. 114-1 ET.</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje de aporte parafiscal al ICBF. Sujeto a exoneración Art.
 114-1 ET (Ley 1607/2012) para salarios &lt; 10 SMMLV.</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>3</strong> para representar 3% (no 0.03).
+Valor vigente: <strong>3.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_icbf_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">3.0</field>
@@ -232,7 +273,9 @@ a la exoneración Art. 114-1 ET.</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Múltiplo de SMMLV por debajo del cual aplica la exoneración de aportes
 a SENA, ICBF y salud-empleador (Art. 114-1 ET, Ley 1607/2012).</p>
-<pre><em>Valor</em> -&gt; <strong>Int (múltiplo de SMMLV)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de veces el SMMLV, <strong>NO</strong> un valor en pesos:
+escriba <strong>10</strong> para representar "10 SMMLV". Valor vigente: <strong>10</strong>.</p></field>
     </record>
     <record id="rule_parameter_tope_exoneracion_smmlv_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">10</field>
@@ -245,7 +288,10 @@ a SENA, ICBF y salud-empleador (Art. 114-1 ET, Ley 1607/2012).</p>
         <field name="code">l10n_co_pct_intereses_cesantias</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje anual de intereses sobre el saldo de cesantías (Ley 52/1975).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>12</strong> para representar 12% (no 0.12).
+Valor vigente: <strong>12.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_intereses_cesantias_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">12.0</field>
@@ -259,7 +305,10 @@ a SENA, ICBF y salud-empleador (Art. 114-1 ET, Ley 1607/2012).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Fracción del salario integral que constituye el factor prestacional /
 base de IBC (Art. 132 CST: mínimo 70%).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (fracción)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba la fracción decimal, <strong>NO</strong> el porcentaje entero (a diferencia de
+los parámetros "% ..." de este módulo, este SÍ se ingresa como fracción): escriba
+<strong>0.70</strong> para representar 70% (no 70). Valor vigente: <strong>0.70</strong>.</p></field>
     </record>
     <record id="rule_parameter_factor_integral_salary_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">0.70</field>
@@ -273,7 +322,8 @@ base de IBC (Art. 132 CST: mínimo 70%).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Días considerados por mes para prorrateo de salario y prestaciones
 (convención comercial colombiana).</p>
-<pre><em>Valor</em> -&gt; <strong>Int</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de días. Valor vigente: <strong>30</strong>.</p></field>
     </record>
     <record id="rule_parameter_dias_mes_comercial_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">30</field>
@@ -287,7 +337,8 @@ base de IBC (Art. 132 CST: mínimo 70%).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Días considerados por año para el cálculo proporcional de cesantías,
 prima e indemnización (12 meses comerciales de 30 días, doctrina CSJ).</p>
-<pre><em>Valor</em> -&gt; <strong>Int</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de días. Valor vigente: <strong>360</strong>.</p></field>
     </record>
     <record id="rule_parameter_dias_anio_comercial_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">360</field>
@@ -301,7 +352,9 @@ prima e indemnización (12 meses comerciales de 30 días, doctrina CSJ).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Divisor para el cálculo proporcional de vacaciones: 15 días hábiles por
 año (Art. 186 CST) = salario × días_laborados / 720.</p>
-<pre><em>Valor</em> -&gt; <strong>Int</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (divisor puro, sin unidad de medida).
+Valor vigente: <strong>720</strong>.</p></field>
     </record>
     <record id="rule_parameter_divisor_vacaciones_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">720</field>
@@ -315,7 +368,8 @@ año (Art. 186 CST) = salario × días_laborados / 720.</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Primeros días de incapacidad por enfermedad general pagados al 100%
 por el empleador antes de que la EPS asuma el pago (Art. 227 CST).</p>
-<pre><em>Valor</em> -&gt; <strong>Int (días)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de días. Valor vigente: <strong>2</strong>.</p></field>
     </record>
     <record id="rule_parameter_dias_incapacidad_empleador_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">2</field>
@@ -329,7 +383,10 @@ por el empleador antes de que la EPS asuma el pago (Art. 227 CST).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje del salario pagado por la EPS entre el día 3 y el día 90 de
 incapacidad por enfermedad general (Decreto 1406/1999, Art. 3).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>66.67</strong> para representar 66.67% (no 0.6667).
+Valor vigente: <strong>66.67</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_incapacidad_3_90_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">66.67</field>
@@ -343,7 +400,10 @@ incapacidad por enfermedad general (Decreto 1406/1999, Art. 3).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje del salario pagado por la EPS a partir del día 91 de
 incapacidad por enfermedad general.</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>50</strong> para representar 50% (no 0.50).
+Valor vigente: <strong>50.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_incapacidad_91_mas_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">50.0</field>
@@ -357,7 +417,10 @@ incapacidad por enfermedad general.</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje máximo embargable del salario para embargos de alimentos o
 de cooperativa (Art. 156 CST).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>50</strong> para representar 50% (no 0.50).
+Valor vigente: <strong>50.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_tope_embargo_alimentos_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">50.0</field>
@@ -371,7 +434,10 @@ de cooperativa (Art. 156 CST).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Fracción máxima embargable del excedente sobre 1 SMMLV para embargos
 civiles/ordinarios (Art. 155 CST).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (fracción)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba la fracción decimal, <strong>NO</strong> el porcentaje entero (a diferencia de
+los parámetros "% ..." de este módulo, este SÍ se ingresa como fracción): escriba
+<strong>0.20</strong> para representar 20% (no 20). Valor vigente: <strong>0.20</strong>.</p></field>
     </record>
     <record id="rule_parameter_factor_embargo_civil_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">0.20</field>
@@ -385,7 +451,10 @@ civiles/ordinarios (Art. 155 CST).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje de renta exenta aplicable al subtotal depurado en la
 retención en la fuente (Art. 206 num. 10 ET).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>25</strong> para representar 25% (no 0.25).
+Valor vigente: <strong>25.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_renta_exenta_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">25.0</field>
@@ -398,7 +467,10 @@ retención en la fuente (Art. 206 num. 10 ET).</p>
         <field name="code">l10n_co_max_renta_exenta_uvt</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Tope mensual de renta exenta expresado en UVT (Art. 206 num. 10 ET).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (UVT)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número de UVT, <strong>NO</strong> un valor en pesos -- Odoo lo convierte a
+pesos automáticamente usando la UVT vigente del período: escriba <strong>240</strong>
+para "240 UVT". Valor vigente: <strong>240.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_max_renta_exenta_uvt_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">240.0</field>
@@ -412,7 +484,10 @@ retención en la fuente (Art. 206 num. 10 ET).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Porcentaje del ingreso bruto deducible por dependientes económicos en
 la retención en la fuente (Art. 387 ET).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>10</strong> para representar 10% (no 0.10).
+Valor vigente: <strong>10.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_pct_deduccion_dependientes_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">10.0</field>
@@ -425,40 +500,55 @@ la retención en la fuente (Art. 387 ET).</p>
         <field name="code">l10n_co_max_dependientes_uvt</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Tope mensual de la deducción por dependientes expresado en UVT
-(Art. 387 ET).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (UVT)</strong></pre></field>
+(Art. 387 ET, núm. 2 -- tope exacto de 32 UVT, sin decimal).</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número de UVT, <strong>NO</strong> un valor en pesos -- Odoo lo convierte a
+pesos automáticamente usando la UVT vigente del período: escriba <strong>32</strong>
+para "32 UVT". Valor vigente: <strong>32</strong>.</p></field>
     </record>
     <record id="rule_parameter_max_dependientes_uvt_2024" model="hr.rule.parameter.value">
-        <field name="parameter_value">32.5</field>
+        <field name="parameter_value">32</field>
         <field name="rule_parameter_id" ref="rule_parameter_max_dependientes_uvt"/>
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
-    <record id="rule_parameter_max_vol_pension_pct" model="hr.rule.parameter">
-        <field name="name">Colombia: Tope Aporte Voluntario Pensión (% Ingreso)</field>
-        <field name="code">l10n_co_max_vol_pension_pct</field>
+    <record id="rule_parameter_max_vol_pension_afc_combinado_pct" model="hr.rule.parameter">
+        <field name="name">Colombia: Tope Combinado Pensión Voluntaria + AFC (% Ingreso)</field>
+        <field name="code">l10n_co_max_vol_pension_afc_combinado_pct</field>
         <field name="country_id" ref="base.co"/>
-        <field name="description" type="html"><p>Porcentaje máximo del ingreso bruto deducible por aportes voluntarios a
-pensión en la depuración de retención en la fuente (Art. 126-1 ET).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+        <field name="description" type="html"><p>Porcentaje máximo COMBINADO del ingreso bruto mensual deducible entre
+aportes voluntarios a pensión (Art. 126-1 ET, mod. Ley 1819/2016) y AFC (Art. 126-4 ET) en la
+depuración de retención en la fuente -- AUD-05/doc 32: es un tope único compartido entre los 2
+conceptos, no 2 topes independientes. Reemplaza a los antiguos
+<code>l10n_co_max_vol_pension_pct</code>/<code>l10n_co_max_afc_pct</code> (retirados, permitían
+hasta 55%% combinado por error).</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>30</strong> para representar 30% (no 0.30).
+Valor vigente: <strong>30.0</strong>.</p></field>
     </record>
-    <record id="rule_parameter_max_vol_pension_pct_2024" model="hr.rule.parameter.value">
-        <field name="parameter_value">25.0</field>
-        <field name="rule_parameter_id" ref="rule_parameter_max_vol_pension_pct"/>
+    <record id="rule_parameter_max_vol_pension_afc_combinado_pct_2024" model="hr.rule.parameter.value">
+        <field name="parameter_value">30.0</field>
+        <field name="rule_parameter_id" ref="rule_parameter_max_vol_pension_afc_combinado_pct"/>
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
-    <record id="rule_parameter_max_afc_pct" model="hr.rule.parameter">
-        <field name="name">Colombia: Tope Aporte AFC (% Ingreso)</field>
-        <field name="code">l10n_co_max_afc_pct</field>
+    <record id="rule_parameter_max_vol_pension_afc_anual_uvt" model="hr.rule.parameter">
+        <field name="name">Colombia: Techo Anual Pensión Voluntaria + AFC (UVT)</field>
+        <field name="code">l10n_co_max_vol_pension_afc_anual_uvt</field>
         <field name="country_id" ref="base.co"/>
-        <field name="description" type="html"><p>Porcentaje máximo del ingreso bruto deducible por aportes a cuentas AFC
-en la depuración de retención en la fuente (Art. 126-4 ET).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+        <field name="description" type="html"><p>Techo anual COMBINADO adicional, en UVT, para la exención de aportes
+voluntarios a pensión + AFC (Art. 126-1/126-4 ET) -- AUD-05/doc 32. Se acumula por año calendario,
+consultando cuánto se trató como exento en payslips confirmados de meses anteriores del mismo
+empleado.</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número de UVT, <strong>NO</strong> un valor en pesos -- Odoo lo convierte a
+pesos automáticamente usando la UVT vigente del período: escriba <strong>3800</strong>
+para "3800 UVT". Valor vigente: <strong>3800</strong>.</p></field>
     </record>
-    <record id="rule_parameter_max_afc_pct_2024" model="hr.rule.parameter.value">
-        <field name="parameter_value">30.0</field>
-        <field name="rule_parameter_id" ref="rule_parameter_max_afc_pct"/>
+    <record id="rule_parameter_max_vol_pension_afc_anual_uvt_2024" model="hr.rule.parameter.value">
+        <field name="parameter_value">3800</field>
+        <field name="rule_parameter_id" ref="rule_parameter_max_vol_pension_afc_anual_uvt"/>
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
@@ -476,7 +566,9 @@ en la depuración de retención en la fuente (Art. 126-4 ET).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Múltiplo de SMMLV de IBC a partir del cual aplica el aporte al Fondo
 de Solidaridad Pensional (Art. 27 Ley 100/1993).</p>
-<pre><em>Valor</em> -&gt; <strong>Int (múltiplo de SMMLV)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de veces el SMMLV, <strong>NO</strong> un valor en pesos:
+escriba <strong>4</strong> para representar "4 SMMLV". Valor vigente: <strong>4</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_umbral_base_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">4</field>
@@ -490,7 +582,10 @@ de Solidaridad Pensional (Art. 27 Ley 100/1993).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Tarifa base del aporte al FSP para IBC entre 4 y 16 SMMLV
 (Art. 27 Ley 100/1993).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>1</strong> para representar 1% (no 0.01).
+Valor vigente: <strong>1.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_pct_base_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">1.0</field>
@@ -504,7 +599,9 @@ de Solidaridad Pensional (Art. 27 Ley 100/1993).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Múltiplo de SMMLV a partir del cual aplica la tarifa del tramo 1 de
 subsistencia del FSP (Decreto 4982/2007).</p>
-<pre><em>Valor</em> -&gt; <strong>Int (múltiplo de SMMLV)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de veces el SMMLV, <strong>NO</strong> un valor en pesos:
+escriba <strong>16</strong> para representar "16 SMMLV". Valor vigente: <strong>16</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_umbral_tier1_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">16</field>
@@ -516,7 +613,10 @@ subsistencia del FSP (Decreto 4982/2007).</p>
         <field name="code">l10n_co_fsp_pct_tier1</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Tarifa del FSP para IBC entre 16 y 17 SMMLV (Decreto 4982/2007).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>1.2</strong> para representar 1.2% (no 0.012).
+Valor vigente: <strong>1.2</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_pct_tier1_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">1.2</field>
@@ -530,7 +630,9 @@ subsistencia del FSP (Decreto 4982/2007).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Múltiplo de SMMLV a partir del cual aplica la tarifa del tramo 2 de
 subsistencia del FSP (Decreto 4982/2007).</p>
-<pre><em>Valor</em> -&gt; <strong>Int (múltiplo de SMMLV)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de veces el SMMLV, <strong>NO</strong> un valor en pesos:
+escriba <strong>17</strong> para representar "17 SMMLV". Valor vigente: <strong>17</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_umbral_tier2_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">17</field>
@@ -542,7 +644,10 @@ subsistencia del FSP (Decreto 4982/2007).</p>
         <field name="code">l10n_co_fsp_pct_tier2</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Tarifa del FSP para IBC entre 17 y 18 SMMLV (Decreto 4982/2007).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>1.4</strong> para representar 1.4% (no 0.014).
+Valor vigente: <strong>1.4</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_pct_tier2_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">1.4</field>
@@ -556,7 +661,9 @@ subsistencia del FSP (Decreto 4982/2007).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Múltiplo de SMMLV a partir del cual aplica la tarifa del tramo 3 de
 subsistencia del FSP (Decreto 4982/2007).</p>
-<pre><em>Valor</em> -&gt; <strong>Int (múltiplo de SMMLV)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de veces el SMMLV, <strong>NO</strong> un valor en pesos:
+escriba <strong>18</strong> para representar "18 SMMLV". Valor vigente: <strong>18</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_umbral_tier3_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">18</field>
@@ -568,7 +675,10 @@ subsistencia del FSP (Decreto 4982/2007).</p>
         <field name="code">l10n_co_fsp_pct_tier3</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Tarifa del FSP para IBC entre 18 y 19 SMMLV (Decreto 4982/2007).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>1.6</strong> para representar 1.6% (no 0.016).
+Valor vigente: <strong>1.6</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_pct_tier3_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">1.6</field>
@@ -582,7 +692,9 @@ subsistencia del FSP (Decreto 4982/2007).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Múltiplo de SMMLV a partir del cual aplica la tarifa del tramo 4 de
 subsistencia del FSP (Decreto 4982/2007).</p>
-<pre><em>Valor</em> -&gt; <strong>Int (múltiplo de SMMLV)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de veces el SMMLV, <strong>NO</strong> un valor en pesos:
+escriba <strong>19</strong> para representar "19 SMMLV". Valor vigente: <strong>19</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_umbral_tier4_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">19</field>
@@ -594,7 +706,10 @@ subsistencia del FSP (Decreto 4982/2007).</p>
         <field name="code">l10n_co_fsp_pct_tier4</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Tarifa del FSP para IBC entre 19 y 20 SMMLV (Decreto 4982/2007).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>1.8</strong> para representar 1.8% (no 0.018).
+Valor vigente: <strong>1.8</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_pct_tier4_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">1.8</field>
@@ -608,7 +723,9 @@ subsistencia del FSP (Decreto 4982/2007).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Múltiplo de SMMLV a partir del cual aplica la tarifa máxima (tramo 5)
 de subsistencia del FSP (Decreto 4982/2007).</p>
-<pre><em>Valor</em> -&gt; <strong>Int (múltiplo de SMMLV)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de veces el SMMLV, <strong>NO</strong> un valor en pesos:
+escriba <strong>20</strong> para representar "20 SMMLV". Valor vigente: <strong>20</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_umbral_tier5_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">20</field>
@@ -620,7 +737,10 @@ de subsistencia del FSP (Decreto 4982/2007).</p>
         <field name="code">l10n_co_fsp_pct_tier5</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Tarifa máxima del FSP para IBC >= 20 SMMLV (Decreto 4982/2007).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (%)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>2</strong> para representar 2% (no 0.02).
+Valor vigente: <strong>2.0</strong>.</p></field>
     </record>
     <record id="rule_parameter_fsp_pct_tier5_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">2.0</field>
@@ -637,14 +757,21 @@ de subsistencia del FSP (Decreto 4982/2007).</p>
         <field name="name">Colombia: Horas Semanales Jornada Máxima Legal</field>
         <field name="code">l10n_co_horas_semanales</field>
         <field name="country_id" ref="base.co"/>
-        <field name="description" type="html"><p>Jornada máxima legal semanal (Art. 161 CST, reducida por Ley
-2101/2021: 46h hasta 2026-07-14, 42h desde 2026-07-15).</p>
-<pre><em>Valor</em> -&gt; <strong>Int (horas)</strong></pre></field>
+        <field name="description" type="html"><p>Jornada máxima legal semanal (Art. 161 CST, reducida
+gradualmente por Ley 2101/2021: 46h desde 2024-07-15, 44h desde 2025-07-15, 42h desde 2026-07-15).</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de horas por semana. Valor vigente (desde 2026-07-15):
+<strong>42</strong>.</p></field>
     </record>
-    <record id="rule_parameter_horas_semanales_2026" model="hr.rule.parameter.value">
+    <record id="rule_parameter_horas_semanales_2024_jul15" model="hr.rule.parameter.value">
         <field name="parameter_value">46</field>
         <field name="rule_parameter_id" ref="rule_parameter_horas_semanales"/>
-        <field name="date_from" eval="datetime(2026, 1, 1).date()"/>
+        <field name="date_from" eval="datetime(2024, 7, 15).date()"/>
+    </record>
+    <record id="rule_parameter_horas_semanales_2025_jul15" model="hr.rule.parameter.value">
+        <field name="parameter_value">44</field>
+        <field name="rule_parameter_id" ref="rule_parameter_horas_semanales"/>
+        <field name="date_from" eval="datetime(2025, 7, 15).date()"/>
     </record>
     <record id="rule_parameter_horas_semanales_2026_jul15" model="hr.rule.parameter.value">
         <field name="parameter_value">42</field>
@@ -657,13 +784,20 @@ de subsistencia del FSP (Decreto 4982/2007).</p>
         <field name="code">l10n_co_horas_mensuales</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Divisor de horas mensuales para el valor-hora de horas extra y
-recargos (Ley 2101/2021: 230 hasta 2026-07-14, 210 desde 2026-07-15).</p>
-<pre><em>Valor</em> -&gt; <strong>Int (horas)</strong></pre></field>
+recargos (Ley 2101/2021: 230 desde 2024-07-15, 220 desde 2025-07-15, 210 desde 2026-07-15).</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de horas por mes (divisor puro). Valor vigente (desde
+2026-07-15): <strong>210</strong>.</p></field>
     </record>
-    <record id="rule_parameter_horas_mensuales_2026" model="hr.rule.parameter.value">
+    <record id="rule_parameter_horas_mensuales_2024_jul15" model="hr.rule.parameter.value">
         <field name="parameter_value">230</field>
         <field name="rule_parameter_id" ref="rule_parameter_horas_mensuales"/>
-        <field name="date_from" eval="datetime(2026, 1, 1).date()"/>
+        <field name="date_from" eval="datetime(2024, 7, 15).date()"/>
+    </record>
+    <record id="rule_parameter_horas_mensuales_2025_jul15" model="hr.rule.parameter.value">
+        <field name="parameter_value">220</field>
+        <field name="rule_parameter_id" ref="rule_parameter_horas_mensuales"/>
+        <field name="date_from" eval="datetime(2025, 7, 15).date()"/>
     </record>
     <record id="rule_parameter_horas_mensuales_2026_jul15" model="hr.rule.parameter.value">
         <field name="parameter_value">210</field>
@@ -676,7 +810,11 @@ recargos (Ley 2101/2021: 230 hasta 2026-07-14, 210 desde 2026-07-15).</p>
         <field name="code">l10n_co_factor_hed</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Factor de recargo para hora extra diurna (Art. 168 CST: 25%).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (factor)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Este parámetro es el <strong>multiplicador TOTAL</strong> que se paga por cada hora extra
+(incluye el 100% base + el recargo legal) -- <strong>NO</strong> ingrese solo el porcentaje de
+recargo. Escriba <strong>1.25</strong> para pagar cada hora extra diurna al 125% del valor de una
+hora ordinaria (25% de recargo + 100% base). Valor vigente: <strong>1.25</strong>.</p></field>
     </record>
     <record id="rule_parameter_factor_hed_2026" model="hr.rule.parameter.value">
         <field name="parameter_value">1.25</field>
@@ -689,7 +827,11 @@ recargos (Ley 2101/2021: 230 hasta 2026-07-14, 210 desde 2026-07-15).</p>
         <field name="code">l10n_co_factor_hen</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Factor de recargo para hora extra nocturna (Art. 168 CST: 75%).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (factor)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Este parámetro es el <strong>multiplicador TOTAL</strong> que se paga por cada hora extra
+(incluye el 100% base + el recargo legal) -- <strong>NO</strong> ingrese solo el porcentaje de
+recargo. Escriba <strong>1.75</strong> para pagar cada hora extra nocturna al 175% del valor de
+una hora ordinaria (75% de recargo + 100% base). Valor vigente: <strong>1.75</strong>.</p></field>
     </record>
     <record id="rule_parameter_factor_hen_2026" model="hr.rule.parameter.value">
         <field name="parameter_value">1.75</field>
@@ -702,7 +844,12 @@ recargos (Ley 2101/2021: 230 hasta 2026-07-14, 210 desde 2026-07-15).</p>
         <field name="code">l10n_co_factor_hrn</field>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Factor de recargo nocturno ordinario (Art. 168 CST: 35%).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (factor)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor -- ¡ESTE ES DISTINTO A LOS DEMÁS FACTORES DE ESTE GRUPO!</h3>
+<p>A diferencia de los factores de hora extra (Hora Extra Diurna/Nocturna, que SÍ incluyen el
+100% base), este parámetro es <strong>SOLO el recargo adicional</strong>: el recargo nocturno
+ordinario se paga SUMADO sobre la hora que ya cubre el salario base, no reemplaza una hora
+completa aparte. Escriba <strong>0.35</strong> para representar un recargo adicional de 35% (no
+1.35, y no 35). Valor vigente: <strong>0.35</strong>.</p></field>
     </record>
     <record id="rule_parameter_factor_hrn_2026" model="hr.rule.parameter.value">
         <field name="parameter_value">0.35</field>
@@ -716,12 +863,16 @@ recargos (Ley 2101/2021: 230 hasta 2026-07-14, 210 desde 2026-07-15).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Factor de recargo diurno dominical/festivo (Art. 179 CST, subido de 75%
 a 90% por la Ley 2466/2025 desde 2026-07-01).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (factor)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Este parámetro es el <strong>multiplicador TOTAL</strong> que se paga por cada hora dominical/
+festiva diurna (incluye el 100% base + el recargo legal) -- <strong>NO</strong> ingrese solo el
+porcentaje de recargo. Escriba <strong>2.00</strong> para pagar esa hora al 200% del valor de una
+hora ordinaria. Valor vigente (desde 2027-07-01): <strong>2.00</strong>.</p></field>
     </record>
-    <record id="rule_parameter_factor_hrddf_2026" model="hr.rule.parameter.value">
-        <field name="parameter_value">1.75</field>
+    <record id="rule_parameter_factor_hrddf_2025_jul1" model="hr.rule.parameter.value">
+        <field name="parameter_value">1.80</field>
         <field name="rule_parameter_id" ref="rule_parameter_factor_hrddf"/>
-        <field name="date_from" eval="datetime(2026, 1, 1).date()"/>
+        <field name="date_from" eval="datetime(2025, 7, 1).date()"/>
     </record>
     <record id="rule_parameter_factor_hrddf_2026_jul1" model="hr.rule.parameter.value">
         <field name="parameter_value">1.90</field>
@@ -740,12 +891,17 @@ a 90% por la Ley 2466/2025 desde 2026-07-01).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Factor de hora extra diurna en dominical/festivo (Ley 2466/2025 desde
 2026-07-01).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (factor)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Este parámetro es el <strong>multiplicador TOTAL</strong> que se paga por cada hora extra
+dominical/festiva diurna (incluye el 100% base + todos los recargos legales combinados) --
+<strong>NO</strong> ingrese solo un porcentaje de recargo. Escriba <strong>2.25</strong> para pagar
+esa hora al 225% del valor de una hora ordinaria. Valor vigente (desde 2027-07-01):
+<strong>2.25</strong>.</p></field>
     </record>
-    <record id="rule_parameter_factor_heddf_2026" model="hr.rule.parameter.value">
-        <field name="parameter_value">2.00</field>
+    <record id="rule_parameter_factor_heddf_2025_jul1" model="hr.rule.parameter.value">
+        <field name="parameter_value">2.05</field>
         <field name="rule_parameter_id" ref="rule_parameter_factor_heddf"/>
-        <field name="date_from" eval="datetime(2026, 1, 1).date()"/>
+        <field name="date_from" eval="datetime(2025, 7, 1).date()"/>
     </record>
     <record id="rule_parameter_factor_heddf_2026_jul1" model="hr.rule.parameter.value">
         <field name="parameter_value">2.15</field>
@@ -764,12 +920,17 @@ a 90% por la Ley 2466/2025 desde 2026-07-01).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Factor de hora extra nocturna en dominical/festivo (Ley 2466/2025 desde
 2026-07-01).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (factor)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Este parámetro es el <strong>multiplicador TOTAL</strong> que se paga por cada hora extra
+dominical/festiva nocturna (incluye el 100% base + todos los recargos legales combinados) --
+<strong>NO</strong> ingrese solo un porcentaje de recargo. Escriba <strong>2.75</strong> para pagar
+esa hora al 275% del valor de una hora ordinaria. Valor vigente (desde 2027-07-01):
+<strong>2.75</strong>.</p></field>
     </record>
-    <record id="rule_parameter_factor_hendf_2026" model="hr.rule.parameter.value">
-        <field name="parameter_value">2.50</field>
+    <record id="rule_parameter_factor_hendf_2025_jul1" model="hr.rule.parameter.value">
+        <field name="parameter_value">2.55</field>
         <field name="rule_parameter_id" ref="rule_parameter_factor_hendf"/>
-        <field name="date_from" eval="datetime(2026, 1, 1).date()"/>
+        <field name="date_from" eval="datetime(2025, 7, 1).date()"/>
     </record>
     <record id="rule_parameter_factor_hendf_2026_jul1" model="hr.rule.parameter.value">
         <field name="parameter_value">2.65</field>
@@ -788,12 +949,17 @@ a 90% por la Ley 2466/2025 desde 2026-07-01).</p>
         <field name="country_id" ref="base.co"/>
         <field name="description" type="html"><p>Factor de recargo nocturno en dominical/festivo (Ley 2466/2025 desde
 2026-07-01).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (factor)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Este parámetro es el <strong>multiplicador TOTAL</strong> que se paga por cada hora dominical/
+festiva nocturna (incluye el 100% base + todos los recargos legales combinados) --
+<strong>NO</strong> ingrese solo un porcentaje de recargo. Escriba <strong>2.35</strong> para pagar
+esa hora al 235% del valor de una hora ordinaria. Valor vigente (desde 2027-07-01):
+<strong>2.35</strong>.</p></field>
     </record>
-    <record id="rule_parameter_factor_hrndf_2026" model="hr.rule.parameter.value">
-        <field name="parameter_value">2.10</field>
+    <record id="rule_parameter_factor_hrndf_2025_jul1" model="hr.rule.parameter.value">
+        <field name="parameter_value">2.15</field>
         <field name="rule_parameter_id" ref="rule_parameter_factor_hrndf"/>
-        <field name="date_from" eval="datetime(2026, 1, 1).date()"/>
+        <field name="date_from" eval="datetime(2025, 7, 1).date()"/>
     </record>
     <record id="rule_parameter_factor_hrndf_2026_jul1" model="hr.rule.parameter.value">
         <field name="parameter_value">2.25</field>
@@ -810,20 +976,23 @@ a 90% por la Ley 2466/2025 desde 2026-07-01).</p>
         <field name="name">Colombia: Hora Inicio Franja Nocturna</field>
         <field name="code">l10n_co_hora_inicio_franja_nocturna</field>
         <field name="country_id" ref="base.co"/>
-        <field name="description" type="html"><p>Hora de inicio de la franja nocturna (Art. 25 Ley 2466/2025: se adelanta
-de 9pm a 7pm desde 2026-07-01; hasta esa fecha rige el régimen anterior,
+        <field name="description" type="html"><p>Hora de inicio de la franja nocturna (Art. 10 Ley 2466/2025: se adelanta
+de 9pm a 7pm desde 2025-12-25; hasta esa fecha rige el régimen anterior,
 9pm).</p>
-<pre><em>Valor</em> -&gt; <strong>Float (hora, 0-24)</strong></pre></field>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba la hora del día en formato 24 horas (0 a 24), con decimales para fracciones de
+hora si aplica (ej. 19.5 = 7:30pm). Valor vigente (desde 2025-12-25): <strong>19.0</strong>
+(7:00pm).</p></field>
     </record>
-    <record id="rule_parameter_hora_inicio_franja_nocturna_2026" model="hr.rule.parameter.value">
+    <record id="rule_parameter_hora_inicio_franja_nocturna_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">21.0</field>
         <field name="rule_parameter_id" ref="rule_parameter_hora_inicio_franja_nocturna"/>
-        <field name="date_from" eval="datetime(2026, 1, 1).date()"/>
+        <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
-    <record id="rule_parameter_hora_inicio_franja_nocturna_2026_jul1" model="hr.rule.parameter.value">
+    <record id="rule_parameter_hora_inicio_franja_nocturna_2025_dic25" model="hr.rule.parameter.value">
         <field name="parameter_value">19.0</field>
         <field name="rule_parameter_id" ref="rule_parameter_hora_inicio_franja_nocturna"/>
-        <field name="date_from" eval="datetime(2026, 7, 1).date()"/>
+        <field name="date_from" eval="datetime(2025, 12, 25).date()"/>
     </record>
 
 </odoo>

@@ -254,10 +254,15 @@ class HrPayslip(models.Model):
         payslip_data = self._collect_payslip_data()
 
         # Construir XML sin firmar
+        # NOTA (doc 24 §17): corte a builder v2 (dict_to_xml) restaurado e
+        # instalado en staging_produccion 2026-09-12 por decisión explícita
+        # de David -- riesgo aceptado conscientemente de usar este builder
+        # para los envíos reales de habilitación ante la DIAN, ANTES de que
+        # ese proceso ocurra. Ver 00_ESTADO_ACTUAL.md y doc 24 §17.
         if self.l10n_co_ne_is_adjustment:
-            xml_bytes = nomina_xml_builder.build_nota_ajuste(payslip_data)
+            xml_bytes = nomina_xml_builder.build_nota_ajuste_v2(payslip_data)
         else:
-            xml_bytes = nomina_xml_builder.build_nomina_individual(payslip_data)
+            xml_bytes = nomina_xml_builder.build_nomina_individual_v2(payslip_data)
 
         # Calcular CUNE (11 campos según Anexo Técnico, incluye Software-Pin)
         company = self.company_id
@@ -301,7 +306,7 @@ class HrPayslip(models.Model):
 
         # Firmar XML con XAdES-BES
         private_key, cert_pem, cert_der, cert_obj = xml_signer.load_from_certificate(
-            company.l10n_co_ne_certificate_id,
+            company._get_ne_certificate(),
         )
         signed_xml = xml_signer.sign_xml(
             xml_bytes=xml_bytes,
@@ -377,6 +382,27 @@ class HrPayslip(models.Model):
         company = self.company_id
         self._validate_company_ne_config(company)
 
+        if company.l10n_co_ne_demo_mode:
+            # Doc 37: Modo Demo -- equivalente a _send_bill_sync() del
+            # l10n_co_dian nativo (Facturación). El XML ya se construyó,
+            # calculó su CUNE y se firmó localmente en
+            # action_generate_ne_xml() -- este modo únicamente evita la
+            # transmisión real SendNominaSync al webservice de la DIAN.
+            # No aplica a action_send_test_set() (habilitación real).
+            self.l10n_co_ne_state = 'accepted'
+            if self.l10n_co_ne_consecutive:
+                self.number = self.l10n_co_ne_consecutive
+            self.message_post(
+                body=_(
+                    'Nómina electrónica %s validada localmente en Modo '
+                    'Demo (sin transmisión real a la DIAN).',
+                    self.number or self.name,
+                ),
+                message_type='comment',
+                subtype_xmlid='mail.mt_note',
+            )
+            return True
+
         # Leer XML firmado del attachment (como bytes)
         xml_content = base64.b64decode(
             self.l10n_co_ne_xml_attachment_id.datas
@@ -384,7 +410,7 @@ class HrPayslip(models.Model):
 
         # Cargar certificado para firmar el sobre SOAP
         private_key, cert_pem, cert_der, _cert_obj = xml_signer.load_from_certificate(
-            company.l10n_co_ne_certificate_id,
+            company._get_ne_certificate(),
         )
 
         # Determinar endpoint según ambiente
@@ -642,7 +668,7 @@ class HrPayslip(models.Model):
 
         # Load certificate
         private_key, cert_pem, cert_der, _cert_obj = xml_signer.load_from_certificate(
-            company.l10n_co_ne_certificate_id,
+            company._get_ne_certificate(),
         )
 
         # Send test set
@@ -686,7 +712,7 @@ class HrPayslip(models.Model):
 
         company = self.company_id
         private_key, cert_pem, cert_der, _cert_obj = xml_signer.load_from_certificate(
-            company.l10n_co_ne_certificate_id,
+            company._get_ne_certificate(),
         )
 
         endpoint = (
@@ -1484,7 +1510,7 @@ class HrPayslip(models.Model):
             missing.append(_('ID Software Nómina'))
         if not mode or not mode.software_pin:
             missing.append(_('PIN Software Nómina'))
-        if not company.l10n_co_ne_certificate_id:
+        if not company._get_ne_certificate():
             missing.append(_('Certificado Digital'))
         if missing:
             raise UserError(_(
@@ -1494,7 +1520,7 @@ class HrPayslip(models.Model):
                 '\n• '.join(missing),
             ))
 
-        certificate = company.l10n_co_ne_certificate_id
+        certificate = company._get_ne_certificate()
         if certificate and certificate.date_end and certificate.date_end < fields.Datetime.now():
             raise UserError(_(
                 'El certificado digital de la empresa %s está vencido '

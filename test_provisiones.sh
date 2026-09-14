@@ -278,23 +278,25 @@ def t6():
 test("CO_NETO no incluye las lineas PROV (verificado en runtime, no solo estructural)", t6)
 
 # ================================================================
-# TEST 7: integracion contable -- confirma que _prepare_account_move_lines
-# (hr_payslip_account.py) SI recoge las lineas invisibles CO_PROV_* una
-# vez configuradas en l10n.co.payroll.account.config, sin codigo nuevo
-# (doc 18 SS2.4). Usa 2 cuentas contables reales existentes, crea la
-# config solo para CO_PROV_PRIMA (alcance minimo para probar el
-# mecanismo), confirma el payslip y verifica el asiento generado.
+# TEST 7: integracion contable -- confirma que el motor contable
+# NATIVO (hr_payroll_account, doc 23 -- reemplaza el l10n.co.payroll.
+# account.config propio que existia cuando se escribio esta prueba
+# originalmente) SI recoge las lineas invisibles CO_PROV_* una vez
+# configuradas directo en hr.salary.rule.account_debit/account_credit
+# (company_dependent, doc 23 SS2), sin codigo nuevo (doc 18 SS2.4).
+# Usa 2 cuentas contables reales existentes, configura solo
+# CO_PROV_PRIMA (alcance minimo para probar el mecanismo), confirma el
+# payslip y verifica el asiento generado.
 #
-# Sin commits intermedios, y cr.rollback() incondicional al final (no solo
-# en el except de test()): la compania de prueba tiene
-# check_account_audit_trail=True, y una vez un account.move se marca
-# posted_before=True, Odoo protege su chatter permanentemente (cumplimiento
-# legal, ver account/models/mail_message.py:_except_audit_log()) -- ni
-# button_draft() ni unlink() lo deshacen. Intentar limpiar con
-# escritura+commit (como el resto de la suite) revienta ahi. Como nada se
-# comitea, el rollback deshace payslip+move+config+cambio de wage de una
-# sola vez -- no hace falta restaurar nada a mano. Hallazgo de Tech Lead
-# corriendo esto contra staging_produccion.
+# Sin commits intermedios, cr.rollback() incondicional al final (no
+# solo en el except de test()) -- mismo criterio defensivo que el
+# resto de la suite de doc 23 (test_contabilidad.sh), aunque ya no
+# aplica el motivo original (check_account_audit_trail bloqueando
+# button_draft()/unlink() en un move posted): el motor nativo deja el
+# asiento en estado 'draft', nunca lo auto-postea (confirmado en doc
+# 23), asi que ni siquiera llega a estar protegido. Se mantiene el
+# rollback incondicional de todas formas, es la forma segura
+# establecida para no comitear account.move de prueba.
 # ================================================================
 def t7():
     accounts = env['account.account'].search([
@@ -307,12 +309,9 @@ def t7():
 
     contract.write({'wage': _SMMLV * 1.5, 'l10n_co_ne_integral_salary': False})
 
-    AccountConfig = env['l10n.co.payroll.account.config']
-    config = AccountConfig.create({
-        'salary_rule_id': prov_prima.id,
-        'debit_account_id': debit_account.id,
-        'credit_account_id': credit_account.id,
-        'company_id': company.id,
+    prov_prima.with_company(company).write({
+        'account_debit': debit_account.id,
+        'account_credit': credit_account.id,
     })
 
     ps = env['hr.payslip'].create({

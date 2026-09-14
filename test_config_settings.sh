@@ -11,9 +11,12 @@
 #   (1 fila fija por compania, sin Selection de tipo de documento --
 #   Nomina Individual y Nota de Ajuste comparten siempre el mismo modo).
 # - l10n_co_ne_certificate_ids (O2M nuevo, mismo patron sin filtro que
-#   l10n_co_dian_certificate_ids) se agrega como tabla visual; el Many2one
-#   l10n_co_ne_certificate_id sigue siendo el campo funcional real que
-#   usa xml_signer (no se reemplaza, evita la ambiguedad de DIAN).
+#   l10n_co_dian_certificate_ids) se agrega como tabla visual.
+#   ACTUALIZADO 2026-09-12: el Many2one l10n_co_ne_certificate_id (doc 22
+#   §2 Opcion B, seleccion explicita) se retiro -- paridad real con
+#   Facturacion Electronica, que no tiene equivalente y toma siempre el
+#   ultimo certificado de la lista. res.company._get_ne_certificate()
+#   reemplaza su uso en el flujo de firma (ver T6 reescrito mas abajo).
 # - l10n_co_ne_environment (Selection) se mantiene como unica fuente de
 #   verdad; l10n_co_ne_test_environment (Boolean, computed+inverse) se
 #   agrega para exponerla como checkbox sin duplicar el dato.
@@ -212,30 +215,35 @@ def t5():
 test("Campos planos viejos eliminados de res.company; l10n.co.ne.operation_mode bien registrado (sin Selection)", t5)
 
 # ================================================================
-# TEST 6: autoseleccion de certificado -- si hay exactamente 1
-# certificado en la lista y ninguno seleccionado, el onchange lo
-# autoselecciona. Usa el certificado real ya cargado en el servidor
-# (Certificado.pfx) -- confirmado antes de escribir este script que
-# company.l10n_co_ne_certificate_id estaba en None a pesar de que ya
-# existia ese certificado, exactamente el caso que este onchange
-# resuelve.
+# TEST 6 (reescrito 2026-09-12): _get_ne_certificate() reemplaza al
+# Many2one de seleccion explicita retirado (doc 22 §2 Opcion B, ya no
+# vigente) -- mismo criterio que Facturacion Electronica (l10n_co_dian:
+# certificates_sudo[-1], el ULTIMO de la lista). No se prueba con un
+# segundo certificado sintetico: certificate.certificate.content es
+# required=True (contenido X.509 real) y .copy() falla desencriptando
+# el pkcs12_password enmascarado por el ORM (mismo hallazgo ya
+# documentado en test_certificado.sh T4) -- generar uno de verdad solo
+# para probar un slice de lista no vale el riesgo/complejidad. Se
+# prueba con el unico certificado real (caso que SI importa: que el
+# metodo funcione con la configuracion real de Guapante) y con una
+# compania en memoria sin certificados (caso "sin certificado",
+# complementa el T3 de test_certificado.sh que prueba lo mismo a nivel
+# de _validate_company_ne_config). Se usa `.new()`, no `.create()`:
+# `.create()` sobre res.company dispara hooks de hr_payroll que crean
+# hr.payroll.note ligadas a la compania y el `.unlink()` posterior falla
+# por FK (hallazgo real corrido en test_certificado.sh T3) -- `.new()`
+# no inserta nada, alcanza porque _get_ne_certificate() solo lee.
 # ================================================================
 def t6():
-    original_cert_id = company.l10n_co_ne_certificate_id.id
-    try:
-        company.write({'l10n_co_ne_certificate_id': False})
-        cr.commit()
-        settings = Settings.new({'company_id': company.id})
-        settings.l10n_co_ne_certificate_ids  # fuerza a resolver el related
-        assert len(settings.l10n_co_ne_certificate_ids) == 1, \
-            f"Se esperaba exactamente 1 certificado real precargado, hay {len(settings.l10n_co_ne_certificate_ids)}"
-        settings._onchange_l10n_co_ne_certificate_ids()
-        assert settings.l10n_co_ne_certificate_id, \
-            "El onchange deberia haber autoseleccionado el unico certificado de la lista"
-    finally:
-        company.write({'l10n_co_ne_certificate_id': original_cert_id})
-        cr.commit()
-test("Autoseleccion de certificado cuando hay exactamente 1 en la lista", t6)
+    real_cert = env['certificate.certificate'].search([('company_id', '=', company.id)], limit=1)
+    assert real_cert, "No hay ningun certificate.certificate real para probar -- ajustar la prueba"
+    assert company._get_ne_certificate() == real_cert, \
+        "Con un solo certificado, _get_ne_certificate() deberia devolver ese"
+
+    empty_company = env['res.company'].new({'name': 'NE Test Sin Certificado (en memoria)'})
+    assert not empty_company._get_ne_certificate(), \
+        "Una compania sin certificados deberia devolver un recordset vacio, no error"
+test("_get_ne_certificate() devuelve el certificado real, y vacio sin certificados (paridad con Facturacion Electronica)", t6)
 
 # ================================================================
 # TEST 7: l10n_co_ne_certification_process gatea de verdad
@@ -244,7 +252,6 @@ test("Autoseleccion de certificado cuando hay exactamente 1 en la lista", t6)
 # real: la compañía no tiene test_set_id configurado hoy).
 # ================================================================
 def t7():
-    original_cert_id = company.l10n_co_ne_certificate_id.id
     original_certification = company.l10n_co_ne_certification_process
     cert = env['certificate.certificate'].search([('company_id', '=', company.id)], limit=1)
     assert cert, "No hay ningun certificate.certificate real para probar -- ajustar la prueba"
@@ -266,7 +273,6 @@ def t7():
     })
     try:
         company.write({
-            'l10n_co_ne_certificate_id': cert.id,
             'l10n_co_ne_certification_process': False,
         })
         cr.commit()
@@ -290,15 +296,17 @@ def t7():
     finally:
         payslip.unlink()
         company.write({
-            'l10n_co_ne_certificate_id': original_cert_id,
             'l10n_co_ne_certification_process': original_certification,
         })
         cr.commit()
 test("l10n_co_ne_certification_process gatea action_send_test_set() de verdad", t7)
 
 # ================================================================
-# TEST 8 (doc 21, se mantiene sin cambios -- Consecutivos/Certificado
-# siguen con domain= explicito).
+# TEST 8 (doc 21, se mantiene sin cambios -- Consecutivos siguen con
+# domain= explicito. El bloque de Certificado se retiro 2026-09-12: el
+# Many2one con domain= desaparecio, l10n_co_ne_certificate_ids no
+# necesita domain propio -- es la misma lista global de certificados de
+# la compania, igual que l10n_co_dian_certificate_ids).
 # ================================================================
 def t8():
     expected_seq_domain = "[('code', 'like', 'l10n_co_nomina.')]"
@@ -318,12 +326,6 @@ def t8():
     # registro), no get_domain_list().
     eval_context = {'company_id': settings.company_id.id, 'id': settings.id}
 
-    cert_field = Settings._fields['l10n_co_ne_certificate_id']
-    assert cert_field.domain, "l10n_co_ne_certificate_id deberia tener domain= explicito"
-    resolved_cert_domain = safe_eval(cert_field.domain, eval_context)
-    assert resolved_cert_domain == [('company_id', '=', company.id)], \
-        f"l10n_co_ne_certificate_id.domain deberia resolver a company_id={company.id}, resolvio {resolved_cert_domain}"
-
     Sequence = env['ir.sequence']
     other_module_seq = Sequence.search([('code', 'not like', 'l10n_co_nomina.')], limit=1)
     assert other_module_seq, "No hay ninguna secuencia de otro modulo para probar el negativo"
@@ -331,7 +333,7 @@ def t8():
     matches = Sequence.search(seq_domain + [('id', '=', other_module_seq.id)])
     assert not matches, \
         f"El domain de l10n_co_ne_sequence_id NO deberia matchear una secuencia de otro modulo ({other_module_seq.code})"
-test("Domain explicito en Consecutivos/Certificado se mantiene (doc 21)", t8)
+test("Domain explicito en Consecutivos se mantiene (doc 21)", t8)
 
 # ================================================================
 # TEST 9: la vista de Ajustes > Nomina sigue heredando del punto
@@ -361,6 +363,60 @@ def t10():
     assert not mode.test_set_id, \
         f"test_set_id deberia seguir vacio (no habia dato que migrar), es {mode.test_set_id!r}"
 test("post-migrate.py migro correctamente los datos reales conocidos (software_id/pin)", t10)
+
+# ================================================================
+# TEST 11 (doc 36 v2, 2026-09-12): los 4 campos de diario por estructura
+# salarial NO son `related=` -- se exponen via get_values()/set_values()
+# (journal_id vive en hr.payroll.structure, company_dependent, sin
+# cadena de relacion simple desde res.company). Se prueba el roundtrip
+# completo: get_values() refleja el journal_id real actual de cada
+# estructura, y set_values() escribe un journal distinto de vuelta a la
+# estructura real -- restaurando el valor original en el finally.
+# ================================================================
+def t11():
+    from odoo.addons.l10n_co_nomina_electronica.models.res_config_settings import (
+        _NE_STRUCTURE_JOURNAL_FIELDS,
+    )
+    structures = {
+        fname: env.ref(xmlid) for fname, xmlid in _NE_STRUCTURE_JOURNAL_FIELDS.items()
+    }
+    originals = {fname: structure.journal_id for fname, structure in structures.items()}
+
+    # get_values(): debe reflejar el journal_id real actual de cada estructura.
+    defaults = Settings.default_get(list(_NE_STRUCTURE_JOURNAL_FIELDS.keys()))
+    for fname, structure in structures.items():
+        assert defaults.get(fname) == structure.journal_id.id, \
+            f"get_values() para {fname} deberia ser {structure.journal_id.id} (journal_id real de {structure.name}), devolvio {defaults.get(fname)}"
+
+    # set_values(): un journal distinto (misma moneda que la compañia,
+    # ya existente, no se crea ninguno nuevo) debe persistir en la
+    # estructura real correspondiente.
+    other_journal = env['account.journal'].search([
+        ('company_id', '=', company.id),
+        ('id', 'not in', [j.id for j in originals.values() if j]),
+    ], limit=1)
+    assert other_journal, "No hay un segundo diario real distinto para probar el roundtrip -- ajustar la prueba"
+
+    try:
+        settings = Settings.new({**defaults, 'company_id': company.id})
+        fname_to_test = next(iter(_NE_STRUCTURE_JOURNAL_FIELDS))
+        settings[fname_to_test] = other_journal.id
+        settings.set_values()
+        cr.commit()
+        structures[fname_to_test].invalidate_recordset(['journal_id'])
+        assert structures[fname_to_test].journal_id == other_journal, \
+            f"set_values() no persistio el journal nuevo en {structures[fname_to_test].name}: quedo en {structures[fname_to_test].journal_id.name}"
+    finally:
+        settings_restore = Settings.new({**defaults, 'company_id': company.id})
+        for fname, original_journal in originals.items():
+            settings_restore[fname] = original_journal.id if original_journal else False
+        settings_restore.set_values()
+        cr.commit()
+        for fname, structure in structures.items():
+            structure.invalidate_recordset(['journal_id'])
+            assert structure.journal_id == originals[fname], \
+                f"No se restauro el journal_id original de {structure.name}"
+test("Cuentas Predeterminadas: get_values()/set_values() de los 4 diarios por estructura, roundtrip real", t11)
 
 # ================================================================
 # RESULTADOS

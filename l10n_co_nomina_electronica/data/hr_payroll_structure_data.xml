@@ -95,6 +95,17 @@
                 arriba, aplicado aquí por la misma razón.</field>
         </record>
 
+        <record id="hr_salary_rule_category_acumuladores_internos" model="hr.salary.rule.category">
+            <field name="name">Acumuladores Internos (invisible)</field>
+            <field name="code">ACUM_INT</field>
+            <field name="note">Categoria para reglas invisibles (appears_on_payslip=False) que
+                guardan un valor interno para que otra formula lo consulte mas adelante (ej.
+                CO_EXENTO_PENSION_AFC, AUD-05/doc 32 -- acumulador anual de exencion combinada de
+                pension voluntaria + AFC) -- no son prestaciones sociales (PROV) ni subtotales de
+                display (TOT_DISPLAY), es una categoria propia para no mezclar semanticas distintas
+                aunque compartan la propiedad tecnica "sin parent_id, fuera de DEV/DEDU/GROSS/NET".</field>
+        </record>
+
         <!-- ============================================================ -->
         <!-- Tipo de Estructura: Empleados Colombia                        -->
         <!-- ============================================================ -->
@@ -128,10 +139,50 @@
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-# Periodo de nomina: dias del periodo configurado en el contrato
-_period = int(contract.l10n_co_payroll_period or 30)
 _dias_mes = payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_from)
-result = contract.wage / _dias_mes * worked_days['WORK100'].number_of_days if 'WORK100' in worked_days else contract.wage * _period / _dias_mes
+
+def _dias_en_mes(year, month):
+    # sin 'import calendar': safe_eval prohibe la sentencia 'import' dentro de
+    # amount_python_compute (opcode IMPORT_NAME no esta en la whitelist).
+    if month == 2:
+        bisiesto = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+        return 29 if bisiesto else 28
+    if month in (4, 6, 9, 11):
+        return 30
+    return 31
+
+def _dia_comercial(d):
+    # Convencion de "mes comercial" colombiana (doctrina CSJ, la misma que ya usa
+    # l10n_co_dias_anio_comercial para cesantias/prima): todo mes se cuenta como
+    # si tuviera _dias_mes (30) dias. El ultimo dia calendario REAL de cualquier
+    # mes (28/29-feb, 30 o 31) siempre equivale al dia comercial 30 -- no solo
+    # cuando el mes tiene exactamente 30 dias. Esta regla aplica igual para
+    # fechas de inicio y de fin de contrato (es la misma resta en ambos casos).
+    ultimo_dia_mes = _dias_en_mes(d.year, d.month)
+    if d.day == ultimo_dia_mes:
+        return _dias_mes
+    return min(d.day, _dias_mes)
+
+periodo_ini = payslip.date_from
+periodo_fin = payslip.date_to
+contrato_ini = contract.date_start
+contrato_fin = contract.date_end or periodo_fin
+
+activo_ini = max(periodo_ini, contrato_ini)
+activo_fin = min(periodo_fin, contrato_fin)
+
+if activo_ini > activo_fin:
+    dias_bajo_contrato = 0
+else:
+    dias_bajo_contrato = _dia_comercial(activo_fin) - _dia_comercial(activo_ini) + 1
+
+unpaid_types = payslip.env['hr.leave.type'].search([('unpaid', '=', True)])
+unpaid_codes = set(unpaid_types.mapped('work_entry_type_id.code')) - {False}
+dias_no_remunerados = sum(
+    line.number_of_days for code, line in worked_days.items() if code in unpaid_codes
+)
+dias_pagables = dias_bajo_contrato - dias_no_remunerados
+result = contract.wage / _dias_mes * dias_pagables
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Sueldo</field>
@@ -152,9 +203,46 @@ result = contract.wage &lt;= payslip._rule_parameter('l10n_co_smmlv', payslip.da
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-# Auxilio de Transporte: valor del ano correspondiente
 _dias_mes = payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_from)
-result = payslip._rule_parameter('l10n_co_aux_transporte', payslip.date_from) / _dias_mes * (worked_days['WORK100'].number_of_days if 'WORK100' in worked_days else _dias_mes)
+
+def _dias_en_mes(year, month):
+    # sin 'import calendar': safe_eval prohibe la sentencia 'import' dentro de
+    # amount_python_compute (opcode IMPORT_NAME no esta en la whitelist).
+    if month == 2:
+        bisiesto = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+        return 29 if bisiesto else 28
+    if month in (4, 6, 9, 11):
+        return 30
+    return 31
+
+def _dia_comercial(d):
+    # Convencion de "mes comercial" colombiana -- ver el mismo comentario en
+    # CO_BASICO (hr_salary_rule_co_basico), misma formula de dias pagables.
+    ultimo_dia_mes = _dias_en_mes(d.year, d.month)
+    if d.day == ultimo_dia_mes:
+        return _dias_mes
+    return min(d.day, _dias_mes)
+
+periodo_ini = payslip.date_from
+periodo_fin = payslip.date_to
+contrato_ini = contract.date_start
+contrato_fin = contract.date_end or periodo_fin
+
+activo_ini = max(periodo_ini, contrato_ini)
+activo_fin = min(periodo_fin, contrato_fin)
+
+if activo_ini > activo_fin:
+    dias_bajo_contrato = 0
+else:
+    dias_bajo_contrato = _dia_comercial(activo_fin) - _dia_comercial(activo_ini) + 1
+
+unpaid_types = payslip.env['hr.leave.type'].search([('unpaid', '=', True)])
+unpaid_codes = set(unpaid_types.mapped('work_entry_type_id.code')) - {False}
+dias_no_remunerados = sum(
+    line.number_of_days for code, line in worked_days.items() if code in unpaid_codes
+)
+dias_pagables = dias_bajo_contrato - dias_no_remunerados
+result = payslip._rule_parameter('l10n_co_aux_transporte', payslip.date_from) / _dias_mes * dias_pagables
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Transporte</field>
@@ -875,7 +963,8 @@ _ibc_salud = _ibc_pension
 
 # Ejecutar depuracion y tabla marginal Art. 383 ET
 _rete_result = _rete_cfg.compute_retefuente(
-    employee, _gross, _ibc_pension, _ibc_salud, employee.company_id
+    employee, _gross, _ibc_pension, _ibc_salud, employee.company_id,
+    contract=contract, payslip=payslip,
 )
 _valor = _rete_result.get('retencion_pesos', 0)
 result = -abs(_valor) if _valor > 0 else 0
@@ -886,6 +975,64 @@ result = -abs(_valor) if _valor > 0 else 0
 Configurar en Nomina > Configuracion > Retencion en la Fuente.
 Soporta Procedimiento 1 (tabla marginal) y Procedimiento 2 (porcentaje fijo).
 La depuracion incluye: aportes obligatorios, voluntarios, AFC, dependientes, renta exenta 25%.</field>
+        </record>
+
+        <!-- ==================== EXENTO PENSION VOLUNTARIA + AFC (invisible, acumulador) ==================== -->
+        <record id="hr_salary_rule_co_exento_pension_afc" model="hr.salary.rule">
+            <field name="name">Exento Pensión Voluntaria + AFC (acumulador anual)</field>
+            <field name="code">CO_EXENTO_PENSION_AFC</field>
+            <field name="sequence">111</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">
+# Misma condicion que CO_RETEFUENTE -- solo aplica si hay config de retefuente
+_rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
+    ('year', '=', str(payslip.date_from.year)),
+    ('company_id', '=', employee.company_id.id),
+], limit=1)
+if not _rete_cfg:
+    _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
+        ('year', '=', str(payslip.date_from.year)),
+    ], limit=1)
+result = bool(_rete_cfg)
+            </field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+# AUD-05/doc 32: regla INVISIBLE (appears_on_payslip=False, no paga ni
+# descuenta nada -- solo GUARDA el monto exento combinado de este mes, ya
+# con el tope del 30% y el techo anual aplicados) para que meses futuros
+# puedan acumular via payslip._sum('CO_EXENTO_PENSION_AFC', ...). Mismo
+# patron que las reglas de provisiones (doc 18): un valor que se necesita
+# leer despues, no una deduccion real. Recalcula compute_retefuente() --
+# mismos inputs deterministicos que CO_RETEFUENTE, sin efectos secundarios.
+_rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
+    ('year', '=', str(payslip.date_from.year)),
+    ('company_id', '=', employee.company_id.id),
+], limit=1)
+if not _rete_cfg:
+    _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
+        ('year', '=', str(payslip.date_from.year)),
+    ], limit=1)
+
+_gross = categories['GROSS'] if categories.get('GROSS') else contract.wage
+_ibc_pension = categories.get('DEV_SAL', contract.wage)
+if contract.l10n_co_ne_integral_salary:
+    _ibc_pension = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+_ibc_salud = _ibc_pension
+
+_rete_result = _rete_cfg.compute_retefuente(
+    employee, _gross, _ibc_pension, _ibc_salud, employee.company_id,
+    contract=contract, payslip=payslip,
+)
+result = _rete_result.get('exento_vol_pension_afc', 0)
+            </field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Acumulador interno para el techo anual de 3.800 UVT combinado de
+aportes voluntarios a pension + AFC (Art. 126-1/126-4 ET, AUD-05/doc 32). No aparece en el recibo
+de nomina ni afecta el neto -- CO_RETEFUENTE (arriba) ya aplico este mismo exento en la depuracion
+de la base gravable. Esta regla solo persiste el valor para que compute_retefuente() lo pueda sumar
+en meses futuros via payslip._sum().</field>
         </record>
 
         <record id="hr_salary_rule_co_libranzas" model="hr.salary.rule">

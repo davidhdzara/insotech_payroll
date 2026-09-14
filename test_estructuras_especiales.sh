@@ -101,12 +101,35 @@ def _reconstruct_neto(ps, neto_code, *root_cats):
     categorias descienden de root_cats (excluyendo la propia linea de
     NETO por codigo, que si no queda incluida en su propia suma -- mismo
     patron que T6 de test_provisiones.sh). SS_EMP es hija de DEDU: no se
-    lista aparte, ya queda cubierta caminando el arbol desde DEDU."""
+    lista aparte, ya queda cubierta caminando el arbol desde DEDU.
+
+    IMPORTANTE (hallazgo doc 30): NO sumar l.total (el campo Monetary ya
+    guardado/redondeado de cada linea) -- el propio NETO (CO_LIQ_NETO/
+    CO_PRIMA_NETO/CO_BON_NETO) se calcula internamente sumando
+    categories['DEV']/['PREST']+['DEDU'] en precision completa (sin
+    redondear) y solo redondea una vez al guardar su propio total. Sumar
+    7 lineas ya redondeadas por separado acumula un error de redondeo de
+    hasta un par de centavos frente a esa unica ronda final -- no es un
+    bug de categoria, es orden de redondeo, y el NETO (sumar-y-redondear-
+    una-vez) es el lado matematicamente correcto, no el test.
+
+    Por eso se recalcula via ps._get_payslip_lines() -- el mismo metodo
+    que usa compute_sheet() internamente, que devuelve el 'total' de
+    cada regla ANTES de guardarse/redondearse en hr.payslip.line (no
+    tiene efectos secundarios, no escribe nada, se puede llamar de nuevo
+    con seguridad tras compute_sheet()). category_id se toma de las
+    lineas ya persistidas (mismo codigo), que no cambia entre llamadas."""
     root_ids = [c.id for c in root_cats]
-    lines = ps.line_ids.filtered(
-        lambda l: l.code != neto_code and any(_is_descendant(l.category_id, rid) for rid in root_ids)
-    )
-    return sum(lines.mapped('total'))
+    code_to_cat = {l.code: l.category_id for l in ps.line_ids}
+    total = 0.0
+    for line_vals in ps._get_payslip_lines():
+        code = line_vals['code']
+        if code == neto_code:
+            continue
+        cat = code_to_cat.get(code)
+        if cat and any(_is_descendant(cat, rid) for rid in root_ids):
+            total += line_vals['total']
+    return total
 
 def _make_payslip(struct, name):
     return env['hr.payslip'].create({

@@ -16,6 +16,7 @@ electrónica.
 
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError
+from odoo.tools.misc import str2bool
 
 
 class ResCompany(models.Model):
@@ -40,33 +41,29 @@ class ResCompany(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # Certificado Digital – reutiliza certificate.certificate nativo
     # ──────────────────────────────────────────────────────────────────
-    l10n_co_ne_certificate_id = fields.Many2one(
-        comodel_name='certificate.certificate',
-        string='Certificado Digital',
-        check_company=True,
-        domain="[('company_id', '=', id)]",
-        help='Certificado digital usado para firmar los documentos de '
-             'nómina electrónica (XAdES-BES). Reutiliza el mismo '
-             'certificate.certificate nativo que usa Odoo para '
-             'facturación electrónica -- no requiere cargar un .p12 '
-             'independiente para nómina. Si hay más de un certificado '
-             'en la lista, debe elegir explícitamente cuál usa nómina.',
-    )
-    # Doc 22 §2 (Opción B, paridad literal con Facturación Electrónica):
-    # mismo patron SIN filtro que l10n_co_dian_certificate_ids -- es la
-    # MISMA lista global de certificados de la compania (certificate.
-    # certificate no distingue "para que sirve" cada uno), no un pool
-    # separado para nomina. Util para crear/editar certificados sin salir
-    # de Ajustes > Nomina, pero l10n_co_ne_certificate_id de arriba sigue
-    # siendo el campo funcional real que usa xml_signer -- este O2M no
-    # reemplaza esa seleccion explicita (a diferencia de DIAN, que toma
-    # "el ultimo de la lista" sin ningun campo que marque el activo,
-    # ambiguedad que deliberadamente NO heredamos).
+    # Antes había además un Many2one l10n_co_ne_certificate_id para elegir
+    # explícitamente "cuál certificado usa nómina" (doc 22 §2, Opción B).
+    # Retirado 2026-09-12: verificado el código real de Facturación
+    # Electrónica (l10n_co_dian) -- NO tiene ningún campo de selección
+    # explícita, toma siempre el último certificado de la lista
+    # (certificates_sudo[-1]). El Many2one aparte era complejidad nuestra,
+    # no paridad real con Facturación. _get_ne_certificate() reemplaza su
+    # uso en el flujo de firma con el mismo criterio ("el último").
     l10n_co_ne_certificate_ids = fields.One2many(
         comodel_name='certificate.certificate',
         inverse_name='company_id',
         string='Certificados',
     )
+
+    def _get_ne_certificate(self):
+        """Certificado usado para firmar nómina electrónica.
+
+        Mismo criterio que Facturación Electrónica (l10n_co_dian):
+        el último certificado de la lista de la compañía, sin campo
+        de selección explícita aparte.
+        """
+        self.ensure_one()
+        return self.l10n_co_ne_certificate_ids[-1:]
 
     # ──────────────────────────────────────────────────────────────────
     # Ambiente y configuración de habilitación
@@ -108,6 +105,45 @@ class ResCompany(models.Model):
         help='Envía documentos de prueba de nómina electrónica con su '
              'certificado para lograr el estado "Habilitado" en el '
              'portal de la DIAN.',
+    )
+    # Doc 37: mismo patrón que l10n_co_dian_demo_mode nativo (Facturación
+    # Electrónica, Enterprise) -- Boolean respaldado en ir.config_parameter
+    # (no columna propia), mutuamente excluyente con "Ambiente de Pruebas".
+    # Campo propio (no se reutiliza el flag de Facturación): Nómina y
+    # Facturación son productos independientes con sus propias validaciones
+    # (_validate_company_ne_config, etc.), compartir el flag los acoplaría
+    # sin necesidad.
+    l10n_co_ne_demo_mode = fields.Boolean(
+        string='DIAN Modo Demo',
+        compute='_compute_ne_demo_mode',
+        inverse='_inverse_ne_demo_mode',
+        help='Activa este modo para poder probar los flujos de nómina '
+             'electrónica solo con validaciones internas, pero sin '
+             'respuesta del entorno de la DIAN.',
+    )
+
+    # ──────────────────────────────────────────────────────────────────
+    # Habilitación DIAN (doc 34) -- metas de documentos a certificar
+    # ──────────────────────────────────────────────────────────────────
+    # Sin default fijo (doc 34 §5, corrección de David 2026-09-12): el
+    # numero real lo exige el portal de habilitacion de la DIAN caso por
+    # caso, no algo que este equipo pueda asumir. Lo consume el wizard
+    # l10n.co.ne.certification.wizard como meta de progreso, no como
+    # generador -- Opcion B confirmada en doc 34 §2 (usa el pipeline real
+    # de hr.payslip, no un generador sintetico aparte).
+    l10n_co_ne_num_nomina_certificar = fields.Integer(
+        string='Cantidad de Nómina Electrónica a Certificar',
+        help='Meta de documentos tipo Nómina Individual que deben quedar '
+             'Aceptados por la DIAN durante el proceso de certificación. '
+             'La define usted según lo que exija el portal de '
+             'habilitación de la DIAN para esta empresa.',
+    )
+    l10n_co_ne_num_ajuste_certificar = fields.Integer(
+        string='Cantidad de Nómina Electrónica de Ajuste a Certificar',
+        help='Meta de documentos tipo Nota de Ajuste que deben quedar '
+             'Aceptados por la DIAN durante el proceso de certificación. '
+             'La define usted según lo que exija el portal de '
+             'habilitación de la DIAN para esta empresa.',
     )
 
     # ──────────────────────────────────────────────────────────────────
@@ -237,6 +273,18 @@ class ResCompany(models.Model):
         string='Código ARL',
         help='Código de la ARL según tabla de administradoras PILA (ej: 14-11).',
     )
+    # Doc 11 (ficha consolidada): nombre legible de la ARL, a nivel de
+    # compañía -- no por empleado. La afiliación a ARL en Colombia es de
+    # toda la empresa, no individual (todos los empleados comparten la
+    # misma ARL); duplicar un campo de nombre por cada ficha de empleado
+    # obligaría a actualizar N registros si la empresa cambia de ARL.
+    l10n_co_pila_arl_name = fields.Char(
+        string='Nombre ARL',
+        help='Nombre comercial de la Administradora de Riesgos Laborales '
+             'de la empresa (ej: "Positiva ARL", "Sura ARL"). Complementa '
+             'el Código ARL (código PILA) -- este campo es solo para '
+             'mostrar un nombre legible en pantalla.',
+    )
     l10n_co_pila_forma_presentacion = fields.Selection(
         selection=[
             ('U', 'Único'),
@@ -268,6 +316,26 @@ class ResCompany(models.Model):
         for company in self:
             company.l10n_co_ne_environment = (
                 '2' if company.l10n_co_ne_test_environment else '1'
+            )
+            # Mutuamente excluyente con Modo Demo (mismo criterio que
+            # _inverse_l10n_co_dian_test_environment nativo): activar el
+            # ambiente de pruebas real de la DIAN apaga el Modo Demo local.
+            if company.l10n_co_ne_test_environment:
+                company.l10n_co_ne_demo_mode = False
+
+    def _compute_ne_demo_mode(self):
+        for company in self:
+            company.l10n_co_ne_demo_mode = str2bool(
+                self.env['ir.config_parameter'].sudo().get_param(
+                    f'l10n_co_ne_demo_mode_{company.id}'
+                )
+            )
+
+    def _inverse_ne_demo_mode(self):
+        for company in self:
+            self.env['ir.config_parameter'].sudo().set_param(
+                f'l10n_co_ne_demo_mode_{company.id}',
+                str(company.l10n_co_ne_demo_mode),
             )
 
     # ──────────────────────────────────────────────────────────────────
