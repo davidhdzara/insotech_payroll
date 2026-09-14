@@ -230,7 +230,12 @@ def get_department_code(state_record) -> str:
         return ''
     edi_code = getattr(state_record, 'l10n_co_edi_code', None)
     if edi_code:
-        return str(edi_code)[:2]
+        # AUD-DIAN-34 (2026-09-14): l10n_co_edi_code es Integer nativo de
+        # Odoo -- pierde el cero a la izquierda (Antioquia = 5, no '05').
+        # La tabla 5.4.2 del Anexo Tecnico exige 2 digitos exactos
+        # (reglas NIE014/NIE036/NIE051); sin zfill, la DIAN rechaza el
+        # codigo como invalido aunque el valor en si sea correcto.
+        return str(edi_code)[:2].zfill(2)
     code = getattr(state_record, 'code', None)
     return str(code) if code else ''
 
@@ -251,7 +256,11 @@ def get_city_code(city_record) -> str:
         return ''
     edi_code = getattr(city_record, 'l10n_co_edi_code', None)
     if edi_code:
-        return str(edi_code)
+        # AUD-DIAN-34 (2026-09-14): mismo problema que get_department_code
+        # -- Integer nativo sin cero a la izquierda (Itagui = 5360, no
+        # '05360'). Tabla 5.4.3 exige 5 digitos (departamento + 3 del
+        # municipio) exactos (reglas NIE015/NIE037/NIE052).
+        return str(edi_code).zfill(5)
     zipcode = getattr(city_record, 'zipcode', None)
     return str(zipcode) if zipcode else ''
 

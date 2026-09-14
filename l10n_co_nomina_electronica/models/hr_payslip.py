@@ -804,9 +804,31 @@ class HrPayslip(models.Model):
         now = datetime.now()
         company_nit, company_dv = self._ne_company_nit_dv()
 
+        # AUD-DIAN-34 (2026-09-14): NumeroSecuenciaXML/@Numero debe ser
+        # Prefijo+Consecutivo (ej. "NE00000001"), pero @Consecutivo debe
+        # ser SOLO el numero elegido por el emisor, sin el prefijo (regla
+        # NIE011) -- l10n_co_ne_consecutive ya viene con el prefijo
+        # incluido (lo arma ir.sequence.next_by_id()), asi que hay que
+        # separarlos aqui para los 2 atributos.
+        ne_prefix = (
+            company.l10n_co_ne_adjust_prefix
+            if self.l10n_co_ne_is_adjustment
+            else company.l10n_co_ne_payroll_prefix
+        ) or ''
+        ne_numero = self.l10n_co_ne_consecutive or ''
+        ne_consecutivo = (
+            ne_numero[len(ne_prefix):]
+            if ne_prefix and ne_numero.startswith(ne_prefix)
+            else ne_numero
+        )
+
         data = {
             'informacion_general': {
-                'Version': 'V1.0: NumNom: %s' % self.l10n_co_ne_consecutive,
+                # AUD-DIAN-34 (2026-09-14): NIE022 exige este literal EXACTO
+                # -- no el consecutivo del documento (ese ya va en CUNE/
+                # NumeroSecuenciaXML). El valor anterior ("V1.0: NumNom: ...")
+                # nunca fue el literal que pide el Anexo Tecnico.
+                'Version': 'V1.0: Documento Soporte de Pago de Nómina Electrónica',
                 'Ambiente': company.l10n_co_ne_environment,
                 'TipoXML': '103' if self.l10n_co_ne_is_adjustment else '102',
                 'FechaGen': now.strftime('%Y-%m-%d'),
@@ -818,13 +840,9 @@ class HrPayslip(models.Model):
                 'TRM': '0',
             },
             'numero_secuencia': {
-                'Prefijo': (
-                    company.l10n_co_ne_adjust_prefix
-                    if self.l10n_co_ne_is_adjustment
-                    else company.l10n_co_ne_payroll_prefix
-                ),
-                'Consecutivo': self.l10n_co_ne_consecutive,
-                'Numero': self.l10n_co_ne_consecutive,
+                'Prefijo': ne_prefix,
+                'Consecutivo': ne_consecutivo,
+                'Numero': ne_numero,
                 'CodigoTrabajador': str(employee.id),
             },
             'lugar_generacion': {
