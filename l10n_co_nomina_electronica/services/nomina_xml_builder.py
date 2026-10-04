@@ -467,31 +467,37 @@ def _add_devengados(parent: etree._Element, data: dict) -> None:
     )
 
     # --- Transporte ---
-    # NIE072/073 (2026-10-04, reenvío real de habilitación): la DIAN
-    # exige ambos atributos de viaticos presentes (aunque sea "0.00")
-    # cuando el elemento Transporte se emite -- no son condicionales a
-    # que exista un input real de viaticos. Antes solo se agregaban si
-    # el dato estaba presente, lo que dejaba el elemento incompleto
-    # para cualquier empleado con AuxilioTransporte pero sin viaticos.
+    # AUD-DIAN-34 (2026-10-04): el commit 2e81fbd agregó ViaticoManuAlojS/
+    # NS siempre en "0.00" por NIE072/073, siguiendo al pie el ejemplo del
+    # Anexo Técnico (que SÍ los trae en "0.0"). Evidencia empírica real
+    # contra el validador de habilitación de la DIAN hoy (3 envíos de
+    # prueba comparados, un documento por ZipKey) contradice ese ejemplo:
+    # con los atributos presentes en "0.00" la DIAN devuelve NIE072+NIE073;
+    # quitándolos (dejando solo AuxilioTransporte) el rechazo desaparece.
+    # No hay regla citable en el Anexo que lo explique -- el validador
+    # real rechaza el atributo presente en cero, así que se omite cuando
+    # el valor es 0, igual que el resto de atributos opcionales del XSD.
     transporte = data.get('Transporte')
     if transporte:
         if isinstance(transporte, dict):
             transporte = [transporte]
         for t in transporte:
+            viatico_s = float(t.get('ViaticoManuAlojS') or 0)
+            viatico_ns = float(t.get('ViaticoManuAlojNS') or 0)
             if (
                 t.get('AuxilioTransporte') is None
-                and t.get('ViaticoManuAlojS') is None
-                and t.get('ViaticoManuAlojNS') is None
+                and viatico_s <= 0
+                and viatico_ns <= 0
             ):
                 continue
             attribs = {}
             if t.get('AuxilioTransporte') is not None:
                 attribs['AuxilioTransporte'] = _fmt(
                     t['AuxilioTransporte'])
-            attribs['ViaticoManuAlojS'] = _fmt(
-                t.get('ViaticoManuAlojS') or 0)
-            attribs['ViaticoManuAlojNS'] = _fmt(
-                t.get('ViaticoManuAlojNS') or 0)
+            if viatico_s > 0:
+                attribs['ViaticoManuAlojS'] = _fmt(viatico_s)
+            if viatico_ns > 0:
+                attribs['ViaticoManuAlojNS'] = _fmt(viatico_ns)
             _attr(dev, 'Transporte', **attribs)
 
     # --- Horas Extra ---
@@ -1365,10 +1371,11 @@ def _get_horas_extra_items(items: list[dict]) -> list[dict]:
 def _get_transporte_items(transporte) -> list[dict]:
     """Equivalente dict del bloque Transporte de _add_devengados().
 
-    NIE072/073 (2026-10-04): ver nota equivalente en _add_devengados()
-    -- ViaticoManuAlojS/NS deben ir siempre presentes (default 0) una
-    vez que el elemento Transporte se emite, no condicionados a que
-    exista un input real de viaticos.
+    AUD-DIAN-34 (2026-10-04): ver nota equivalente en _add_devengados()
+    -- ViaticoManuAlojS/NS se omiten (None, que dict_to_xml descarta)
+    cuando el valor es 0; evidencia empírica real contra la DIAN hoy
+    contradice la premisa anterior de incluirlos siempre en "0.00"
+    (causaba NIE072/073).
     """
     if not transporte:
         return []
@@ -1376,10 +1383,12 @@ def _get_transporte_items(transporte) -> list[dict]:
         transporte = [transporte]
     items = []
     for t in transporte:
+        viatico_s = float(t.get('ViaticoManuAlojS') or 0)
+        viatico_ns = float(t.get('ViaticoManuAlojNS') or 0)
         if (
             t.get('AuxilioTransporte') is None
-            and t.get('ViaticoManuAlojS') is None
-            and t.get('ViaticoManuAlojNS') is None
+            and viatico_s <= 0
+            and viatico_ns <= 0
         ):
             continue
         items.append({
@@ -1387,8 +1396,8 @@ def _get_transporte_items(transporte) -> list[dict]:
                 _fmt(t['AuxilioTransporte'])
                 if t.get('AuxilioTransporte') is not None else None
             ),
-            'ViaticoManuAlojS': _fmt(t.get('ViaticoManuAlojS') or 0),
-            'ViaticoManuAlojNS': _fmt(t.get('ViaticoManuAlojNS') or 0),
+            'ViaticoManuAlojS': _fmt(viatico_s) if viatico_s > 0 else None,
+            'ViaticoManuAlojNS': _fmt(viatico_ns) if viatico_ns > 0 else None,
         })
     return items
 
