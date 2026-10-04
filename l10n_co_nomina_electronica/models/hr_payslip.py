@@ -289,9 +289,21 @@ class HrPayslip(models.Model):
             info_gen.set('CUNE', cune_value)
             info_gen.set('EncripCUNE', 'CUNE-SHA384')
         # Agregar CodigoQR
+        # AUD-DIAN-34 (2026-09-14): el host cambia segun el ambiente
+        # (Anexo Tecnico, seccion QRCode) -- Habilitacion usa
+        # catalogo-vpfe-hab, Produccion usa catalogo-vpfe (sin '-hab').
+        # Antes estaba hardcodeado al host de PRODUCCION sin importar el
+        # ambiente real, lo que explica el rechazo NIE021 en TODAS las
+        # pruebas de habilitacion de hoy pese a que el formato de la URL
+        # se veia correcto.
+        qr_host = (
+            'catalogo-vpfe.dian.gov.co'
+            if company.l10n_co_ne_environment == '1'
+            else 'catalogo-vpfe-hab.dian.gov.co'
+        )
         qr_url = (
-            'https://catalogo-vpfe.dian.gov.co/document/'
-            'searchqr?documentkey=' + cune_value
+            'https://%s/document/searchqr?documentkey=%s'
+            % (qr_host, cune_value)
         )
         qr_el = tree.find('{%s}CodigoQR' % ns)
         if qr_el is None and info_gen is not None:
