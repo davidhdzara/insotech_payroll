@@ -681,12 +681,35 @@ class HrPayslip(models.Model):
             raise UserError(_('Debe configurar el ID de Pruebas en el Modo de Operación de la compañía para enviar el set de pruebas.'))
 
         # Collect all signed XMLs
+        # AUD-DIAN-34 (2026-10-04): si el SoftwareID/TestSetId de la
+        # compañía cambió (ej. David se re-registró en el portal DIAN)
+        # DESPUÉS de que el XML ya se generó y firmó, el SoftwareID
+        # embebido queda desactualizado -- enviarlo igual mezcla un
+        # SoftwareID viejo con un TestSetId nuevo, combinación inválida
+        # que la DIAN rechaza (StatusCode 2). Pasó real hoy: costó
+        # varios ciclos manuales de regenerar antes de notarlo.
+        current_software_id = (
+            company.l10n_co_ne_operation_mode_ids.software_id or ''
+        ).encode()
         xml_files = {}
+        stale = []
         for payslip in records:
             if payslip.l10n_co_ne_xml_attachment_id:
                 filename = payslip._get_ne_xml_filename()
                 xml_bytes = base64.b64decode(payslip.l10n_co_ne_xml_attachment_id.datas)
+                if current_software_id and current_software_id not in xml_bytes:
+                    stale.append(payslip.name)
+                    continue
                 xml_files[filename] = xml_bytes
+
+        if stale:
+            raise UserError(_(
+                'El SoftwareID/TestSetId de la compañía cambió desde '
+                'que se generó el XML de estas nóminas -- regénerelas '
+                'antes de enviar (botón "Generar XML" o reiniciar el '
+                'proceso de habilitación):\n%s',
+                '\n'.join(stale),
+            ))
 
         if not xml_files:
             raise UserError(_('No se encontraron XMLs firmados en las nóminas seleccionadas.'))
