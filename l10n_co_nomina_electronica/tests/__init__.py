@@ -1,3 +1,4 @@
 from . import test_cune
 from . import test_leave_integration
+from . import test_dian_response_parser
 
