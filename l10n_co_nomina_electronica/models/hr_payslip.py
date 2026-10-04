@@ -115,6 +115,17 @@ class HrPayslip(models.Model):
         help='Adjunto que contiene el XML de nómina electrónica firmado '
              'digitalmente con el certificado .p12 de la empresa.',
     )
+    l10n_co_ne_dian_request = fields.Text(
+        string='Solicitud DIAN',
+        readonly=True,
+        copy=False,
+        help='Petición SOAP/XML completa enviada al servicio web de la '
+             'DIAN (SendTestSetAsync/GetStatusZip), guardada ANTES de '
+             'enviarla. Sin esto, diagnosticar un rechazo real requiere '
+             'reconstruir a ciegas qué se mandó a partir de la '
+             'respuesta de error (incidente real 2026-10-04: bug de '
+             'TestSetId solo se detectó indirectamente).',
+    )
     l10n_co_ne_dian_response = fields.Text(
         string='Respuesta DIAN',
         readonly=True,
@@ -444,6 +455,7 @@ class HrPayslip(models.Model):
         )
 
         # Procesar respuesta DIAN
+        self.l10n_co_ne_dian_request = response.get('RawRequest', '')
         self.l10n_co_ne_dian_response = response.get('RawResponse', '')
         zip_key = response.get('ZipKey', '')
         if zip_key:
@@ -702,6 +714,11 @@ class HrPayslip(models.Model):
         records.write({
             'l10n_co_ne_zip_key': zip_key,
             'l10n_co_ne_state': 'sent',
+            # AUD-DIAN-34 (2026-10-04): un solo SendTestSetAsync cubre
+            # todo el lote -- se guarda el mismo request/response en
+            # cada registro del set, igual que ya se hace con zip_key.
+            'l10n_co_ne_dian_request': response.get('RawRequest', ''),
+            'l10n_co_ne_dian_response': response.get('RawResponse', ''),
         })
         _logger.info(
             'Set de pruebas enviado: %d documentos. ZipKey: %s',
@@ -750,6 +767,7 @@ class HrPayslip(models.Model):
             endpoint=endpoint,
         )
 
+        self.l10n_co_ne_dian_request = response.get('RawRequest', '')
         self.l10n_co_ne_dian_response = response.get('RawResponse', '')
         is_valid = response.get('IsValid', '') == 'true'
 

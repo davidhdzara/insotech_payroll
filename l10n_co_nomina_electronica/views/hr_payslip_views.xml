@@ -127,6 +127,13 @@
                                string="CUNE Nómina Original"
                                readonly="l10n_co_ne_state != 'draft'"/>
                     </group>
+                    <group string="Solicitud DIAN">
+                        <field name="l10n_co_ne_dian_request"
+                               string="Solicitud DIAN"
+                               readonly="1"
+                               nolabel="1"
+                               colspan="4"/>
+                    </group>
                     <group string="Respuesta DIAN">
                         <field name="l10n_co_ne_dian_response"
                                string="Respuesta DIAN"

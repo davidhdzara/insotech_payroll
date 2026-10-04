@@ -433,6 +433,13 @@ def _send(
     envelope = _build_envelope(
         action, endpoint, body_xml, cert_der, private_key,
     )
+    # AUD-DIAN-34 (2026-10-04): se guarda lo que REALMENTE se envió,
+    # no solo lo que la DIAN respondió -- sin esto, diagnosticar un
+    # rechazo real obliga a reconstruir a ciegas qué se mandó a partir
+    # del error (incidente real: el bug del TestSetId incorrecto solo
+    # se detectó indirectamente por la respuesta, nunca viendo el
+    # request). Mismo truncado que RawResponse.
+    raw_request = envelope.decode('utf-8', errors='replace')[:5000]
 
     headers = {
         'Content-Type': (
@@ -465,6 +472,7 @@ def _send(
                     'HTTP %d: %s' % (resp.status_code,
                                      resp.text[:300])
                 )
+            result['RawRequest'] = raw_request
             return result
 
     except requests.RequestException as e:
@@ -472,9 +480,12 @@ def _send(
         return {
             'StatusCode': 'CONNECTION_ERROR',
             'ErrorMessage': str(e),
+            'RawRequest': raw_request,
         }
 
-    return _parse_response(resp.text)
+    result = _parse_response(resp.text)
+    result['RawRequest'] = raw_request
+    return result
 
 
 # =====================================================================
