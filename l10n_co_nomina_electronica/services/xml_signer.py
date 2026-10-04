@@ -359,15 +359,19 @@ def sign_xml(
     # AUD-DIAN-34 (2026-09-14): xades:Description es opcional segun el
     # esquema XAdES (minOccurs=0), pero la implementacion nativa de
     # Facturacion Electronica (l10n_co_dian, en produccion) SIEMPRE lo
-    # incluye con este texto exacto -- la DIAN rechaza la firma (ZE02,
-    # "Valor de la firma invalido") sin dar mas detalle, y este es el
-    # unico hueco estructural real encontrado al comparar contra la
-    # implementacion nativa que si funciona.
+    # incluye -- agregado aqui por paralelismo estructural con esa
+    # implementacion que si funciona (no por una regla DC0x numerada:
+    # el Anexo Tecnico no valida este campo por codigo propio). El texto
+    # SI es normativo: la seccion 7.10 del Anexo Tecnico de Nomina
+    # especifica literalmente "Política de firma para nóminas
+    # electrónicas de la República de Colombia." -- corregido 2026-10-04
+    # (Tech Lead detecto que se habia copiado el texto de Facturacion
+    # sin cambiar "facturas" por "nóminas").
     sp_description = etree.SubElement(
         sp_id_elem, '{%s}Description' % NS_XADES,
     )
     sp_description.text = (
-        'Política de firma para facturas electrónicas de la '
+        'Política de firma para nóminas electrónicas de la '
         'República de Colombia.'
     )
 
