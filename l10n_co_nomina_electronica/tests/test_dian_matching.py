@@ -30,7 +30,17 @@ class TestDianMatchingCommon(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env.company
+        # AUD-DIAN-34 (2026-10-05): nunca crear/modificar registros sobre
+        # self.env.company ni depender de datos reales de Guapante -- la
+        # build de Odoo.sh corre los tests sobre una COPIA de la BD real
+        # (con su propio l10n.co.ne.operation_mode ya cargado para la
+        # compañía por defecto); crear ahí uno nuevo violó
+        # UNIQUE(company_id) y abortó la carga del módulo ("Failed to
+        # load registry"). Compañía dedicada y descartable para todo
+        # el aislamiento de estas pruebas.
+        cls.company = cls.env['res.company'].create({
+            'name': 'Compañía de Prueba DIAN Matching',
+        })
         co_country = cls.env['res.country'].search([('code', '=', 'CO')], limit=1)
         if not co_country:
             co_country = cls.env.ref('base.co')
@@ -47,10 +57,12 @@ class TestDianMatchingCommon(TransactionCase):
         employee = self.env['hr.employee'].create({
             'name': name,
             'identification_id': '10' + str(self.env['hr.employee'].search_count([])),
+            'company_id': self.company.id,
         })
         contract = self.env['hr.contract'].create({
             'name': 'Contrato %s' % name,
             'employee_id': employee.id,
+            'company_id': self.company.id,
             'structure_type_id': self.structure_type.id,
             'wage': 1800000.0,
             'date_start': date(2024, 1, 1),
@@ -60,6 +72,7 @@ class TestDianMatchingCommon(TransactionCase):
             'name': 'Nómina %s' % name,
             'employee_id': employee.id,
             'contract_id': contract.id,
+            'company_id': self.company.id,
             'struct_id': self.structure.id,
             'date_from': date(2026, 9, 1),
             'date_to': date(2026, 9, 30),

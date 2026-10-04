@@ -20,7 +20,16 @@ class TestNeConsecutivePrefixGuard(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env.company
+        # AUD-DIAN-34 (2026-10-05): nunca modificar self.env.company -- la
+        # build de Odoo.sh corre sobre una copia de la BD real de Guapante;
+        # test_individual_with_misconfigured_pre_sequence_never_keeps_na_prefix
+        # necesita reasignar l10n_co_ne_pre_sequence_id, y hacerlo sobre la
+        # compañía real (aunque TransactionCase lo revierta) es justo el
+        # patrón que causó el UniqueViolation real en test_dian_matching.py.
+        # Compañía dedicada y descartable, igual que ahí.
+        cls.company = cls.env['res.company'].create({
+            'name': 'Compañía de Prueba Consecutivo NE',
+        })
         co_country = cls.env['res.country'].search([('code', '=', 'CO')], limit=1)
         if not co_country:
             co_country = cls.env.ref('base.co')
@@ -43,10 +52,12 @@ class TestNeConsecutivePrefixGuard(TransactionCase):
         employee = self.env['hr.employee'].create({
             'name': name,
             'identification_id': '20' + str(self.env['hr.employee'].search_count([])),
+            'company_id': self.company.id,
         })
         contract = self.env['hr.contract'].create({
             'name': 'Contrato %s' % name,
             'employee_id': employee.id,
+            'company_id': self.company.id,
             'structure_type_id': self.structure_type.id,
             'wage': 1800000.0,
             'date_start': date(2024, 1, 1),
@@ -56,6 +67,7 @@ class TestNeConsecutivePrefixGuard(TransactionCase):
             'name': 'Nómina %s' % name,
             'employee_id': employee.id,
             'contract_id': contract.id,
+            'company_id': self.company.id,
             'struct_id': self.structure.id,
             'date_from': date(2026, 9, 1),
             'date_to': date(2026, 9, 30),
