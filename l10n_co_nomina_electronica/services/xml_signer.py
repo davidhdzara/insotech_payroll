@@ -18,6 +18,8 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
+from pytz import timezone as _pytz_timezone
+
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -348,9 +350,16 @@ def sign_xml(
     signing_time = etree.SubElement(
         ssp, '{%s}SigningTime' % NS_XADES,
     )
-    signing_time.text = datetime.now().strftime(
-        '%Y-%m-%dT%H:%M:%S-05:00'
-    )
+    # AUD-DIAN-34 (2026-10-04): datetime.now() devuelve la hora naive del
+    # servidor (UTC en Odoo.sh) -- con el sufijo "-05:00" pegado sin
+    # convertir, SigningTime quedaba declarado ~5h en el futuro respecto
+    # al instante real, y la DIAN rechazaba la firma (ZE02) de forma
+    # idéntica en cada intento. Se usa hora tz-aware America/Bogota
+    # (Colombia no tiene DST, el offset -05:00 es siempre correcto una
+    # vez la hora de pared ya está en zona horaria real).
+    signing_time.text = datetime.now(
+        _pytz_timezone('America/Bogota')
+    ).strftime('%Y-%m-%dT%H:%M:%S-05:00')
 
     # SigningCertificate
     # AUD-DIAN-34 (2026-10-04, DC25): el Anexo Tecnico exige al menos 3

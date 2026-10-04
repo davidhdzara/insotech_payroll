@@ -26,6 +26,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime
 
+from pytz import timezone as _pytz_timezone
 from lxml import etree as _etree
 
 from odoo import api, fields, models, _
@@ -855,7 +856,16 @@ class HrPayslip(models.Model):
             and line.salary_rule_id.l10n_co_ne_is_deduction
         )
 
-        now = datetime.now()
+        # AUD-DIAN-34 (2026-10-04): el contenedor Odoo.sh corre en UTC --
+        # datetime.now() devolvia la hora naive del servidor (UTC) con un
+        # sufijo "-05:00" pegado encima sin convertir, declarando
+        # FechaGen/HoraGen (y, via el mismo bug en xml_signer.py,
+        # SigningTime) ~5h en el futuro respecto al instante real. La DIAN
+        # rechazaba la firma (ZE02) por eso, de forma idéntica en cada
+        # intento sin importar el contenido. Se calca el patrón nativo de
+        # l10n_co_dian (account_edi_xml_ubl_dian.py): hora tz-aware
+        # America/Bogota via pytz.
+        now = datetime.now(_pytz_timezone('America/Bogota'))
         company_nit, company_dv = self._ne_company_nit_dv()
 
         # AUD-DIAN-34 (2026-09-14): NumeroSecuenciaXML/@Numero debe ser
