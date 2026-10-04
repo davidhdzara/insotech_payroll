@@ -1,6 +1,6 @@
 {
     'name': 'Nómina Electrónica Colombia - DIAN',
-    'version': '18.0.3.0.36',
+    'version': '18.0.3.0.38',
     'category': 'Human Resources/Payroll',
     'summary': 'Generación y envío de Nómina Electrónica a la DIAN (Resolución 000013 de 2021)',
     'description': """
@@ -62,13 +62,23 @@ Funcionalidades principales:
         'wizard/hr_payslip_send_views.xml',
         'wizard/l10n_co_ne_certification_wizard_views.xml',
         'views/l10n_co_ne_operation_mode_views.xml',
+        # AUD-DIAN-34 (2026-10-04): hr_retefuente_views.xml debe cargar
+        # ANTES de hr_salary_rule_views.xml -- define el menu
+        # menu_l10n_co_nomina_colombia_config que hr_salary_rule_views.xml
+        # usa como parent. Orden anterior rompia -i en instalacion
+        # limpia (nunca se detecto porque siempre se probo sobre un
+        # modulo ya instalado, -u en vez de -i).
+        'views/hr_retefuente_views.xml',
+        'views/hr_salary_rule_views.xml',
+        # res_config_settings_views.xml debe cargar DESPUES de
+        # hr_salary_rule_views.xml -- su boton "Abrir Cuentas
+        # Contables" referencia action_hr_salary_rule_account_ne,
+        # definida ahi.
         'views/res_config_settings_views.xml',
         'views/hr_employee_views.xml',
         'views/hr_contract_views.xml',
         'views/hr_payslip_views.xml',
-        'views/hr_salary_rule_views.xml',
         'views/l10n_co_nomina_ugpp_views.xml',
-        'views/hr_retefuente_views.xml',
         'views/hr_salary_attachment_views.xml',
         'views/hr_contract_deductions_views.xml',
         'views/hr_contract_retefuente_views.xml',
