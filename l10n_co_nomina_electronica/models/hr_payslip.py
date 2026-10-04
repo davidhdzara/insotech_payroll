@@ -356,8 +356,14 @@ class HrPayslip(models.Model):
         self.ensure_one()
         self._validate_ne_prerequisites()
 
-        # Asignar consecutivo oficial si no tiene uno o si es el temporal PRE-NOM
-        if not self.l10n_co_ne_consecutive or self.l10n_co_ne_consecutive.startswith('PRE-NOM'):
+        # Asignar consecutivo oficial si no tiene uno, si es el temporal
+        # PRE-NOM, o si tiene un prefijo que no corresponde a este tipo de
+        # documento (AUD-DIAN-34 2026-10-04: ver _ne_expected_prefix()).
+        expected_prefix = self._ne_expected_prefix()
+        if (
+            not self.l10n_co_ne_consecutive
+            or not self.l10n_co_ne_consecutive.startswith(expected_prefix)
+        ):
             self.l10n_co_ne_consecutive = self._get_next_ne_consecutive()
 
 
@@ -1782,6 +1788,25 @@ class HrPayslip(models.Model):
                 certificate.date_end,
             ))
 
+    def _ne_expected_prefix(self):
+        """Prefijo que DEBE tener un consecutivo oficial de este payslip.
+
+        AUD-DIAN-34 (2026-10-04): incidente real en Guapante -- la
+        secuencia temporal (``l10n_co_ne_pre_sequence_id``) quedó mal
+        configurada apuntando a la de Notas de Ajuste, así que una
+        nómina INDIVIDUAL terminó con consecutivo "NA..." (prefijo de
+        ajuste). El único chequeo que existía ("no empieza por
+        PRE-NOM") no detecta esto -- un valor con el prefijo *equivocado*
+        pero que no es PRE-NOM pasaba como si fuera válido. Defensa en
+        profundidad: el consecutivo solo se considera válido si tiene
+        el prefijo que corresponde a este tipo de documento.
+        """
+        self.ensure_one()
+        company = self.company_id
+        if self.l10n_co_ne_is_adjustment:
+            return company.l10n_co_ne_adjust_prefix or 'NA'
+        return company.l10n_co_ne_payroll_prefix or 'NE'
+
     def _get_next_ne_consecutive(self):
         """
         Genera el siguiente consecutivo de nómina electrónica para la empresa
@@ -1789,9 +1814,13 @@ class HrPayslip(models.Model):
         """
         self.ensure_one()
         company = self.company_id
-        
-        # Si ya tiene un consecutivo asignado que NO es temporal, lo reutilizamos
-        if self.l10n_co_ne_consecutive and not self.l10n_co_ne_consecutive.startswith('PRE-NOM'):
+
+        # Si ya tiene un consecutivo asignado con el prefijo correcto para
+        # este tipo de documento, lo reutilizamos -- cualquier otro caso
+        # (temporal PRE-NOM, o el prefijo de ajuste/nómina equivocado) se
+        # reasigna.
+        expected_prefix = self._ne_expected_prefix()
+        if self.l10n_co_ne_consecutive and self.l10n_co_ne_consecutive.startswith(expected_prefix):
             return self.l10n_co_ne_consecutive
 
         if self.l10n_co_ne_is_adjustment:
