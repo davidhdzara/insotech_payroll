@@ -317,8 +317,8 @@ class HrPayslip(models.Model):
         )
 
         # Firmar XML con XAdES-BES
-        private_key, cert_pem, cert_der, cert_obj = xml_signer.load_from_certificate(
-            company._get_ne_certificate(),
+        private_key, cert_pem, cert_der, cert_obj, cert_chain = (
+            xml_signer.load_from_certificate(company._get_ne_certificate())
         )
         signed_xml = xml_signer.sign_xml(
             xml_bytes=xml_bytes,
@@ -326,6 +326,7 @@ class HrPayslip(models.Model):
             cert_pem=cert_pem,
             cert_der=cert_der,
             cert_obj=cert_obj,
+            cert_chain=cert_chain,
         )
 
         # Crear attachment (signed_xml ya es bytes)
@@ -421,8 +422,8 @@ class HrPayslip(models.Model):
         )
 
         # Cargar certificado para firmar el sobre SOAP
-        private_key, cert_pem, cert_der, _cert_obj = xml_signer.load_from_certificate(
-            company._get_ne_certificate(),
+        private_key, cert_pem, cert_der, _cert_obj, _cert_chain = (
+            xml_signer.load_from_certificate(company._get_ne_certificate())
         )
 
         # Determinar endpoint según ambiente
@@ -679,8 +680,8 @@ class HrPayslip(models.Model):
             raise UserError(_('No se encontraron XMLs firmados en las nóminas seleccionadas.'))
 
         # Load certificate
-        private_key, cert_pem, cert_der, _cert_obj = xml_signer.load_from_certificate(
-            company._get_ne_certificate(),
+        private_key, cert_pem, cert_der, _cert_obj, _cert_chain = (
+            xml_signer.load_from_certificate(company._get_ne_certificate())
         )
 
         # Send test set
@@ -732,8 +733,8 @@ class HrPayslip(models.Model):
             ))
 
         company = self.company_id
-        private_key, cert_pem, cert_der, _cert_obj = xml_signer.load_from_certificate(
-            company._get_ne_certificate(),
+        private_key, cert_pem, cert_der, _cert_obj, _cert_chain = (
+            xml_signer.load_from_certificate(company._get_ne_certificate())
         )
 
         endpoint = (

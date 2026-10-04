@@ -68,11 +68,25 @@ def load_from_certificate(certificate) -> tuple:
     replica el patrón que usa el propio módulo ``certificate`` para evitar
     que el ORM devuelva el placeholder de tamaño en vez del contenido real.
 
+    AUD-DIAN-34 (2026-10-04, DC25): además de la hoja, resuelve la cadena
+    completa (hoja + intermedia + raíz) vía el método nativo
+    ``certificate._get_certificate_chain()`` -- el modelo genérico
+    ``certificate.certificate`` ya la arma sola al cargar el .p12
+    (enlazando cada eslabón por ``issuer_cert_id``), mismo dato que usa
+    ``account_edi_xml_ubl_dian.py`` (Facturación Electrónica nativa, en
+    producción) para construir sus 3 ``xades:Cert``. DC25 exige al menos
+    3 grupos ``Cert`` dentro de ``SigningCertificate`` -- antes esta
+    función solo devolvía la hoja, dejando a ``sign_xml`` sin forma de
+    construir los otros 2.
+
     Args:
-        certificate: recordset certificate.certificate (un solo registro).
+        certificate: recordset certificate.certificate (un solo registro,
+            la hoja/certificado de firma).
 
     Returns:
-        Tupla (private_key, cert_pem_bytes, cert_der_bytes, cert_object).
+        Tupla (private_key, cert_pem_bytes, cert_der_bytes, cert_object,
+        chain_cert_objects) -- el último es la lista de objetos
+        ``x509.Certificate`` de la cadena completa, hoja primero.
     """
     certificate.ensure_one()
     cert = certificate.with_context(bin_size=False)
@@ -88,7 +102,27 @@ def load_from_certificate(certificate) -> tuple:
     cert_pem = cert_obj.public_bytes(serialization.Encoding.PEM)
     cert_der = cert_obj.public_bytes(serialization.Encoding.DER)
 
-    return private_key, cert_pem, cert_der, cert_obj
+    chain_records = cert._get_certificate_chain()
+    chain_cert_objects = [
+        x509.load_pem_x509_certificate(
+            base64.b64decode(
+                chain_cert.with_context(bin_size=False).pem_certificate
+            ),
+            default_backend(),
+        )
+        for chain_cert in chain_records
+    ]
+    if not chain_cert_objects:
+        # Nunca debería pasar (la hoja misma siempre forma parte de su
+        # propia cadena) -- si pasa, no hay cadena resuelta y es mejor
+        # fallar explícito que firmar con un solo Cert (DC25 lo rechaza).
+        raise ValueError(
+            'No se pudo resolver la cadena de certificación (hoja + '
+            'intermedia + raíz) para %s -- _get_certificate_chain() '
+            'devolvió vacío.' % certificate.display_name
+        )
+
+    return private_key, cert_pem, cert_der, cert_obj, chain_cert_objects
 
 
 # =====================================================================
@@ -136,6 +170,7 @@ def sign_xml(
     cert_pem: bytes,
     cert_der: bytes,
     cert_obj,
+    cert_chain=None,
 ) -> bytes:
     """Firma un XML de Nómina Electrónica con XAdES-BES.
 
@@ -149,8 +184,9 @@ def sign_xml(
     3. Construir la estructura ds:Signature con:
        - SignedInfo (references al documento, KeyInfo y SignedProperties)
        - SignatureValue
-       - KeyInfo con certificado X.509
-       - Object > QualifyingProperties > SignedProperties (XAdES)
+       - KeyInfo con certificado X.509 (solo la hoja)
+       - Object > QualifyingProperties > SignedProperties (XAdES), con
+         un xades:Cert por cada certificado de ``cert_chain``
     4. Calcular digests y firmar
 
     El material de firma ya debe estar cargado (ver ``load_from_certificate``)
@@ -161,7 +197,13 @@ def sign_xml(
         private_key: Clave privada RSA ya cargada.
         cert_pem: Certificado en formato PEM (bytes).
         cert_der: Certificado en formato DER (bytes).
-        cert_obj: Objeto x509.Certificate ya cargado.
+        cert_obj: Objeto x509.Certificate ya cargado (la hoja).
+        cert_chain: Lista de objetos x509.Certificate de la cadena
+            completa (hoja + intermedia + raíz), hoja primero. DC25 del
+            Anexo Técnico exige al menos 3 grupos ``xades:Cert`` dentro
+            de ``SigningCertificate`` -- si se omite, se firma solo con
+            la hoja (``[cert_obj]``), estructuralmente incompleto frente
+            a DC25/DC37-DC46.
 
     Returns:
         XML firmado como bytes UTF-8 con declaración XML.
@@ -194,15 +236,14 @@ def sign_xml(
     kinfo_id = '%s-keyinfo' % sig_id
     sp_id = '%s-sigprops' % sig_id
 
-    # Certificado en base64 (DER)
+    # Certificado en base64 (DER) -- solo la hoja, para ds:KeyInfo
     cert_b64 = base64.b64encode(cert_der).decode('ascii')
 
-    # Digest del certificado
-    cert_digest = _compute_digest(cert_der)
-
-    # Información del emisor del certificado
-    issuer_name = cert_obj.issuer.rfc4514_string()
-    serial_number = str(cert_obj.serial_number)
+    # Cadena completa para xades:SigningCertificate/xades:Cert (DC25:
+    # minimo 3 grupos Cert -- hoja + intermedia + raiz). Si no se pasa
+    # cadena, cae a solo la hoja (estructuralmente incompleto, pero no
+    # rompe la firma de documentos que no dependan de esto).
+    chain = cert_chain or [cert_obj]
 
     # Calcular digest del documento (sin la firma aún)
     doc_xml = etree.tostring(root, method='c14n')
@@ -312,35 +353,45 @@ def sign_xml(
     )
 
     # SigningCertificate
+    # AUD-DIAN-34 (2026-10-04, DC25): el Anexo Tecnico exige al menos 3
+    # grupos Cert distintos (hoja + CA intermedia + CA raiz), confirmado
+    # tambien por el XPath de la seccion 7.14 Regla-4 que indexa
+    # Cert[3]. Antes solo se generaba 1 Cert (la hoja) -- se reemplaza
+    # por un Cert completo (CertDigest + IssuerSerial) por cada
+    # certificado de la cadena, mismo patron que account_edi_xml_ubl_dian.py
+    # (Facturacion Electronica nativa, en produccion) con
+    # company.l10n_co_dian_certificate_ids.
     signing_cert = etree.SubElement(
         ssp, '{%s}SigningCertificate' % NS_XADES,
     )
-    cert_elem = etree.SubElement(
-        signing_cert, '{%s}Cert' % NS_XADES,
-    )
-    cert_digest_elem = etree.SubElement(
-        cert_elem, '{%s}CertDigest' % NS_XADES,
-    )
-    etree.SubElement(
-        cert_digest_elem, '{%s}DigestMethod' % NS_DS,
-        Algorithm='http://www.w3.org/2001/04/xmlenc#sha256',
-    )
-    cert_dv = etree.SubElement(
-        cert_digest_elem, '{%s}DigestValue' % NS_DS,
-    )
-    cert_dv.text = cert_digest
+    for chain_cert in chain:
+        chain_cert_der = chain_cert.public_bytes(serialization.Encoding.DER)
+        cert_elem = etree.SubElement(
+            signing_cert, '{%s}Cert' % NS_XADES,
+        )
+        cert_digest_elem = etree.SubElement(
+            cert_elem, '{%s}CertDigest' % NS_XADES,
+        )
+        etree.SubElement(
+            cert_digest_elem, '{%s}DigestMethod' % NS_DS,
+            Algorithm='http://www.w3.org/2001/04/xmlenc#sha256',
+        )
+        cert_dv = etree.SubElement(
+            cert_digest_elem, '{%s}DigestValue' % NS_DS,
+        )
+        cert_dv.text = _compute_digest(chain_cert_der)
 
-    issuer_serial = etree.SubElement(
-        cert_elem, '{%s}IssuerSerial' % NS_XADES,
-    )
-    x509_issuer = etree.SubElement(
-        issuer_serial, '{%s}X509IssuerName' % NS_DS,
-    )
-    x509_issuer.text = issuer_name
-    x509_serial = etree.SubElement(
-        issuer_serial, '{%s}X509SerialNumber' % NS_DS,
-    )
-    x509_serial.text = serial_number
+        issuer_serial = etree.SubElement(
+            cert_elem, '{%s}IssuerSerial' % NS_XADES,
+        )
+        x509_issuer = etree.SubElement(
+            issuer_serial, '{%s}X509IssuerName' % NS_DS,
+        )
+        x509_issuer.text = chain_cert.issuer.rfc4514_string()
+        x509_serial = etree.SubElement(
+            issuer_serial, '{%s}X509SerialNumber' % NS_DS,
+        )
+        x509_serial.text = str(chain_cert.serial_number)
 
     # SignaturePolicyIdentifier
     spi = etree.SubElement(
