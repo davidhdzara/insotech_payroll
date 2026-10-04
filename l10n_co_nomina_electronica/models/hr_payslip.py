@@ -22,6 +22,7 @@ V1.0, Resolución DIAN 000013 de 2021.
 """
 
 import base64
+import hashlib
 import logging
 from collections import defaultdict
 from datetime import datetime
@@ -84,6 +85,7 @@ class HrPayslip(models.Model):
             ('draft', 'Borrador'),
             ('generated', 'XML Generado'),
             ('sent', 'Enviado a DIAN'),
+            ('uncertain', 'Envío incierto - requiere conciliación'),
             ('accepted', 'Aceptado por DIAN'),
             ('rejected', 'Rechazado por DIAN'),
         ],
@@ -95,6 +97,7 @@ class HrPayslip(models.Model):
              '• Borrador: aún no se ha generado el XML.\n'
              '• XML Generado: XML construido, firmado y listo para envío.\n'
              '• Enviado a DIAN: transmitido al web service, pendiente respuesta.\n'
+             '• Envío incierto: no hubo acuse válido; requiere conciliación.\n'
              '• Aceptado por DIAN: la DIAN validó y aceptó el documento.\n'
              '• Rechazado por DIAN: la DIAN rechazó el documento.',
     )
@@ -142,6 +145,102 @@ class HrPayslip(models.Model):
              'enviar el documento. Se usa para consultar el estado del '
              'procesamiento (GetStatusZip).',
     )
+    l10n_co_ne_exchange_ids = fields.Many2many(
+        comodel_name='l10n.co.ne.exchange',
+        relation='l10n_co_ne_exchange_payslip_rel',
+        column1='payslip_id', column2='exchange_id',
+        string='Historial de intercambios DIAN', readonly=True, copy=False,
+    )
+
+    def _ne_response_text(self, value):
+        # AUD-DIAN-34 (2026-10-04): este campo es un resumen para la vista
+        # del formulario, no evidencia -- la evidencia completa (sobre SOAP
+        # y ZIP de respuesta íntegros, sin truncar) vive en
+        # l10n.co.ne.exchange. Un SendTestSetAsync de 4 nóminas puede traer
+        # un ZIP base64 de varios MB; meterlo entero aquí infla el registro
+        # del payslip sin necesidad.
+        if isinstance(value, bytes):
+            value = value.decode('utf-8', errors='replace')
+        return (value or '')[:5000]
+
+    def _ne_store_exchange(self, operation, endpoint, response, manifest=None,
+                           queried_zip_key=None, parent_exchange=None,
+                           unidentified_count=0):
+        """Guarda evidencia completa y actualiza solo el resumen visible."""
+        exchange = self.env['l10n.co.ne.exchange'].create_exchange(
+            self.company_id, operation, endpoint, response, self, manifest,
+            queried_zip_key=queried_zip_key, parent_exchange=parent_exchange,
+            unidentified_count=unidentified_count,
+        )
+        self.write({
+            'l10n_co_ne_dian_request': self._ne_response_text(response.get('RawRequest')),
+            'l10n_co_ne_dian_response': self._ne_response_text(response.get('RawResponse')),
+        })
+        return exchange
+
+    @staticmethod
+    def _ne_reference_candidates(result):
+        """Extrae referencias de un resultado sin confundir IDs SOAP con CUNE."""
+        candidates = set()
+        for key in ('XmlDocumentKey', 'CUNE', 'DocumentKey'):
+            value = result.get(key)
+            if value:
+                candidates.add(value.strip())
+        application = result.get('ApplicationResponse') or ''
+        if application:
+            candidates.update(soap_client.extract_document_references(application))
+        return candidates
+
+    def _ne_match_dian_results(self, results, manifest):
+        """Asocia resultados solo cuando la evidencia identifica un documento.
+
+        Reglas confirmadas con Tech Lead (2026-10-04), tras observar que la
+        respuesta real de GetStatusZip de hoy trajo un único DianResponse
+        SIN XmlDocumentKey ni XmlFileName:
+        (a) match estricto por identificador (CUNE/XmlDocumentKey/
+            referencia documental UBL) cuando DIAN lo entrega -- nunca por
+            nombre de archivo, que DIAN puede omitir o repetir;
+        (b) si DIAN no entrega NINGÚN identificador y el manifiesto de
+            este ZipKey tiene exactamente 1 documento, el resultado solo
+            puede ser de ese documento -- se aplica;
+        (c) si hay varios documentos y el resultado no trae identificador,
+            no se cambia ningún estado -- se cuenta como "sin identificar"
+            (valor de retorno ``unidentified``) para que quede visible en
+            vez de adivinar.
+        No se inventan más reglas que estas tres; con la primera respuesta
+        real sin truncar que sí traiga identificadores, se revisa de nuevo.
+        """
+        by_cune = {}
+        for line in manifest:
+            if line.cune:
+                by_cune.setdefault(line.cune, []).append(line)
+        matched = {}
+        ambiguous = set()
+        unidentified = 0
+        for result in results:
+            candidates = self._ne_reference_candidates(result)
+            if candidates:
+                lines = [line for candidate in candidates for line in by_cune.get(candidate, [])]
+            elif len(manifest) == 1:
+                lines = list(manifest)
+            else:
+                unidentified += 1
+                continue
+            if len(lines) != 1:
+                if candidates:
+                    unidentified += 1
+                continue
+            line = lines[0]
+            target = line.payslip_id
+            # El resultado aplica exclusivamente a la misma versión firmada.
+            current_xml = base64.b64decode(target.l10n_co_ne_xml_attachment_id.datas) if target.l10n_co_ne_xml_attachment_id else b''
+            if target.l10n_co_ne_cune != line.cune or hashlib.sha256(current_xml).hexdigest() != line.sha256:
+                continue
+            if target.id in matched:
+                ambiguous.add(target.id)
+            else:
+                matched[target.id] = result
+        return matched, ambiguous, unidentified
 
     l10n_co_ne_is_salarial = fields.Boolean(
         string='Es Salarial (Bonificaciones)',
@@ -455,9 +554,10 @@ class HrPayslip(models.Model):
             endpoint=endpoint,
         )
 
-        # Procesar respuesta DIAN
-        self.l10n_co_ne_dian_request = response.get('RawRequest', '')
-        self.l10n_co_ne_dian_response = response.get('RawResponse', '')
+        # Procesar respuesta DIAN y preservar el payload exacto del intento.
+        self._ne_store_exchange('send_sync', endpoint, response, [{
+            'payslip': self, 'filename': filename, 'xml': xml_content,
+        }])
         zip_key = response.get('ZipKey', '')
         if zip_key:
             self.l10n_co_ne_zip_key = zip_key
@@ -662,12 +762,19 @@ class HrPayslip(models.Model):
     def action_send_test_set(self):
         """Envía el set de pruebas a la DIAN (SendTestSetAsync).
 
-        Agrupa todas las nóminas con estado 'generated' y las envía
-        como un set de pruebas al endpoint de habilitación.
+        Agrupa las nóminas en 'generated' (primer envío) o 'uncertain'
+        (envío previo sin acuse válido -- el XML firmado ya existe y es
+        reenviable tal cual, sin regenerar) y las envía como un set de
+        pruebas al endpoint de habilitación.
         """
-        records = self.filtered(lambda p: p.l10n_co_ne_state == 'generated')
+        records = self.filtered(
+            lambda p: p.l10n_co_ne_state in ('generated', 'uncertain')
+        )
         if not records:
-            raise UserError(_('No hay nóminas con XML generado para enviar como set de pruebas.'))
+            raise UserError(_(
+                'No hay nóminas con XML generado, ni en envío incierto, '
+                'para enviar como set de pruebas.'
+            ))
 
         company = records[0].company_id
         self._validate_company_ne_config(company)
@@ -693,6 +800,7 @@ class HrPayslip(models.Model):
             company.l10n_co_ne_operation_mode_ids.software_id or ''
         ).encode()
         xml_files = {}
+        manifest = []
         stale = []
         for payslip in records:
             if payslip.l10n_co_ne_xml_attachment_id:
@@ -702,6 +810,11 @@ class HrPayslip(models.Model):
                     stale.append(payslip.name)
                     continue
                 xml_files[filename] = xml_bytes
+                manifest.append({
+                    'payslip': payslip,
+                    'filename': filename,
+                    'xml': xml_bytes,
+                })
 
         if stale:
             raise UserError(_(
@@ -730,6 +843,25 @@ class HrPayslip(models.Model):
         )
 
         zip_key = response.get('ZipKey', '')
+        ack_valid = bool(zip_key and zip_key.strip()) and response.get('HttpStatus', 0) < 400 \
+            and response.get('HttpStatus', 0) >= 200 and not response.get('SOAPFault') \
+            and response.get('StatusCode') not in ('CONNECTION_ERROR', 'PARSE_ERROR', 'ERROR', '99') \
+            and not response.get('TransportError')
+        records._ne_store_exchange(
+            'send_test_set', soap_client.DIAN_ENDPOINT_HAB, response, manifest,
+        )
+        # Un timeout o acuse sin ZipKey es incierto: queda evidencia, pero no
+        # se simula un envío exitoso ni se programa reintento automático.
+        if not ack_valid:
+            records.write({'l10n_co_ne_state': 'uncertain'})
+            return {
+                'type': 'ir.actions.client', 'tag': 'display_notification',
+                'params': {
+                    'title': _('Set de Pruebas no confirmado'),
+                    'message': _('La DIAN no confirmó un ZipKey válido. El intento quedó registrado para conciliación.'),
+                    'type': 'warning', 'sticky': True,
+                },
+            }
         # AUD-DIAN-34 (2026-09-14): antes no se persistia el ZipKey real
         # devuelto por SendTestSetAsync ni se marcaba 'sent' -- accion_
         # check_dian_status() caia a usar el CUNE como trackId (formato
@@ -738,11 +870,6 @@ class HrPayslip(models.Model):
         records.write({
             'l10n_co_ne_zip_key': zip_key,
             'l10n_co_ne_state': 'sent',
-            # AUD-DIAN-34 (2026-10-04): un solo SendTestSetAsync cubre
-            # todo el lote -- se guarda el mismo request/response en
-            # cada registro del set, igual que ya se hace con zip_key.
-            'l10n_co_ne_dian_request': response.get('RawRequest', ''),
-            'l10n_co_ne_dian_response': response.get('RawResponse', ''),
         })
         _logger.info(
             'Set de pruebas enviado: %d documentos. ZipKey: %s',
@@ -761,19 +888,16 @@ class HrPayslip(models.Model):
         }
 
     def action_check_dian_status(self):
-        """Consulta el estado de un envío en la DIAN (GetStatusZip)."""
-        self.ensure_one()
-        # GetStatusZip espera el ZipKey/trackId devuelto por el envío,
-        # no el CUNE. Para registros enviados antes de almacenar el ZipKey
-        # se recurre al CUNE como respaldo.
-        track_id = self.l10n_co_ne_zip_key or self.l10n_co_ne_cune
-        if not track_id:
-            raise UserError(_(
-                'Esta nómina no tiene ZipKey ni CUNE; envíela a la DIAN '
-                'antes de consultar su estado.'
-            ))
-
-        company = self.company_id
+        """Consulta una vez por ZipKey y distribuye solo resultados inequívocos."""
+        if not self:
+            return True
+        companies = self.mapped('company_id')
+        if len(companies) != 1:
+            raise UserError(_('Seleccione nóminas de una sola compañía para consultar DIAN.'))
+        company = companies
+        missing = self.filtered(lambda slip: not slip.l10n_co_ne_zip_key)
+        if missing:
+            raise UserError(_('Hay nóminas sin ZipKey; no se consultan por CUNE porque no es un trackId válido.'))
         private_key, cert_pem, cert_der, _cert_obj, _cert_chain = (
             xml_signer.load_from_certificate(company._get_ne_certificate())
         )
@@ -784,30 +908,67 @@ class HrPayslip(models.Model):
             else soap_client.DIAN_ENDPOINT_HAB
         )
 
-        response = soap_client.get_status_zip(
-            track_id=track_id,
-            private_key=private_key,
-            cert_pem=cert_pem,
-            endpoint=endpoint,
-        )
-
-        self.l10n_co_ne_dian_request = response.get('RawRequest', '')
-        self.l10n_co_ne_dian_response = response.get('RawResponse', '')
-        is_valid = response.get('IsValid', '') == 'true'
-
-        if is_valid and self.l10n_co_ne_state != 'accepted':
-            self.l10n_co_ne_state = 'accepted'
-            if self.l10n_co_ne_consecutive:
-                self.number = self.l10n_co_ne_consecutive
-
-
+        summaries = []
+        for track_id in set(self.mapped('l10n_co_ne_zip_key')):
+            records = self.filtered(lambda slip: slip.l10n_co_ne_zip_key == track_id)
+            response = soap_client.get_status_zip(
+                track_id=track_id, private_key=private_key, cert_pem=cert_pem,
+                endpoint=endpoint,
+            )
+            # Consultas usan el manifiesto del último envío del mismo ZipKey;
+            # nunca se reconstruye desde el XML actual de la nómina.
+            sent = self.env['l10n.co.ne.exchange'].search([
+                ('company_id', '=', company.id), ('operation', '=', 'send_test_set'),
+                ('zip_key', '=', track_id)], order='id desc', limit=1)
+            manifest = sent.document_ids
+            # El emparejamiento se calcula ANTES de guardar la evidencia
+            # para que "sin identificar" quede visible también en el
+            # historial, no solo en la notificación de la sesión actual.
+            matches, ambiguous, unidentified = records._ne_match_dian_results(
+                response.get('DianResponses', []), manifest)
+            records._ne_store_exchange('get_status_zip', endpoint, response,
+                queried_zip_key=track_id, parent_exchange=sent,
+                unidentified_count=unidentified)
+            for slip in records:
+                result = matches.get(slip.id)
+                if not result or slip.id in ambiguous:
+                    continue
+                valid = str(result.get('IsValid', '')).lower() == 'true'
+                # AUD-DIAN-34 (2026-10-04): no existe en el Anexo Técnico
+                # una tabla exhaustiva de StatusCode de GetStatusZip -- solo
+                # el ejemplo real de rechazo que sí documenta (IsValid=false,
+                # StatusCode=99, con ErrorMessage poblado de reglas NIE/ZB).
+                # No se supone ningún otro código como rechazo: "fuera de
+                # ('','00','0','90')" degradaba a 'rejected' estados que
+                # solo estaban pendientes/incompletos, sin evidencia de
+                # rechazo real de la DIAN.
+                is_rejection = (
+                    str(result.get('StatusCode', '')).strip() == '99'
+                    or bool(result.get('ErrorMessages'))
+                )
+                # Una consulta pendiente/no identificada nunca degrada un
+                # accepted. Rechazo terminal individual sí queda registrado.
+                if valid and slip.l10n_co_ne_state != 'accepted':
+                    slip.l10n_co_ne_state = 'accepted'
+                    if slip.l10n_co_ne_consecutive:
+                        slip.number = slip.l10n_co_ne_consecutive
+                elif not valid and is_rejection and slip.l10n_co_ne_state != 'accepted':
+                    slip.l10n_co_ne_state = 'rejected'
+            summary = response.get('StatusDescription') or response.get('StatusMessage') or _('Sin respuesta')
+            if unidentified:
+                summary = _(
+                    '%(summary)s (%(n)d resultado(s) sin identificar -- '
+                    'requieren conciliación manual, ver Historial DIAN)',
+                    summary=summary, n=unidentified,
+                )
+            summaries.append(summary)
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
                 'title': _('Estado DIAN'),
-                'message': response.get('StatusDescription', response.get('StatusMessage', 'Sin respuesta')),
-                'type': 'success' if is_valid else 'warning',
+                'message': ' | '.join(summaries),
+                'type': 'success' if any(s.l10n_co_ne_state == 'accepted' for s in self) else 'warning',
                 'sticky': True,
             },
         }
