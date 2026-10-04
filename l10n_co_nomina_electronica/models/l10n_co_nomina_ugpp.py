@@ -209,6 +209,10 @@ class L10nCoNominaUgpp(models.Model):
             ('date_from', '>=', self.date_from),
             ('date_to', '<=', self.date_to),
             ('state', '=', 'done'),
+            # doc 39 (2026-10-04): excluir empleados sintéticos del
+            # wizard de habilitación DIAN -- nunca son personal real,
+            # no deben contarse en un reporte UGPP real.
+            ('employee_id.l10n_co_ne_is_habilitacion_test', '=', False),
         ])
 
         if not payslips:

@@ -231,6 +231,19 @@ class HrEmployee(models.Model):
     )
 
     # ──────────────────────────────────────────────────────────────────
+    # Habilitación DIAN (doc 39) — empleado emulado, no real
+    # ──────────────────────────────────────────────────────────────────
+    l10n_co_ne_is_habilitacion_test = fields.Boolean(
+        string='Empleado de Prueba Habilitación DIAN',
+        default=False,
+        help='Marca los empleados sintéticos creados por el wizard de '
+             'habilitación DIAN (doc 34/39) para armar el set de pruebas '
+             'sin depender de datos reales de la empresa. PILA y UGPP '
+             'deben excluir estos registros de sus reportes reales -- '
+             'nunca representan personal real ni deben contarse como tal.',
+    )
+
+    # ──────────────────────────────────────────────────────────────────
     # Validaciones
     # ──────────────────────────────────────────────────────────────────
     @api.constrains('l10n_co_ne_worker_type', 'l10n_co_ne_worker_subtype')

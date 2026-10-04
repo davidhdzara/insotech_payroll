@@ -44,6 +44,8 @@ from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
 
+from ..services import habilitacion_test_data
+
 _CONTRACT_OPEN_STATES = ('open', 'close')
 _POLL_ATTEMPTS = 3
 _POLL_DELAY_SECONDS = 5
@@ -80,8 +82,9 @@ class L10nCoNeCertificationWizard(models.TransientModel):
         relation='l10n_co_ne_cert_wizard_employee_rel',
         string='Empleados (Fase 1)',
         domain=[('active', '=', True)],
-        help='Empleados reales de la compañía para los que se preparan '
-             'los payslips de Nómina Individual de habilitación.',
+        help='Empleados de prueba (contenido emulado, doc 39) para los '
+             'que se preparan los payslips de Nómina Individual de '
+             'habilitación -- no son personal real de la compañía.',
     )
     payslip_individual_ids = fields.Many2many(
         comodel_name='hr.payslip',
@@ -226,14 +229,22 @@ class L10nCoNeCertificationWizard(models.TransientModel):
         return first_day, last_day
 
     def _auto_select_employees(self, target_count):
-        """Auto-selecciona empleados reales para Fase 1 sin selector en pantalla.
+        """Auto-selecciona empleados de PRUEBA para Fase 1 (doc 39).
 
-        Regla: contratos en estado 'open' (vigente hoy, no 'close'),
-        ordenados por antigüedad ascendente (``date_start``) -- empleados
-        con más antigüedad tienden a tener datos más completos/estables,
-        menos probable que un contrato recién creado le falte algún dato
-        que rompa la generación del XML. Determinístico, se re-ejecuta
-        igual cada vez con los mismos datos de entrada.
+        Antes seleccionaba contratos reales de la compañía (los más
+        antiguos, por estabilidad de datos) -- eso significaba que
+        cualquier problema de datos en un registro real (ej. el bug
+        CO_BASICO) podía disfrazarse de "falla de habilitación DIAN"
+        sin serlo, y que probar habilitación exigía que ya existieran
+        empleados/contratos reales suficientes.
+
+        Ahora usa empleados/contratos sintéticos dedicados
+        (``services/habilitacion_test_data.py``), creados una sola vez
+        por compañía y reutilizados en cada ejecución -- ningún dato
+        depende de un ``hr.employee``/``hr.contract`` real. La DIAN solo
+        exige 4 Nómina Individual + 4 Nota de Ajuste ACEPTADAS, sin
+        diversidad de empleados ni periodos (Guía oficial "Registro y
+        Selección del Modo de Operación", confirmado 2026-10-04).
         """
         self.ensure_one()
         if not target_count:
@@ -241,18 +252,56 @@ class L10nCoNeCertificationWizard(models.TransientModel):
                 'Configure la meta de "Nómina Individual a Certificar" '
                 '(Ajustes > Nómina) antes de iniciar la habilitación.'
             ))
-        contracts = self.env['hr.contract'].search([
-            ('company_id', '=', self.company_id.id),
-            ('state', '=', 'open'),
-        ], order='date_start asc', limit=target_count)
-        if len(contracts) < target_count:
+        defs = habilitacion_test_data.TEST_EMPLOYEES[:target_count]
+        if len(defs) < target_count:
             raise UserError(_(
-                'Se necesitan %(target)d empleados con contrato activo '
-                'para la meta configurada, pero solo hay %(found)d '
-                'disponibles.',
-                target=target_count, found=len(contracts),
+                'Solo hay %(found)d empleados de prueba de habilitación '
+                'definidos para una meta de %(target)d -- agregue más '
+                'entradas a TEST_EMPLOYEES en habilitacion_test_data.py.',
+                target=target_count, found=len(defs),
             ))
-        return contracts.mapped('employee_id')
+        employees = self.env['hr.employee']
+        for employee_def in defs:
+            employees |= self._get_or_create_test_employee(employee_def)
+        return employees
+
+    def _get_or_create_test_employee(self, employee_def):
+        """Devuelve el empleado de prueba ``employee_def``, creándolo
+        (junto con su contrato) si todavía no existe para esta compañía.
+
+        Idempotente: localiza por ``identification_id`` + ``company_id``,
+        ambos fijos en ``habilitacion_test_data.TEST_EMPLOYEES``.
+        """
+        self.ensure_one()
+        Employee = self.env['hr.employee']
+        employee = Employee.search([
+            ('company_id', '=', self.company_id.id),
+            ('identification_id', '=', employee_def['identification_id']),
+            ('l10n_co_ne_is_habilitacion_test', '=', True),
+        ], limit=1)
+        if employee:
+            return employee
+
+        employee = Employee.create({
+            'company_id': self.company_id.id,
+            'name': employee_def['name'],
+            'identification_id': employee_def['identification_id'],
+            **habilitacion_test_data.TEST_EMPLOYEE_COMMON_VALUES,
+        })
+        structure_type = self.env.ref(
+            'l10n_co_nomina_electronica.hr_payroll_structure_type_co')
+        start_date = fields.Date.context_today(self) - relativedelta(
+            years=habilitacion_test_data.TEST_CONTRACT_START_YEARS_AGO,
+        )
+        self.env['hr.contract'].create({
+            'name': _('Contrato de Prueba - %s', employee_def['name']),
+            'employee_id': employee.id,
+            'company_id': self.company_id.id,
+            'structure_type_id': structure_type.id,
+            'date_start': start_date,
+            **habilitacion_test_data.TEST_CONTRACT_COMMON_VALUES,
+        })
+        return employee
 
     # ──────────────────────────────────────────────────────────────────
     # Fase 1 -- acciones

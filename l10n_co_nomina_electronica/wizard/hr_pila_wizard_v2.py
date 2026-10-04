@@ -513,6 +513,10 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             ('state', '=', 'done'),
             ('date_from', '>=', date_from),
             ('date_from', '<', date_to),
+            # doc 39 (2026-10-04): excluir empleados sintéticos del
+            # wizard de habilitación DIAN -- nunca son personal real,
+            # no deben contarse en un reporte PILA real.
+            ('employee_id.l10n_co_ne_is_habilitacion_test', '=', False),
         ])
 
     # ──────────────────────────────────────────────────────────────────
