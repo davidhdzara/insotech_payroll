@@ -179,8 +179,14 @@ class HrPayslip(models.Model):
         return exchange
 
     @staticmethod
-    def _ne_reference_candidates(result):
-        """Extrae referencias de un resultado sin confundir IDs SOAP con CUNE."""
+    def _ne_cune_candidates(result):
+        """Extrae candidatos de CUNE de un resultado, sin confundirlos con IDs SOAP.
+
+        AUD-DIAN-34 (2026-10-04): evidencia real (GetStatusZip AUTORIZADO,
+        nómina SME-10) confirma que el CUNE del documento original viaja en
+        ``cac:DocumentResponse/cac:DocumentReference/cbc:UUID`` dentro del
+        ApplicationResponse -- ver ``soap_client.extract_document_cunes``.
+        """
         candidates = set()
         for key in ('XmlDocumentKey', 'CUNE', 'DocumentKey'):
             value = result.get(key)
@@ -188,46 +194,73 @@ class HrPayslip(models.Model):
                 candidates.add(value.strip())
         application = result.get('ApplicationResponse') or ''
         if application:
-            candidates.update(soap_client.extract_document_references(application))
+            candidates.update(soap_client.extract_document_cunes(application))
         return candidates
+
+    @staticmethod
+    def _ne_number_candidates(result):
+        """Extrae el NÚMERO de negocio del documento original (no es CUNE).
+
+        ``cac:DocumentResponse/cac:DocumentReference/cbc:ID`` -- solo se usa
+        como respaldo cuando DIAN no entrega CUNE (ver
+        ``soap_client.extract_document_numbers``).
+        """
+        application = result.get('ApplicationResponse') or ''
+        if not application:
+            return set()
+        return soap_client.extract_document_numbers(application)
 
     def _ne_match_dian_results(self, results, manifest):
         """Asocia resultados solo cuando la evidencia identifica un documento.
 
-        Reglas confirmadas con Tech Lead (2026-10-04), tras observar que la
-        respuesta real de GetStatusZip de hoy trajo un único DianResponse
-        SIN XmlDocumentKey ni XmlFileName:
-        (a) match estricto por identificador (CUNE/XmlDocumentKey/
-            referencia documental UBL) cuando DIAN lo entrega -- nunca por
+        Reglas confirmadas con Tech Lead (2026-10-04 y 2026-10-05, esta
+        última con evidencia real de una respuesta GetStatusZip AUTORIZADA
+        de la DIAN -- nómina SME-10, StatusCode 00):
+        (a) match estricto por CUNE (XmlDocumentKey o
+            DocumentReference/UUID) cuando DIAN lo entrega -- nunca por
             nombre de archivo, que DIAN puede omitir o repetir;
-        (b) si DIAN no entrega NINGÚN identificador y el manifiesto de
-            este ZipKey tiene exactamente 1 documento, el resultado solo
-            puede ser de ese documento -- se aplica;
-        (c) si hay varios documentos y el resultado no trae identificador,
-            no se cambia ningún estado -- se cuenta como "sin identificar"
+        (b) si DIAN no entrega CUNE pero sí el NÚMERO del documento
+            (DocumentReference/ID), se empareja por
+            ``l10n_co_ne_consecutive`` SOLO si ese número identifica
+            exactamente 1 documento en el manifiesto;
+        (c) si DIAN no entrega NINGÚN identificador (ni CUNE ni número) y
+            el manifiesto de este ZipKey tiene exactamente 1 documento, el
+            resultado solo puede ser de ese documento -- se aplica;
+        (d) en cualquier otro caso (identificador presente pero sin
+            coincidencia única, o sin identificador con >1 documento), no
+            se cambia ningún estado -- se cuenta como "sin identificar"
             (valor de retorno ``unidentified``) para que quede visible en
             vez de adivinar.
-        No se inventan más reglas que estas tres; con la primera respuesta
-        real sin truncar que sí traiga identificadores, se revisa de nuevo.
+        Un identificador que DIAN sí entrega pero que no coincide con nada
+        del manifiesto NUNCA cae al siguiente nivel -- sería una
+        contradicción, no una ausencia de dato.
         """
         by_cune = {}
+        by_number = {}
         for line in manifest:
             if line.cune:
                 by_cune.setdefault(line.cune, []).append(line)
+            number = line.payslip_id.l10n_co_ne_consecutive
+            if number:
+                by_number.setdefault(number, []).append(line)
         matched = {}
         ambiguous = set()
         unidentified = 0
         for result in results:
-            candidates = self._ne_reference_candidates(result)
-            if candidates:
-                lines = [line for candidate in candidates for line in by_cune.get(candidate, [])]
+            cune_candidates = self._ne_cune_candidates(result)
+            number_candidates = self._ne_number_candidates(result)
+            has_identifier = bool(cune_candidates or number_candidates)
+            if cune_candidates:
+                lines = [line for candidate in cune_candidates for line in by_cune.get(candidate, [])]
+            elif number_candidates:
+                lines = [line for candidate in number_candidates for line in by_number.get(candidate, [])]
             elif len(manifest) == 1:
                 lines = list(manifest)
             else:
                 unidentified += 1
                 continue
             if len(lines) != 1:
-                if candidates:
+                if has_identifier:
                     unidentified += 1
                 continue
             line = lines[0]

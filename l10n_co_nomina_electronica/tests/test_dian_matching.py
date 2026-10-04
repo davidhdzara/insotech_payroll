@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Pruebas de lógica del historial DIAN (doc interno, revisión 2026-10-04):
-emparejamiento de resultados GetStatusZip contra el manifiesto persistido,
-reenvío de nóminas en 'uncertain', y la regla de rechazo restringida a
-StatusCode=99/ErrorMessages (en vez de "cualquier código fuera de una
-lista corta").
+"""Pruebas de lógica del historial DIAN (revisión 2026-10-04/05):
+emparejamiento de resultados GetStatusZip contra el manifiesto persistido
+(CUNE primero, número de documento como respaldo único, o el único
+documento del manifiesto en último caso), reenvío de nóminas en
+'uncertain', y la regla de rechazo restringida a StatusCode=99/
+ErrorMessages (en vez de "cualquier código fuera de una lista corta").
 
 No se testea contra la DIAN real ni se abre conexión de red: todo lo que
 toca SOAP (send_test_set_async) o el certificado se reemplaza con un
@@ -16,6 +17,23 @@ from datetime import date
 from unittest.mock import patch
 
 from odoo.tests.common import TransactionCase
+
+
+def _application_response_xml(document_id=None, cune=None):
+    """ApplicationResponse mínimo con la ruta UBL real (ver test_dian_
+    response_parser.py: evidencia real GetStatusZip AUTORIZADA, nómina
+    SME-10) -- cbc:ID es el NÚMERO de negocio, cbc:UUID es el CUNE."""
+    id_xml = '<cbc:ID>%s</cbc:ID>' % document_id if document_id else ''
+    uuid_xml = (
+        '<cbc:UUID schemeName="CUNE-SHA384">%s</cbc:UUID>' % cune if cune else ''
+    )
+    return (
+        '<ApplicationResponse '
+        'xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" '
+        'xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">'
+        '<cac:DocumentResponse><cac:DocumentReference>%s%s</cac:DocumentReference>'
+        '</cac:DocumentResponse></ApplicationResponse>'
+    ) % (id_xml, uuid_xml)
 
 
 class _FakeCertificate:
@@ -53,7 +71,7 @@ class TestDianMatchingCommon(TransactionCase):
             'type_id': cls.structure_type.id,
         })
 
-    def _make_payslip(self, name, cune, state='sent', zip_key='ZIPKEY-1'):
+    def _make_payslip(self, name, cune, state='sent', zip_key='ZIPKEY-1', consecutive=None):
         employee = self.env['hr.employee'].create({
             'name': name,
             'identification_id': '10' + str(self.env['hr.employee'].search_count([])),
@@ -80,6 +98,8 @@ class TestDianMatchingCommon(TransactionCase):
         payslip.l10n_co_ne_cune = cune
         payslip.l10n_co_ne_state = state
         payslip.l10n_co_ne_zip_key = zip_key
+        if consecutive:
+            payslip.l10n_co_ne_consecutive = consecutive
         return payslip
 
     def _attach_xml(self, payslip, xml_bytes):
@@ -168,6 +188,61 @@ class TestDianResultMatching(TestDianMatchingCommon):
 
         self.assertEqual(matches, {payslips[1].id: result})
         self.assertEqual(unidentified, 0)
+
+    def test_number_identifier_matches_when_no_cune_and_unique_in_manifest(self):
+        """(b) Sin CUNE pero con número (DocumentReference/ID) único -> se aplica.
+
+        AUD-DIAN-34 (2026-10-05): evidencia real (GetStatusZip AUTORIZADO,
+        nómina SME-10) -- DIAN sí entrega DocumentReference/UUID (CUNE) en
+        la práctica, pero este nivel cubre el caso donde no lo haga.
+        """
+        payslips = [
+            self._make_payslip('Num%d' % i, 'CUNE-NUM-%d' % i, consecutive='NE000000000%d' % i)
+            for i in range(3)
+        ]
+        manifest = self.env['l10n.co.ne.exchange.document']
+        for i, p in enumerate(payslips):
+            xml = ('<xml>%d</xml>' % i).encode()
+            self._attach_xml(p, xml)
+            manifest |= self._make_manifest_line(p, 'CUNE-NUM-%d' % i, xml)
+
+        app = _application_response_xml(document_id='NE0000000001')  # sin CUNE
+        result = {'IsValid': 'true', 'StatusCode': '00', 'ApplicationResponse': app}
+        matches, ambiguous, unidentified = payslips[0]._ne_match_dian_results([result], manifest)
+
+        self.assertEqual(matches, {payslips[1].id: result})
+        self.assertEqual(unidentified, 0)
+
+    def test_number_identifier_without_match_is_not_applied(self):
+        """(b) Número presente pero sin coincidencia en el manifiesto -> no se aplica."""
+        payslip = self._make_payslip('NumSinMatch', 'CUNE-NSM', consecutive='NE0000000050')
+        xml = b'<xml>numsinmatch</xml>'
+        self._attach_xml(payslip, xml)
+        manifest = self._make_manifest_line(payslip, 'CUNE-NSM', xml)
+
+        app = _application_response_xml(document_id='NE9999999999')  # no existe en el manifiesto
+        result = {'IsValid': 'true', 'StatusCode': '00', 'ApplicationResponse': app}
+        matches, ambiguous, unidentified = payslip._ne_match_dian_results([result], manifest)
+
+        self.assertEqual(matches, {})
+        self.assertEqual(unidentified, 1)
+
+    def test_cune_takes_priority_over_conflicting_number(self):
+        """(a) Si DIAN entrega CUNE, el número nunca se consulta -- aunque
+        por error apunte a otro documento del mismo manifiesto."""
+        payslip_a = self._make_payslip('A', 'CUNE-A', consecutive='NE0000000001')
+        payslip_b = self._make_payslip('B', 'CUNE-B', consecutive='NE0000000002')
+        manifest = self.env['l10n.co.ne.exchange.document']
+        for p, xml in ((payslip_a, b'<xml>a</xml>'), (payslip_b, b'<xml>b</xml>')):
+            self._attach_xml(p, xml)
+            manifest |= self._make_manifest_line(p, p.l10n_co_ne_cune, xml)
+
+        # CUNE apunta a A, pero el número (si se mirara) apuntaría a B.
+        app = _application_response_xml(document_id='NE0000000002', cune='CUNE-A')
+        result = {'IsValid': 'true', 'StatusCode': '00', 'ApplicationResponse': app}
+        matches, ambiguous, unidentified = payslip_a._ne_match_dian_results([result], manifest)
+
+        self.assertEqual(matches, {payslip_a.id: result})
 
     def test_version_mismatch_between_manifest_and_current_xml_is_not_applied(self):
         """El resultado nunca se aplica si el XML actual ya no es el firmado que se envió."""

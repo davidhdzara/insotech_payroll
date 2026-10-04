@@ -455,33 +455,68 @@ def _parse_response(text: str | bytes) -> dict:
     return result
 
 
-def extract_document_references(application_response: str | bytes) -> set[str]:
-    """Extrae únicamente referencias documentales explícitas y seguras.
+_UBL_CAC_CBC_NS = {
+    'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
+    'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
+}
 
-    Un ``UUID`` o ``ID`` de ApplicationResponse identifica la respuesta de
-    DIAN (o alguno de sus nodos), no la nómina enviada. Por diseño nunca se
-    usa para asociar ni cambiar el estado de un payslip.
-    """
+
+def _parse_application_response_safely(application_response: str | bytes):
     if not application_response:
-        return set()
+        return None
     raw = (application_response.encode('utf-8')
            if isinstance(application_response, str) else application_response)
     try:
-        root = etree.fromstring(raw, etree.XMLParser(
+        return etree.fromstring(raw, etree.XMLParser(
             resolve_entities=False, no_network=True, load_dtd=False,
             dtd_validation=False,
         ))
     except (ValueError, etree.XMLSyntaxError):
+        return None
+
+
+def extract_document_cunes(application_response: str | bytes) -> set[str]:
+    """Extrae el CUNE/CUFE real del documento original referenciado.
+
+    AUD-DIAN-34 (2026-10-04): evidencia real (respuesta GetStatusZip
+    AUTORIZADA de la DIAN, StatusCode 00, nómina "SME-10") confirma que el
+    identificador real del documento original es
+    ``cac:DocumentResponse/cac:DocumentReference/cbc:UUID`` (visto con
+    ``schemeName="CUFE-SHA384"``; el equivalente de nómina sería
+    "CUNE-SHA384") -- NO ``cbc:ID``, que es el NÚMERO de negocio del
+    documento (ver ``extract_document_numbers``). Antes esta función leía
+    ``cbc:ID`` creyendo que era el CUNE, por lo que nunca emparejaba nada.
+    El ``UUID``/``ID`` de nivel raíz del propio ApplicationResponse
+    (identidad de la respuesta de DIAN, no del documento referenciado)
+    sigue excluido por diseño -- solo cuenta la ruta UBL completa.
+    """
+    root = _parse_application_response_safely(application_response)
+    if root is None:
         return set()
-    # Solo rutas UBL de referencia documental. UUID de ApplicationResponse
-    # identifica la respuesta DIAN, no la nómina, y queda excluido.
-    ns = {
-        'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
-        'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
-    }
     return {
         element.text.strip() for element in root.xpath(
-            './/cac:DocumentResponse/cac:DocumentReference/cbc:ID', namespaces=ns
+            './/cac:DocumentResponse/cac:DocumentReference/cbc:UUID',
+            namespaces=_UBL_CAC_CBC_NS,
+        ) if element.text and element.text.strip()
+    }
+
+
+def extract_document_numbers(application_response: str | bytes) -> set[str]:
+    """Extrae el NÚMERO de negocio del documento original (NO es el CUNE).
+
+    ``cac:DocumentResponse/cac:DocumentReference/cbc:ID`` -- ej.
+    "NE0000000009", o "SME10" en el ejemplo real visto. Solo sirve para
+    emparejar contra ``hr.payslip.l10n_co_ne_consecutive`` cuando DIAN no
+    entrega CUNE (ver ``extract_document_cunes``) y el resultado es
+    inequívoco dentro del manifiesto del ZipKey.
+    """
+    root = _parse_application_response_safely(application_response)
+    if root is None:
+        return set()
+    return {
+        element.text.strip() for element in root.xpath(
+            './/cac:DocumentResponse/cac:DocumentReference/cbc:ID',
+            namespaces=_UBL_CAC_CBC_NS,
         ) if element.text and element.text.strip()
     }
 
