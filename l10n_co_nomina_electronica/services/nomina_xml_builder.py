@@ -467,23 +467,32 @@ def _add_devengados(parent: etree._Element, data: dict) -> None:
     )
 
     # --- Transporte ---
+    # NIE072/073 (2026-10-04, reenvío real de habilitación): la DIAN
+    # exige ambos atributos de viaticos presentes (aunque sea "0.00")
+    # cuando el elemento Transporte se emite -- no son condicionales a
+    # que exista un input real de viaticos. Antes solo se agregaban si
+    # el dato estaba presente, lo que dejaba el elemento incompleto
+    # para cualquier empleado con AuxilioTransporte pero sin viaticos.
     transporte = data.get('Transporte')
     if transporte:
         if isinstance(transporte, dict):
             transporte = [transporte]
         for t in transporte:
+            if (
+                t.get('AuxilioTransporte') is None
+                and t.get('ViaticoManuAlojS') is None
+                and t.get('ViaticoManuAlojNS') is None
+            ):
+                continue
             attribs = {}
             if t.get('AuxilioTransporte') is not None:
                 attribs['AuxilioTransporte'] = _fmt(
                     t['AuxilioTransporte'])
-            if t.get('ViaticoManuAlojS') is not None:
-                attribs['ViaticoManuAlojS'] = _fmt(
-                    t['ViaticoManuAlojS'])
-            if t.get('ViaticoManuAlojNS') is not None:
-                attribs['ViaticoManuAlojNS'] = _fmt(
-                    t['ViaticoManuAlojNS'])
-            if attribs:
-                _attr(dev, 'Transporte', **attribs)
+            attribs['ViaticoManuAlojS'] = _fmt(
+                t.get('ViaticoManuAlojS') or 0)
+            attribs['ViaticoManuAlojNS'] = _fmt(
+                t.get('ViaticoManuAlojNS') or 0)
+            _attr(dev, 'Transporte', **attribs)
 
     # --- Horas Extra ---
     _HORAS_EXTRA = [
@@ -1354,26 +1363,32 @@ def _get_horas_extra_items(items: list[dict]) -> list[dict]:
 
 
 def _get_transporte_items(transporte) -> list[dict]:
-    """Equivalente dict del bloque Transporte de _add_devengados()."""
+    """Equivalente dict del bloque Transporte de _add_devengados().
+
+    NIE072/073 (2026-10-04): ver nota equivalente en _add_devengados()
+    -- ViaticoManuAlojS/NS deben ir siempre presentes (default 0) una
+    vez que el elemento Transporte se emite, no condicionados a que
+    exista un input real de viaticos.
+    """
     if not transporte:
         return []
     if isinstance(transporte, dict):
         transporte = [transporte]
     items = []
     for t in transporte:
+        if (
+            t.get('AuxilioTransporte') is None
+            and t.get('ViaticoManuAlojS') is None
+            and t.get('ViaticoManuAlojNS') is None
+        ):
+            continue
         items.append({
             'AuxilioTransporte': (
                 _fmt(t['AuxilioTransporte'])
                 if t.get('AuxilioTransporte') is not None else None
             ),
-            'ViaticoManuAlojS': (
-                _fmt(t['ViaticoManuAlojS'])
-                if t.get('ViaticoManuAlojS') is not None else None
-            ),
-            'ViaticoManuAlojNS': (
-                _fmt(t['ViaticoManuAlojNS'])
-                if t.get('ViaticoManuAlojNS') is not None else None
-            ),
+            'ViaticoManuAlojS': _fmt(t.get('ViaticoManuAlojS') or 0),
+            'ViaticoManuAlojNS': _fmt(t.get('ViaticoManuAlojNS') or 0),
         })
     return items
 
