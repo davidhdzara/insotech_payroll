@@ -48,6 +48,7 @@ Funcionalidades principales:
     'data': [
         # Security
         'security/ir.model.access.csv',
+        'security/l10n_co_ne_exchange_security.xml',
         # Data
         'data/ir_sequence_data.xml',
         'data/l10n_co_rule_parameters_data.xml',
@@ -78,6 +79,7 @@ Funcionalidades principales:
         'views/hr_employee_views.xml',
         'views/hr_contract_views.xml',
         'views/hr_payslip_views.xml',
+        'views/l10n_co_ne_exchange_views.xml',
         'views/l10n_co_nomina_ugpp_views.xml',
         'views/hr_salary_attachment_views.xml',
         'views/hr_contract_deductions_views.xml',
