@@ -76,6 +76,11 @@ class TestDianMatchingCommon(TransactionCase):
             'name': name,
             'identification_id': '10' + str(self.env['hr.employee'].search_count([])),
             'company_id': self.company.id,
+            # AUD-DIAN-34 (2026-10-05): l10n_co_ne_payment_method default
+            # es '1' (Transferencia Bancaria), que _check_bank_account_for_
+            # transfer() exige con l10n_co_ne_bank_account -- sin interés
+            # para estas pruebas, 'Efectivo' evita fabricar datos bancarios.
+            'l10n_co_ne_payment_method': '10',
         })
         contract = self.env['hr.contract'].create({
             'name': 'Contrato %s' % name,

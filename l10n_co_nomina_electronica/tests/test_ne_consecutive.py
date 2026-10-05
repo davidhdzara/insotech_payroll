@@ -53,6 +53,10 @@ class TestNeConsecutivePrefixGuard(TransactionCase):
             'name': name,
             'identification_id': '20' + str(self.env['hr.employee'].search_count([])),
             'company_id': self.company.id,
+            # AUD-DIAN-34 (2026-10-05): ver nota en test_dian_matching.py --
+            # evita _check_bank_account_for_transfer() sin fabricar datos
+            # bancarios.
+            'l10n_co_ne_payment_method': '10',
         })
         contract = self.env['hr.contract'].create({
             'name': 'Contrato %s' % name,
