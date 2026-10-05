@@ -45,6 +45,10 @@ class TestHabilitacionEngine(TransactionCase):
             'software_pin': 'PIN-TEST',
             'test_set_id': 'SET-ACTUAL',
         })
+        # Odoo prohíbe cr.commit() dentro de un test: el motor lo aísla en _commit().
+        commit_patcher = patch(_ENGINE + '._commit')
+        commit_patcher.start()
+        self.addCleanup(commit_patcher.stop)
         self.engine = self.env['l10n.co.ne.habilitacion'].with_company(self.company)
 
     def _slip(self, name, state, adjustment=False, set_id='SET-ACTUAL'):

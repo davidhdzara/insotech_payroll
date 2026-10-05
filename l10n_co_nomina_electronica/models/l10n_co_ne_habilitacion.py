@@ -110,7 +110,7 @@ class L10nCoNeHabilitacion(models.AbstractModel):
                     company, 'error',
                     _('Error inesperado: %s. Presione "Iniciar Proceso de Habilitación" para continuar.',
                       str(exc)[:300]))
-            self.env.cr.commit()
+            self._commit()
             if not finished:
                 self._schedule(_TICK_SECONDS)
 
@@ -140,7 +140,7 @@ class L10nCoNeHabilitacion(models.AbstractModel):
             for slip in sent:
                 before = slip.l10n_co_ne_state
                 slip.action_check_dian_status()
-                self.env.cr.commit()
+                self._commit()
                 if slip.l10n_co_ne_state != before:
                     self._notify_result(company, slip)
             return False
@@ -154,7 +154,7 @@ class L10nCoNeHabilitacion(models.AbstractModel):
                 if software_id and software_id not in xml:
                     slip.action_regenerate_ne_xml()  # el SoftwareID cambió después de generarlo
                 slip.action_send_test_set()
-                self.env.cr.commit()
+                self._commit()
             return False
 
         # 4) Preparar las nóminas individuales (todo o nada).
@@ -269,6 +269,13 @@ class L10nCoNeHabilitacion(models.AbstractModel):
             for response in parsed.get('DianResponses', [])
             for message in response.get('ErrorMessages', [])
         )
+
+    def _commit(self):
+        """Confirma lo hecho hasta aquí (un ZipKey ya enviado no puede perderse por un fallo posterior).
+
+        Aislado en un método para que las pruebas lo reemplacen: Odoo prohíbe cr.commit() en un test.
+        """
+        self.env.cr.commit()
 
     @api.model
     def _schedule(self, delay_seconds):
