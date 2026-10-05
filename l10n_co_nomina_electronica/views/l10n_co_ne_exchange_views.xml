@@ -6,7 +6,7 @@
         <field name="arch" type="xml"><form create="0" edit="0" delete="0">
             <sheet><group><field name="company_id"/><field name="operation"/><field name="endpoint"/><field name="zip_key"/><field name="unidentified_count"/><field name="transport_error"/></group>
             <notebook><page string="Solicitud"><field name="request_payload" filename="zip_key" readonly="1"/></page><page string="Respuesta"><field name="response_payload" filename="zip_key" readonly="1"/></page>
-            <page string="Manifiesto"><field name="document_ids" readonly="1"><tree create="0" delete="0"><field name="payslip_id"/><field name="cune"/><field name="file_name"/><field name="sha256"/><field name="signed_xml" filename="file_name"/></tree></field></page></notebook>
+            <page string="Manifiesto"><field name="document_ids" readonly="1"><list create="0" delete="0"><field name="payslip_id"/><field name="cune"/><field name="file_name"/><field name="sha256"/><field name="signed_xml" filename="file_name"/></list></field></page></notebook>
             </sheet></form></field>
     </record>
 </odoo>
