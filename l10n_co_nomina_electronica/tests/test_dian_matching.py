@@ -332,10 +332,10 @@ class TestDianStateTransitions(TestDianMatchingCommon):
         xml = b'<xml>nr</xml>'
         self._attach_xml(payslip, xml)
         manifest = self._make_manifest_line(payslip, 'CUNE-NR', xml)
-        self.env['l10n.co.ne.exchange'].create({
-            'company_id': self.company.id, 'operation': 'send_test_set',
-            'endpoint': 'https://example.test/habilitacion', 'zip_key': 'ZIPKEY-NR',
-        }).document_ids = [(6, 0, manifest.ids)]
+        # _ne_match_dian_results() solo necesita el manifiesto ya devuelto
+        # por _make_manifest_line() -- no hace falta (ni es posible: el
+        # historial es inmutable, write() bloquea) un segundo exchange con
+        # su propio zip_key; mismo patrón que test_accepted_never_degrades.
 
         ambiguous_result = {'IsValid': 'false', 'StatusCode': '77'}  # sin ErrorMessages, no es 99
         matches, ambiguous, unidentified = payslip._ne_match_dian_results(

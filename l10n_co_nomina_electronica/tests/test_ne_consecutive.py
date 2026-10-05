@@ -67,7 +67,7 @@ class TestNeConsecutivePrefixGuard(TransactionCase):
             'date_start': date(2024, 1, 1),
             'state': 'open',
         })
-        return self.env['hr.payslip'].create({
+        vals = {
             'name': 'Nómina %s' % name,
             'employee_id': employee.id,
             'contract_id': contract.id,
@@ -76,7 +76,13 @@ class TestNeConsecutivePrefixGuard(TransactionCase):
             'date_from': date(2026, 9, 1),
             'date_to': date(2026, 9, 30),
             'l10n_co_ne_is_adjustment': is_adjustment,
-        })
+        }
+        if is_adjustment:
+            # AUD-DIAN-34 (2026-10-05): _check_adjustment_ref_cune() exige
+            # el CUNE de la nómina original cuando is_adjustment=True --
+            # valor de prueba, sin relación con un payslip real.
+            vals['l10n_co_ne_adjustment_ref_cune'] = 'CUNE-ORIGINAL-%s' % name
+        return self.env['hr.payslip'].create(vals)
 
     def test_individual_with_misconfigured_pre_sequence_never_keeps_na_prefix(self):
         """Reproduce el bug real: pre_sequence_id apuntando a la de Ajuste (NA)."""
