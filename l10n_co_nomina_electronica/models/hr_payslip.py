@@ -1127,11 +1127,18 @@ class HrPayslip(models.Model):
         (1) pasado _CRON_RECHECK_MAX_HOURS_DEFAULT (u override), el documento sale del cron
         y queda 'uncertain' -- el botón "Consultar Estado" sigue disponible para revisarlo a
         mano en cualquier momento (ver su invisible en hr_payslip_views.xml).
-        (2) el lote se procesa en orden de write_date ascendente -- el más tiempo esperando
-        entra primero, tanto al tope del lote como al orden de los grupos por ZipKey. Con
-        _ne_store_exchange() ya no reescribiendo el documento cuando la respuesta no cambia
-        (ver ahí), write_date de un 'sent' sin novedades se queda quieto desde el último
-        cambio real -- es una medida confiable de "desde cuándo espera".
+        (2) el lote se procesa en orden de envío ascendente -- el que más tiempo lleva
+        esperando entra primero, tanto al tope del lote como al orden de los grupos por
+        ZipKey.
+
+        H-012 (2026-10-07, hallazgo de Tech Lead corriendo esto en servidor real): "desde
+        cuándo espera" NO se puede medir con write_date -- ese campo lo toca CUALQUIER
+        escritura sobre el payslip, no solo esta integración DIAN (evidencia real: documentos
+        de una copia de BD llevaban 'sent' desde hace tiempo, pero su write_date marcaba
+        "hoy" por motivos ajenos a la DIAN -- con ese campo, el plazo nunca vencería). La
+        fecha estable es la del envío real: create_date del l10n.co.ne.exchange
+        ('send_sync'/'send_test_set') que produjo el ZipKey actual -- un registro histórico
+        que ya existe y nunca se reescribe después de creado.
         """
         now = fields.Datetime.now()
         companies = self.env['res.company'].sudo().search([
@@ -1145,16 +1152,33 @@ class HrPayslip(models.Model):
                 ('company_id', '=', company.id),
                 ('l10n_co_ne_state', '=', 'sent'),
                 ('l10n_co_ne_zip_key', '!=', False),
-            ], order='write_date asc', limit=_CRON_RECHECK_BATCH_LIMIT)
+            ])
             if not pending:
                 continue
+
+            zip_keys = list(set(pending.mapped('l10n_co_ne_zip_key')))
+            sends = self.env['l10n.co.ne.exchange'].sudo().search([
+                ('company_id', '=', company.id),
+                ('operation', 'in', ('send_sync', 'send_test_set')),
+                ('zip_key', 'in', zip_keys),
+            ], order='create_date desc')
+            sent_since = {}
+            for send in sends:
+                sent_since.setdefault(send.zip_key, send.create_date)
+
+            def _waiting_since(slip, _sent_since=sent_since):
+                # Respaldo defensivo si no hay exchange (no debería pasar: zip_key solo se
+                # asigna junto con el exchange que lo produjo) -- nunca por write_date.
+                return _sent_since.get(slip.l10n_co_ne_zip_key) or slip.create_date
+
+            pending = pending.sorted(key=_waiting_since)[:_CRON_RECHECK_BATCH_LIMIT]
 
             max_hours = company._ne_config_int_param(
                 'l10n_co_nomina_electronica.recheck_max_hours',
                 _CRON_RECHECK_MAX_HOURS_DEFAULT,
             )
             expired = pending.filtered(
-                lambda slip: now - slip.write_date >= timedelta(hours=max_hours))
+                lambda slip: now - _waiting_since(slip) >= timedelta(hours=max_hours))
             if expired:
                 for slip in expired:
                     slip.message_post(body=_(
@@ -1172,7 +1196,7 @@ class HrPayslip(models.Model):
                 continue
 
             # dict.fromkeys en vez de sorted(set(...)) -- conserva el orden de llegada de
-            # `pending` (ya viene en write_date ascendente de la búsqueda de arriba) en vez
+            # `pending` (ya viene ordenado por fecha de envío ascendente de arriba) en vez
             # de reordenar alfabéticamente por ZipKey.
             for zip_key in dict.fromkeys(pending.mapped('l10n_co_ne_zip_key')):
                 group = pending.filtered(lambda slip: slip.l10n_co_ne_zip_key == zip_key)
