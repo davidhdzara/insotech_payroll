@@ -59,6 +59,18 @@ DEVENGADO_SIMPLE_CONCEPTS = {
 
 HORA_EXTRA_CONCEPTS = {'HED', 'HEN', 'HRN', 'HEDDF', 'HRDDF', 'HENDF', 'HRNDF'}
 
+# H-013 (2026-10-08, QA Bloque 4, decisión de David): códigos de hr.work.entry.type de las
+# 7 ausencias colombianas que este módulo paga con su propia regla salarial (data/
+# l10n_co_ausencias_data.xml) -- CO_VAC/CO_LIC_REM/CO_LIC_NR/CO_INC_COMUN/CO_INC_LABORAL/
+# CO_LIC_MAT/CO_LIC_PAT. _ne_dias_pagables() las excluye SIEMPRE del básico (nunca dependen
+# de hr.leave.type.unpaid, que es un eje distinto -- ver el comentario en esa función) y
+# cada regla (CO_VAC, etc.) lee los mismos días vía _ne_dias_novedad() -- una sola fuente
+# para ambos lados, nunca doble pago.
+_NOVEDAD_AUSENCIA_WORK_ENTRY_CODES = {
+    'CO_VAC', 'CO_LIC_REM', 'CO_LIC_NR', 'CO_INC_COMUN', 'CO_INC_LABORAL',
+    'CO_LIC_MAT', 'CO_LIC_PAT',
+}
+
 DEDUCTION_SIMPLE_CONCEPTS = {
     'PensionVoluntaria': 'PensionVoluntaria',
     'RetencionFuente': 'RetencionFuente',
@@ -1639,12 +1651,63 @@ class HrPayslip(models.Model):
 
         unpaid_types = self.env['hr.leave.type'].search([('unpaid', '=', True)])
         unpaid_codes = set(unpaid_types.mapped('work_entry_type_id.code')) - {False}
-        dias_no_remunerados = sum(
+        # H-013 (2026-10-08, QA Bloque 4): vacaciones/licencias/incapacidades entraban como
+        # novedades manuales (inputs CO_VAC/CO_LIC_REM/CO_LIC_NR/CO_INC_COMUN/CO_INC_LABORAL)
+        # y el básico no descontaba esos días -- doble pago real (vacaciones 15 días: básico
+        # de 30 días completo + vacaciones aparte). "unpaid" en Odoo no sirve para detectar
+        # esto: significa "sin continuidad de pago del empleador", mientras que vacaciones/
+        # incapacidad/licencia remunerada SÍ se pagan en Colombia, solo que por un concepto
+        # distinto al básico (Art. 186 CST, Ley 100/1993, etc.). Por eso se excluyen SIEMPRE
+        # estos 7 códigos (data/l10n_co_ausencias_data.xml), sin importar su unpaid real.
+        dias_excluidos_codes = unpaid_codes | _NOVEDAD_AUSENCIA_WORK_ENTRY_CODES
+        dias_excluidos = sum(
             wd.number_of_days
             for wd in self.worked_days_line_ids
-            if wd.work_entry_type_id.code in unpaid_codes
+            if wd.work_entry_type_id.code in dias_excluidos_codes
         )
-        return dias_bajo_contrato - dias_no_remunerados
+        return dias_bajo_contrato - dias_excluidos
+
+    def _ne_dias_novedad_ausencia_e_input(self, work_entry_code, input_code, inputs, worked_days):
+        """(días desde Ausencias, días desde el input manual) para un concepto de novedad
+        (CO_VAC/CO_LIC_REM/CO_LIC_NR/CO_INC_COMUN/CO_INC_LABORAL/CO_LIC_MAT/CO_LIC_PAT).
+
+        No decide ni falla -- eso lo hace el llamador: condition_python solo necesita saber
+        si hay algo (cualquiera de los dos > 0); amount_python_compute (vía
+        _ne_dias_novedad()) necesita el valor final y el chequeo de conflicto. H-013
+        (2026-10-08)."""
+        worked_days_line = worked_days.get(work_entry_code)
+        dias_ausencia = worked_days_line.number_of_days if worked_days_line else 0
+        input_line = inputs.get(input_code)
+        dias_input = input_line.amount if input_line else 0
+        return dias_ausencia, dias_input
+
+    def _ne_dias_novedad(self, work_entry_code, input_code, inputs, worked_days):
+        """Única fuente de días para las reglas de ausencias pagadas (CO_VAC/CO_LIC_REM/
+        CO_LIC_NR/CO_INC_COMUN/CO_INC_LABORAL/CO_LIC_MAT/CO_LIC_PAT) -- los mismos días que
+        _ne_dias_pagables() excluye del básico (_NOVEDAD_AUSENCIA_WORK_ENTRY_CODES).
+
+        H-013 (2026-10-08, decisión de David): prioriza el módulo de Ausencias (hr.leave
+        validada -> hr.work.entry -> worked_days, mecanismo nativo de Odoo -- ver
+        data/l10n_co_ausencias_data.xml). El input manual CO_XXX sigue existiendo como
+        respaldo para lo que Ausencias no haya capturado, pero NUNCA junto con una ausencia
+        real del mismo concepto en la misma nómina: sumar los dos sería doble conteo, y
+        elegir uno en silencio escondería un error de captura real. Nunca un default
+        silencioso -- mismo principio que _dias_trabajados_requerido()/_pais_requerido()
+        en services/nomina_xml_builder.py.
+        """
+        dias_ausencia, dias_input = self._ne_dias_novedad_ausencia_e_input(
+            work_entry_code, input_code, inputs, worked_days)
+        if dias_ausencia > 0 and dias_input > 0:
+            raise UserError(_(
+                'Hay %(dias_ausencia)s día(s) de "%(code)s" ya registrados en Ausencias '
+                'y además un input manual "%(input_code)s" con %(dias_input)s día(s) en '
+                'la misma nómina de %(employee)s. Use solo una fuente: borre el input '
+                'manual si la ausencia ya está en el sistema, o elimine la ausencia si el '
+                'dato manual es el correcto.',
+                dias_ausencia=dias_ausencia, code=work_entry_code, input_code=input_code,
+                dias_input=dias_input, employee=self.employee_id.name,
+            ))
+        return dias_ausencia or dias_input
 
     def _dev_basico_y_transporte(self, concept_lines, devengados):
         """Devengados: sueldo básico, transporte y viáticos."""
