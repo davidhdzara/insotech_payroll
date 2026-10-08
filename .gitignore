@@ -22,3 +22,6 @@ Thumbs.db
 # Odoo
 *.pyc
 filestore/
+
+# Guias/resoluciones PDF: solo en local, nunca en git
+*.pdf
