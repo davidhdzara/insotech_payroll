@@ -1933,22 +1933,23 @@ class HrPayslip(models.Model):
         linea_ibc = payslip_anterior.line_ids.filtered(lambda l: l.code == 'CO_SS_BASE_IBC')
         return linea_ibc.total if linea_ibc else contract.wage
 
-    def _ne_ibc_seguridad_social(self, categories, contract, inputs, worked_days):
+    def _ne_ibc_seguridad_social(self, categories, contract, inputs, worked_days, result_rules):
         """IBC de seguridad social del empleado (H-017a, 2026-10-11, decisión de David +
         Tech Lead): incluye en la base de salud/pensión los días de vacaciones, licencia
         remunerada ordinaria y licencia de maternidad/paternidad que hoy quedan fuera de
         categories['DEV_SAL'] (CO_VAC/CO_LIC_REM/CO_LIC_MAT/CO_LIC_PAT tienen categoría
         VAC/INC, parent DEV, no DEV_SAL).
 
-        No depende de result_rules ni del orden de ejecución entre reglas: recalcula la
-        contribución de maternidad/paternidad con la MISMA fórmula que usa su propia regla
-        ((wage/dias_mes_comercial) x días) en vez de leer un resultado ya calculado -- el
-        orden real (CO_LIC_MAT/CO_LIC_PAT en secuencia 55/56 corren antes que las reglas de
-        SS en 100/101/102) ya lo prueba test_ibc_ss_paternidad_14_dias_qa, pero esta función
-        no lo necesita para ser correcta, así que puede llamarse también desde
-        condition_python (hr_payroll es Enterprise/código cerrado -- no se pudo verificar si
-        condition_python y amount_python_compute comparten result_rules en el mismo
-        localdict, así que se evita esa dependencia por completo).
+        Maternidad/paternidad: base = result_rules['CO_LIC_MAT']/['CO_LIC_PAT']['total'] --
+        única fuente (no se recalcula la fórmula aparte). Tech Lead (2026-10-11) verificó
+        contra el código real de Enterprise hr_payroll (hr_payslip.py, _get_localdict()):
+        result_rules se crea UNA sola vez por payslip y el MISMO localdict se pasa tanto a
+        rule._satisfy_condition() como a rule._compute_rule() -- disponible en
+        condition_python y en amount_python_compute por igual. Es además un
+        DefaultDictPayroll: una clave aún no calculada (ej. una regla que no corrió este
+        período) devuelve totales en 0, nunca KeyError/NameError. CO_LIC_MAT/CO_LIC_PAT
+        (secuencia 55/56) corren antes que CO_SALUD_EMP/CO_PENSION_EMP/CO_FSP (100/101/102),
+        así que su resultado ya está disponible aquí.
 
         Única fuente para CO_SALUD_EMP/CO_PENSION_EMP/CO_FSP (las 3 reglas de empleado).
         Alcance explícito de H-017a, NO tocar sin decisión de Tech Lead:
@@ -1982,16 +1983,10 @@ class HrPayslip(models.Model):
                     ultimo_ibc = self._ne_ultimo_ibc_anterior(contract)
                 ibc += (ultimo_ibc / dias_mes_comercial) * dias
 
-        # Maternidad/paternidad: base = lo que la licencia ya paga, 100% del salario por día
-        # calendario -- misma fórmula que CO_LIC_MAT/CO_LIC_PAT, recalculada aquí (ver
-        # docstring, evita depender de result_rules).
-        for work_entry_code in ('CO_LIC_MAT', 'CO_LIC_PAT'):
-            dias_ausencia, dias_input = self._ne_ausencia_calendario_dias_e_input(
-                work_entry_code, work_entry_code, inputs)
-            dias = dias_ausencia or dias_input
-            if dias > 0:
-                ibc += (contract.wage / dias_mes_comercial) * dias
-
+        # Maternidad/paternidad: base = lo que la licencia ya pagó -- result_rules es la
+        # única fuente, ver docstring.
+        ibc += result_rules.get('CO_LIC_MAT', {}).get('total', 0.0)
+        ibc += result_rules.get('CO_LIC_PAT', {}).get('total', 0.0)
         return ibc
 
     def _dev_basico_y_transporte(self, concept_lines, devengados):

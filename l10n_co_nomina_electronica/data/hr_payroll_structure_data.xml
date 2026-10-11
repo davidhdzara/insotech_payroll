@@ -805,7 +805,7 @@ result = inputs['CO_INT_CES'].amount
 # ver _ne_ibc_seguridad_social(). Alcance H-017a: solo esta regla y
 # CO_PENSION_EMP/CO_FSP. Las 6 reglas patronales (CIA) y PILA/UGPP quedan
 # para H-017b -- no cambian aqui.
-ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days)
+ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days, result_rules)
 result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_salud_empleado', payslip.date_from) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -827,7 +827,7 @@ result = not employee.l10n_co_ne_foreigner_no_pension
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
-ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days)
+ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days, result_rules)
 result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', payslip.date_from) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -847,7 +847,7 @@ result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', pays
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
 SMMLV = payslip._rule_parameter('l10n_co_smmlv', payslip.date_from)
 _umbral_base = payslip._rule_parameter('l10n_co_fsp_umbral_base', payslip.date_from)
-ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days)
+ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days, result_rules)
 result = ibc &gt;= SMMLV * _umbral_base
             </field>
             <field name="amount_select">code</field>
@@ -857,7 +857,7 @@ result = ibc &gt;= SMMLV * _umbral_base
 # desde fsp_umbral_tier1 SMMLV (tramos de subsistencia).
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
 SMMLV = payslip._rule_parameter('l10n_co_smmlv', payslip.date_from)
-ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days)
+ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days, result_rules)
 
 _pct_base = payslip._rule_parameter('l10n_co_fsp_pct_base', payslip.date_from) / 100
 _umbral_t1 = payslip._rule_parameter('l10n_co_fsp_umbral_tier1', payslip.date_from)
@@ -904,7 +904,7 @@ result = -abs(ibc * pct)
 # _ne_ultimo_ibc_anterior() lo lea el mes siguiente al calcular la base de una
 # novedad de vacaciones/licencia remunerada (punto a del diseño). Mismo patron
 # que CO_RETEFUENTE_BASE_IBC (doc 08).
-result = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days)
+result = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days, result_rules)
             </field>
             <field name="appears_on_payslip" eval="False"/>
             <field name="note">Acumulador interno (H-017a): guarda el IBC mensual de seguridad
