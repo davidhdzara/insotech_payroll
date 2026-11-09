@@ -678,7 +678,8 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             _p('l10n_co_pct_salud_empleado')
             + _p('l10n_co_pct_salud_empleador')
         ) / 100
-        tarifa_arl = _p('l10n_co_pct_arl_default') / 100  # Riesgo I por defecto
+        # H-005: tarifa según la Clase de Riesgo ARL del contrato (misma fuente que CO_ARL_CIA).
+        tarifa_arl = payslip._ne_pct_arl() / 100
         tarifa_ccf = _p('l10n_co_pct_ccf') / 100
         tarifa_sena = _p('l10n_co_pct_sena') / 100
         tarifa_icbf = _p('l10n_co_pct_icbf') / 100

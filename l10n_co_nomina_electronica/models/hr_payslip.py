@@ -1508,6 +1508,34 @@ class HrPayslip(models.Model):
             ))
         return codigo
 
+    # H-005 (2026-11-09): parámetro hr.rule.parameter de la tarifa ARL por Clase de Riesgo del
+    # contrato (l10n_co_pila_clase_riesgo). Los CÓDIGOS de parámetro viven aquí; los
+    # porcentajes, en data/l10n_co_rule_parameters_data.xml (cero hardcoded normativo).
+    _NE_ARL_PARAMETRO_POR_CLASE = {
+        '1': 'l10n_co_pct_arl_default',
+        '2': 'l10n_co_pct_arl_clase_2',
+        '3': 'l10n_co_pct_arl_clase_3',
+        '4': 'l10n_co_pct_arl_clase_4',
+        '5': 'l10n_co_pct_arl_clase_5',
+    }
+
+    def _ne_pct_arl(self):
+        """Porcentaje (p. ej. 1.044) de la tarifa ARL del empleador según la Clase de Riesgo
+        ARL del contrato (H-005). Única fuente para CO_ARL_CIA y para PILA, de modo que no
+        puedan divergir. Sin clase en el contrato: UserError que nombra al empleado (nunca se
+        asume la Clase I en silencio)."""
+        self.ensure_one()
+        contract = self.contract_id
+        clase = contract.l10n_co_pila_clase_riesgo
+        codigo = self._NE_ARL_PARAMETRO_POR_CLASE.get(clase)
+        if not codigo:
+            raise UserError(_(
+                'El contrato de %(employee)s no tiene Clase de Riesgo ARL configurada '
+                '(pestaña de PILA del contrato). Complétela antes de calcular el aporte a ARL.',
+                employee=self.employee_id.name,
+            ))
+        return self._rule_parameter(codigo, self.date_from)
+
     def _ne_validar_cuenta_transferencia(self):
         """H-021 (2026-11-09): única validación de "Transferencia exige cuenta bancaria".
 

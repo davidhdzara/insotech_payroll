@@ -24,3 +24,4 @@ from . import test_certification_wizard_period
 from . import test_localizacion_nomina
 from . import test_migracion_payroll_package
 from . import test_structure_type_default
+from . import test_arl_clase_riesgo

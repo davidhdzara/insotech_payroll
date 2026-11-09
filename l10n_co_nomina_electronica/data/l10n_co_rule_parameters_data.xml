@@ -216,6 +216,82 @@ legítimamente menor a 1, no es un error de escala. Valor vigente: <strong>0.522
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
+    <record id="rule_parameter_pct_arl_clase_2" model="hr.rule.parameter">
+        <field name="name">Colombia: % ARL Clase de Riesgo II</field>
+        <field name="code">l10n_co_pct_arl_clase_2</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Tarifa de cotización ARL a cargo del empleador para la Clase de
+Riesgo II (Riesgo Bajo). H-005 (2026-11-09): CO_ARL_CIA y PILA la leen según la Clase de
+Riesgo ARL del contrato (l10n_co_pila_clase_riesgo). La Clase I vive en
+l10n_co_pct_arl_default. Clasificación de actividades: Decreto 768/2022; tarifas: Art.
+2.2.4.3.5 del Decreto 1072/2015.</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número del porcentaje, <strong>NO</strong> la fracción decimal equivalente:
+escriba <strong>1.044</strong> para representar 1.044%. Valor vigente: <strong>1.044</strong>.</p></field>
+    </record>
+    <record id="rule_parameter_pct_arl_clase_2_2024" model="hr.rule.parameter.value">
+        <field name="parameter_value">1.044</field>
+        <field name="rule_parameter_id" ref="rule_parameter_pct_arl_clase_2"/>
+        <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
+    </record>
+
+    <record id="rule_parameter_pct_arl_clase_3" model="hr.rule.parameter">
+        <field name="name">Colombia: % ARL Clase de Riesgo III</field>
+        <field name="code">l10n_co_pct_arl_clase_3</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Tarifa de cotización ARL a cargo del empleador para la Clase de
+Riesgo III (Riesgo Medio). H-005 (2026-11-09): CO_ARL_CIA y PILA la leen según la Clase de
+Riesgo ARL del contrato (l10n_co_pila_clase_riesgo). La Clase I vive en
+l10n_co_pct_arl_default. Clasificación de actividades: Decreto 768/2022; tarifas: Art.
+2.2.4.3.5 del Decreto 1072/2015.</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número del porcentaje, <strong>NO</strong> la fracción decimal equivalente:
+escriba <strong>2.436</strong> para representar 2.436%. Valor vigente: <strong>2.436</strong>.</p></field>
+    </record>
+    <record id="rule_parameter_pct_arl_clase_3_2024" model="hr.rule.parameter.value">
+        <field name="parameter_value">2.436</field>
+        <field name="rule_parameter_id" ref="rule_parameter_pct_arl_clase_3"/>
+        <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
+    </record>
+
+    <record id="rule_parameter_pct_arl_clase_4" model="hr.rule.parameter">
+        <field name="name">Colombia: % ARL Clase de Riesgo IV</field>
+        <field name="code">l10n_co_pct_arl_clase_4</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Tarifa de cotización ARL a cargo del empleador para la Clase de
+Riesgo IV (Riesgo Alto). H-005 (2026-11-09): CO_ARL_CIA y PILA la leen según la Clase de
+Riesgo ARL del contrato (l10n_co_pila_clase_riesgo). La Clase I vive en
+l10n_co_pct_arl_default. Clasificación de actividades: Decreto 768/2022; tarifas: Art.
+2.2.4.3.5 del Decreto 1072/2015.</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número del porcentaje, <strong>NO</strong> la fracción decimal equivalente:
+escriba <strong>4.350</strong> para representar 4.350%. Valor vigente: <strong>4.350</strong>.</p></field>
+    </record>
+    <record id="rule_parameter_pct_arl_clase_4_2024" model="hr.rule.parameter.value">
+        <field name="parameter_value">4.350</field>
+        <field name="rule_parameter_id" ref="rule_parameter_pct_arl_clase_4"/>
+        <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
+    </record>
+
+    <record id="rule_parameter_pct_arl_clase_5" model="hr.rule.parameter">
+        <field name="name">Colombia: % ARL Clase de Riesgo V</field>
+        <field name="code">l10n_co_pct_arl_clase_5</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Tarifa de cotización ARL a cargo del empleador para la Clase de
+Riesgo V (Riesgo Máximo). H-005 (2026-11-09): CO_ARL_CIA y PILA la leen según la Clase de
+Riesgo ARL del contrato (l10n_co_pila_clase_riesgo). La Clase I vive en
+l10n_co_pct_arl_default. Clasificación de actividades: Decreto 768/2022; tarifas: Art.
+2.2.4.3.5 del Decreto 1072/2015.</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número del porcentaje, <strong>NO</strong> la fracción decimal equivalente:
+escriba <strong>6.960</strong> para representar 6.960%. Valor vigente: <strong>6.960</strong>.</p></field>
+    </record>
+    <record id="rule_parameter_pct_arl_clase_5_2024" model="hr.rule.parameter.value">
+        <field name="parameter_value">6.960</field>
+        <field name="rule_parameter_id" ref="rule_parameter_pct_arl_clase_5"/>
+        <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
+    </record>
+
     <record id="rule_parameter_pct_ccf" model="hr.rule.parameter">
         <field name="name">Colombia: % Caja de Compensación Familiar</field>
         <field name="code">l10n_co_pct_ccf</field>
