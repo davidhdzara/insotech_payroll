@@ -25,3 +25,4 @@ from . import test_localizacion_nomina
 from . import test_migracion_payroll_package
 from . import test_structure_type_default
 from . import test_arl_clase_riesgo
+from . import test_net_wage

@@ -1508,6 +1508,27 @@ class HrPayslip(models.Model):
             ))
         return codigo
 
+    # Salario neto / bruto (2026-11-09, hallazgo de QA, decisión de Tech Lead): net_wage y
+    # gross_wage nativos suman líneas con código 'NET'/'GROSS', creadas por las reglas que Odoo
+    # agrega por defecto a cada estructura con fórmulas sobre sus categorías nativas
+    # (BASIC/ALW/DED), a las que nuestras categorías (DEV, DEDU, ...) nunca se enlazaron: el neto
+    # nativo quedaba igual al básico. NO se enlazan las categorías (doble conteo del básico, y
+    # DEV_SAL es la base del IBC/PILA/UGPP); se corrige el cálculo del campo nativo.
+    # Cada estructura propia tiene su regla de neto; solo la general tiene "Total Devengados".
+    _NE_NETO_CODES = ('CO_NETO', 'CO_PRIMA_NETO', 'CO_LIQ_NETO', 'CO_BON_NETO')
+    _NE_BRUTO_CODES = ('CO_BRUTO',)
+
+    @api.depends('line_ids.total')
+    def _compute_basic_net(self):
+        super()._compute_basic_net()
+        for payslip in self:
+            neto = payslip.line_ids.filtered(lambda l: l.code in self._NE_NETO_CODES)
+            if neto:
+                payslip.net_wage = sum(neto.mapped('total'))
+            bruto = payslip.line_ids.filtered(lambda l: l.code in self._NE_BRUTO_CODES)
+            if bruto:
+                payslip.gross_wage = sum(bruto.mapped('total'))
+
     # H-005 (2026-11-09): parámetro hr.rule.parameter de la tarifa ARL por Clase de Riesgo del
     # contrato (l10n_co_pila_clase_riesgo). Los CÓDIGOS de parámetro viven aquí; los
     # porcentajes, en data/l10n_co_rule_parameters_data.xml (cero hardcoded normativo).
