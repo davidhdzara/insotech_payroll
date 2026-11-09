@@ -18,6 +18,7 @@ from datetime import date
 
 from lxml import etree
 
+from odoo.addons.base.models.ir_model import MODULE_UNINSTALL_FLAG
 from odoo.tests.common import TransactionCase
 from odoo.tools.safe_eval import safe_eval
 
@@ -94,7 +95,10 @@ class TestReloadPayrollPackage(TransactionCase):
         -u (odoo.tools.convert.convert_file), no una copia reescrita."""
         xmlid = 'l10n_co_nomina_electronica.input_l10n_co_embargo_civil'
         tipo = self.env.ref(xmlid)
-        tipo.unlink()
+        # hr.payslip.input.type prohíbe borrar registros con xmlid de un módulo ("You cannot
+        # delete ... as it is used in another module"); el flag de desinstalación es la vía
+        # estándar de Odoo para simular el borrado que Recargar debe reparar.
+        tipo.with_context(**{MODULE_UNINSTALL_FLAG: True}).unlink()
         self.assertFalse(self.env.ref(xmlid, raise_if_not_found=False))
 
         self.company._l10n_co_ne_reload_payroll_package()
@@ -116,15 +120,16 @@ class TestReloadPayrollPackage(TransactionCase):
         self.company._l10n_co_ne_reload_payroll_package()
         self.env.invalidate_all()
 
+        # parameter_value es Text (Odoo lo guarda como cadena): se compara el número.
         self.assertEqual(
-            parametro.parameter_value, 999999999.0,
+            float(parametro.parameter_value), 999999999.0,
             'Recargar no debe tocar hr.rule.parameter.value.',
         )
 
     def test_action_reload_delega_en_la_compania(self):
         settings = self.env['res.config.settings'].create({'company_id': self.company.id})
         xmlid = 'l10n_co_nomina_electronica.input_l10n_co_embargo_cooperativa'
-        self.env.ref(xmlid).unlink()
+        self.env.ref(xmlid).with_context(**{MODULE_UNINSTALL_FLAG: True}).unlink()
         result = settings.action_reload_payroll_package()
         self.env.invalidate_all()
         self.assertTrue(self.env.ref(xmlid, raise_if_not_found=False))
@@ -156,7 +161,7 @@ class TestArchVistaLocalizacion(TransactionCase):
     def test_setting_nativo_payroll_rules_queda_oculto_con_paquete(self):
         arch = self._arch('l10n_co_nomina_electronica.res_config_settings_view_form')
         xpaths = arch.xpath(
-            "//xpath[@expr=\"//block[@id='hr_payroll_settings']/setting[@string='Payroll Rules']\"]")
+            "//xpath[@expr=\"//div[@id='localization_text']/ancestor::setting\"]")
         self.assertEqual(len(xpaths), 1)
         atributo = xpaths[0].find(".//attribute[@name='invisible']")
         self.assertIsNotNone(atributo)

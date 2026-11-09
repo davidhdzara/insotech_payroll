@@ -157,5 +157,6 @@ class TestPagoCuentaBancaria(TransactionCase):
         payslip.employee_id.l10n_co_ne_payment_method = '1'
         with self.assertRaises(UserError):
             payslip._ne_validar_cuenta_transferencia()
-        self._set_bank_account(payslip.employee_id, 'Banco Valida', '5544')
+        cuenta = self._set_bank_account(payslip.employee_id, 'Banco Valida', '5544')
+        payslip.employee_id.bank_account_id = cuenta.id
         payslip._ne_validar_cuenta_transferencia()  # con cuenta: no falla
