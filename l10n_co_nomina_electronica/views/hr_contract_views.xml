@@ -7,13 +7,19 @@
         <field name="inherit_id" ref="hr_payroll.hr_contract_form_inherit"/>
         <field name="priority">99</field>
         <field name="arch" type="xml">
+            <!-- H12 (2026-11-09, documentador + Tech Lead): contract_details es un grupo EXTERIOR
+                 (col="2"); Odoo solo genera la celda de etiqueta para campos dentro de un grupo
+                 INTERIOR, así que inyectados directo quedaban sin etiqueta. Se envuelven en su propio
+                 <group>, igual que hr_payroll_account en este mismo lugar. -->
             <xpath expr="//group[@name='contract_details']" position="inside">
-                <field name="l10n_co_ne_contract_type"
-                       string="Tipo Contrato DIAN"/>
-                <field name="l10n_co_ne_integral_salary"
-                       string="Salario Integral"/>
-                <field name="l10n_co_payroll_period"
-                       string="Periodo de Nómina"/>
+                <group name="l10n_co_ne_contract_fields">
+                    <field name="l10n_co_ne_contract_type"
+                           string="Tipo Contrato DIAN"/>
+                    <field name="l10n_co_ne_integral_salary"
+                           string="Salario Integral"/>
+                    <field name="l10n_co_payroll_period"
+                           string="Periodo de Nómina"/>
+                </group>
             </xpath>
             <xpath expr="//notebook" position="inside">
                 <page string="PILA" name="pila">
