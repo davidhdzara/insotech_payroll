@@ -270,16 +270,63 @@ class TestAusenciasNomina(TransactionCase):
         self.assertLess(round(basico, 2), round(wage, 2))
 
     def test_incapacidad_comun_sin_doble_pago(self):
-        """Incapacidad corta (1-2 días) -- se mantiene dentro del tramo "100% a cargo del
-        empleador" (Art. 227 CST) sin importar el tramo exacto, para no reproducir aquí la
-        fórmula escalonada completa de CO_INC_COMUN."""
+        """Incapacidad corta (2 días) -- H-013 paso 3 (2026-11-09, Decreto 780/2016 Art.
+        3.2.1.10 par. 1): los 2 primeros días los paga el empleador al 66.67% (antes 100%).
+        Ya no rige "básico + novedad = sueldo" para este concepto: el 33.33% restante de
+        esos días NO se paga. Lo que sí debe seguir cumpliéndose: sin doble pago (el básico
+        descuenta exactamente los días de la incapacidad)."""
         wage = 1800000.0
         employee, contract = self._make_contract('IncComun', wage=wage)
         self._make_validated_leave(
             employee, contract, self.leave_type_inc_comun, date(2026, 9, 1), date(2026, 9, 2))
         payslip = self._make_payslip(employee, contract, date(2026, 9, 1), date(2026, 9, 30))
         payslip.compute_sheet()
-        self._assert_sin_doble_pago(payslip, 'CO_INC_COMUN', wage, dias_max=2)
+        dias = self._dias_worked(payslip, 'CO_INC_COMUN')
+        self.assertGreaterEqual(dias, 1)
+        self.assertLessEqual(dias, 2)
+        valor_dia = wage / 30.0
+        self.assertAlmostEqual(
+            self._sueldo_basico(payslip), wage - valor_dia * dias, delta=0.01)
+        self.assertAlmostEqual(
+            self._novedad(payslip, 'CO_INC_COMUN'), valor_dia * dias * 0.6667, delta=0.01)
+
+    def _incapacidad_comun_pagada(self, nombre, ini, fin, wage=1800000.0):
+        employee, contract = self._make_contract(nombre, wage=wage)
+        self._make_validated_leave(
+            employee, contract, self.leave_type_inc_comun, ini, fin)
+        payslip = self._make_payslip(employee, contract, date(2026, 9, 1), date(2026, 9, 30))
+        payslip.compute_sheet()
+        return self._novedad(payslip, 'CO_INC_COMUN'), wage / 30.0
+
+    def test_incapacidad_comun_dos_dias_empleador_al_6667(self):
+        """H-013 paso 3: 2 días calendario (1-2 sep) = 2 * valor_dia * 66.67%."""
+        pagado, valor_dia = self._incapacidad_comun_pagada(
+            'IncEmp2', date(2026, 9, 1), date(2026, 9, 2))
+        self.assertAlmostEqual(pagado, 2 * valor_dia * 0.6667, delta=0.01)
+
+    def test_incapacidad_comun_un_dia_empleador_al_6667(self):
+        pagado, valor_dia = self._incapacidad_comun_pagada(
+            'IncEmp1', date(2026, 9, 1), date(2026, 9, 1))
+        self.assertAlmostEqual(pagado, valor_dia * 0.6667, delta=0.01)
+
+    def test_incapacidad_comun_cinco_dias_tramo_empleador_y_eps(self):
+        """5 días: 2 del empleador + 3 de la EPS, ambos tramos al 66.67% -- el total no
+        puede ser el de 5 días al 100% ni el de 2 días al 100% + 3 al 66.67% (pre-H-013 p3)."""
+        pagado, valor_dia = self._incapacidad_comun_pagada(
+            'IncEmp5', date(2026, 9, 1), date(2026, 9, 5))
+        self.assertAlmostEqual(pagado, 5 * valor_dia * 0.6667, delta=0.01)
+        self.assertLess(pagado, valor_dia * (2 + 3 * 0.6667) - 1)
+
+    def test_incapacidad_comun_pct_empleador_sale_del_parametro(self):
+        """El 66.67% de los días del empleador vive en l10n_co_pct_incapacidad_empleador
+        (hr.rule.parameter), separado del de la EPS: cambiarlo cambia solo esos días."""
+        valor = self.env.ref('l10n_co_nomina_electronica.rule_parameter_pct_incapacidad_empleador_2024')
+        valor.parameter_value = '50'
+        pagado, valor_dia = self._incapacidad_comun_pagada(
+            'IncEmpParam', date(2026, 9, 1), date(2026, 9, 4))
+        # 2 días del empleador al 50% + 2 días de la EPS al 66.67%
+        self.assertAlmostEqual(
+            pagado, valor_dia * (2 * 0.5 + 2 * 0.6667), delta=0.01)
 
     def test_incapacidad_laboral_sin_doble_pago(self):
         wage = 1800000.0

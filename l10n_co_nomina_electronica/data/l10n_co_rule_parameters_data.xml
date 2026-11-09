@@ -366,14 +366,36 @@ Valor vigente: <strong>720</strong>.</p></field>
         <field name="name">Colombia: Días Incapacidad a Cargo del Empleador</field>
         <field name="code">l10n_co_dias_incapacidad_empleador</field>
         <field name="country_id" ref="base.co"/>
-        <field name="description" type="html"><p>Primeros días de incapacidad por enfermedad general pagados al 100%
-por el empleador antes de que la EPS asuma el pago (Art. 227 CST).</p>
+        <field name="description" type="html"><p>Primeros días de incapacidad por enfermedad general a cargo del
+empleador antes de que la EPS asuma el pago (Decreto 780/2016, Art. 3.2.1.10, parágrafo 1:
+"Serán a cargo de los respectivos empleadores las prestaciones económicas correspondientes a los
+dos (2) primeros días de incapacidad originada por enfermedad general y de las Entidades
+Promotoras de Salud a partir del tercer (3) día"). El porcentaje que se paga en esos días está
+en <code>l10n_co_pct_incapacidad_empleador</code>.</p>
 <h3 class="mt-5">Cómo ingresar el valor</h3>
 <p>Escriba el número entero de días. Valor vigente: <strong>2</strong>.</p></field>
     </record>
     <record id="rule_parameter_dias_incapacidad_empleador_2024" model="hr.rule.parameter.value">
         <field name="parameter_value">2</field>
         <field name="rule_parameter_id" ref="rule_parameter_dias_incapacidad_empleador"/>
+        <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
+    </record>
+
+    <record id="rule_parameter_pct_incapacidad_empleador" model="hr.rule.parameter">
+        <field name="name">Colombia: % Incapacidad Días a Cargo del Empleador</field>
+        <field name="code">l10n_co_pct_incapacidad_empleador</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Porcentaje del salario que el empleador paga en los primeros días
+de incapacidad por enfermedad general (los de <code>l10n_co_dias_incapacidad_empleador</code>).
+H-013 paso 3 (2026-11-09, norma confirmada por David): antes se pagaban al 100%.</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>66.67</strong> para representar 66.67% (no 0.6667).
+Valor vigente: <strong>66.67</strong>.</p></field>
+    </record>
+    <record id="rule_parameter_pct_incapacidad_empleador_2024" model="hr.rule.parameter.value">
+        <field name="parameter_value">66.67</field>
+        <field name="rule_parameter_id" ref="rule_parameter_pct_incapacidad_empleador"/>
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
