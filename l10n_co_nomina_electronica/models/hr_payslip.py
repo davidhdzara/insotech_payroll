@@ -566,6 +566,44 @@ class HrPayslip(models.Model):
         )
         return True
 
+    # Deduccion (codigo de regla) -> campo del contrato con su tercero.
+    _NE_TERCERO_DEDUCCION_CONTRATO = {
+        'CO_SINDICATO': 'l10n_co_ne_sindicato_partner_id',
+        'CO_AFC': 'l10n_co_ne_afc_partner_id',
+        'CO_PENSION_VOL': 'l10n_co_ne_pension_voluntaria_partner_id',
+        'CO_PLAN_COMP': 'l10n_co_ne_plan_complementario_partner_id',
+        'CO_COOPERATIVA': 'l10n_co_ne_cooperativa_partner_id',
+        'CO_EDUCACION': 'l10n_co_ne_educacion_partner_id',
+    }
+
+    def _ne_validar_terceros_deducciones(self):
+        """Sin valores por defecto silenciosos: una deduccion calculada
+        (desde el contrato o desde un input manual) exige el contacto al que
+        se paga lo retenido, definido en el contrato."""
+        for slip in self:
+            for line in slip.line_ids:
+                campo = self._NE_TERCERO_DEDUCCION_CONTRATO.get(line.code)
+                if not campo or not line.total:
+                    continue
+                contract = slip.contract_id
+                if not contract[campo]:
+                    raise UserError(_(
+                        'La nomina "%(nomina)s" calcula la deduccion '
+                        '"%(regla)s", pero el contrato "%(contrato)s" no '
+                        'tiene el contacto de la entidad. Complete el campo '
+                        '"%(campo)s" en el contrato (pestana Deducciones '
+                        'Fijas).',
+                        nomina=slip.display_name,
+                        regla=line.name,
+                        contrato=contract.display_name,
+                        campo=contract._fields[campo].string,
+                    ))
+
+    def compute_sheet(self):
+        res = super().compute_sheet()
+        self._ne_validar_terceros_deducciones()
+        return res
+
     def action_payslip_done(self):
         """
         Sobrescribe la confirmación de la nómina para asignar el consecutivo
