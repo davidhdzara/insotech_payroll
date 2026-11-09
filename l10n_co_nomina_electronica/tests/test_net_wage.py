@@ -93,10 +93,12 @@ class TestNetWage(TransactionCase):
                 'name': code, 'contract_id': payslip.contract_id.id,
                 'employee_id': payslip.employee_id.id,
                 'quantity': 1.0, 'rate': 100.0, 'amount': 777000.0,
+                # hr.payslip.line.total es un Monetary plano, NO computado: lo escribe el motor
+                # de reglas en compute_sheet(); al crear la línea a mano hay que dárselo.
+                'total': 777000.0,
             })
-            # La línea se creó a mano: no hay garantía de que el disparador de dependencias
-            # (line_ids.total) haya marcado net_wage para recalcular antes de leerlo (en el
-            # servidor leyó 0.0 con invalidate_recordset). Se fuerza el recálculo explícito.
+            # Se fuerza el recálculo de net_wage por claridad (la causa del 0.0 era el total de
+            # la línea, no el disparador de dependencias).
             payslip.env.add_to_compute(payslip._fields['net_wage'], payslip)
             self.assertAlmostEqual(
                 payslip.net_wage, 777000.0, delta=0.01,
