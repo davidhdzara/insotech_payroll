@@ -42,6 +42,9 @@ class TestStructureTypeDefault(TransactionCase):
         compania.partner_id.country_id = self.env.ref('base.co').id
         empleado = self.env['hr.employee'].create({
             'name': 'Empleado Reasignación (.102)', 'company_id': compania.id,
+            # Método '10' (efectivo): el default '1' (Transferencia) exige cuenta bancaria
+            # (constraint _check_bank_account_for_transfer, H-021) y esta prueba no la necesita.
+            'l10n_co_ne_payment_method': '10',
         })
         contrato = self.env['hr.contract'].create({
             'name': 'Contrato Reasignación (.102)',
