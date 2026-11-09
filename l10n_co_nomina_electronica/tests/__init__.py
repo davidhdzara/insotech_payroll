@@ -27,3 +27,4 @@ from . import test_structure_type_default
 from . import test_arl_clase_riesgo
 from . import test_net_wage
 from . import test_contrato_etiquetas
+from . import test_nota_ajuste_eliminar

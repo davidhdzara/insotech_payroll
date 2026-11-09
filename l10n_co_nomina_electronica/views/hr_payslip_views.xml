@@ -48,6 +48,12 @@
                         class="btn-secondary"
                         invisible="l10n_co_ne_state != 'accepted' or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
+                <button name="action_create_elimination"
+                        string="Eliminar Documento"
+                        type="object"
+                        class="btn-secondary"
+                        invisible="l10n_co_ne_state != 'accepted' or state != 'done' or l10n_co_ne_is_adjustment"
+                        groups="hr_payroll.group_hr_payroll_manager"/>
 
             </xpath>
 
@@ -114,7 +120,8 @@
                                    decoration-info="l10n_co_ne_state == 'draft'"
                                    decoration-warning="l10n_co_ne_state in ('generated','sent','uncertain')"
                                    decoration-success="l10n_co_ne_state == 'accepted'"
-                                   decoration-danger="l10n_co_ne_state == 'rejected'"/>
+                                   decoration-danger="l10n_co_ne_state == 'rejected'"
+                                   decoration-muted="l10n_co_ne_state == 'eliminated'"/>
                             <field name="l10n_co_ne_xml_attachment_id"
                                    string="Archivo XML"
                                    readonly="1"/>
@@ -143,6 +150,9 @@
                                readonly="1"/>
                         <field name="l10n_co_ne_adjustment_ref_cune"
                                string="CUNE Nómina Original"
+                               readonly="l10n_co_ne_state != 'draft'"/>
+                        <field name="l10n_co_ne_adjustment_type"
+                               string="Tipo de Nota de Ajuste"
                                readonly="l10n_co_ne_state != 'draft'"/>
                     </group>
                     <group string="Solicitud DIAN">
@@ -193,7 +203,8 @@
                        decoration-info="l10n_co_ne_state == 'draft'"
                        decoration-warning="l10n_co_ne_state in ('generated','sent','uncertain')"
                        decoration-success="l10n_co_ne_state == 'accepted'"
-                       decoration-danger="l10n_co_ne_state == 'rejected'"/>
+                       decoration-danger="l10n_co_ne_state == 'rejected'"
+                       decoration-muted="l10n_co_ne_state == 'eliminated'"/>
                 <field name="l10n_co_ne_cune"
                        string="CUNE"
                        optional="hide"/>

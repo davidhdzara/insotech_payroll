@@ -130,6 +130,7 @@ class HrPayslip(models.Model):
             ('uncertain', 'Envío incierto - requiere conciliación'),
             ('accepted', 'Aceptado por DIAN'),
             ('rejected', 'Rechazado por DIAN'),
+            ('eliminated', 'Eliminado por nota de ajuste'),
         ],
         string='Estado DIAN',
         default='draft',
@@ -371,6 +372,18 @@ class HrPayslip(models.Model):
              'o eliminación) de una nómina electrónica previamente '
              'aceptada por la DIAN.',
     )
+    l10n_co_ne_adjustment_type = fields.Selection(
+        selection=[
+            ('1', 'Reemplazar'),
+            ('2', 'Eliminar'),
+        ],
+        string='Tipo de Nota de Ajuste',
+        default='1',
+        copy=False,
+        help='TipoNota del Anexo Técnico (5.5.8): Reemplazar sustituye el documento por uno '
+             'corregido; Eliminar lo retira "por errores contables o de procedimiento". La DIAN '
+             'no borra el documento original: solo lo marca como eliminado (H-001).',
+    )
     l10n_co_ne_hab_set_id = fields.Char(
         string='Set de Habilitación DIAN',
         copy=False,
@@ -608,6 +621,7 @@ class HrPayslip(models.Model):
             self.l10n_co_ne_state = 'accepted'
             if self.l10n_co_ne_consecutive:
                 self.number = self.l10n_co_ne_consecutive
+            self._ne_marcar_original_eliminado()
             self.message_post(
                 body=_(
                     'Nómina electrónica %s validada localmente en Modo '
@@ -657,6 +671,7 @@ class HrPayslip(models.Model):
             self.l10n_co_ne_state = 'accepted'
             if self.l10n_co_ne_consecutive:
                 self.number = self.l10n_co_ne_consecutive
+            self._ne_marcar_original_eliminado()
             _logger.info(
                 'Nómina electrónica %s ACEPTADA por DIAN (CUNE: %s)',
                 self.number or self.name,
@@ -768,11 +783,23 @@ class HrPayslip(models.Model):
 
         Solo disponible si la nómina fue aceptada por la DIAN.
         """
+        return self._ne_open_adjustment_form('1')
+
+    def action_create_elimination(self):
+        """Abre la nota de ajuste tipo Eliminar (H-001) del documento aceptado por la DIAN."""
+        return self._ne_open_adjustment_form('2')
+
+    def _ne_open_adjustment_form(self, tipo):
         self.ensure_one()
         if self.l10n_co_ne_state != 'accepted':
             raise UserError(_(
                 'Solo puede crear notas de ajuste para nóminas aceptadas '
                 'por la DIAN.'
+            ))
+        if self.l10n_co_ne_is_adjustment and tipo == '2':
+            raise UserError(_(
+                'Por ahora solo se pueden eliminar nóminas individuales originales, no notas '
+                'de ajuste.'
             ))
 
         return {
@@ -783,6 +810,7 @@ class HrPayslip(models.Model):
             'target': 'current',
             'context': {
                 'default_l10n_co_ne_is_adjustment': True,
+                'default_l10n_co_ne_adjustment_type': tipo,
                 'default_l10n_co_ne_adjustment_ref_cune': self.l10n_co_ne_cune,
                 'default_employee_id': self.employee_id.id,
                 'default_contract_id': self.contract_id.id,
@@ -1090,11 +1118,14 @@ class HrPayslip(models.Model):
                 )
                 # Una consulta pendiente/no identificada nunca degrada un
                 # accepted. Rechazo terminal individual sí queda registrado.
-                if valid and slip.l10n_co_ne_state != 'accepted':
+                # H-001: 'eliminated' tampoco se degrada -- la DIAN sigue respondiendo el
+                # veredicto viejo de aceptación del original al reconsultarlo.
+                if valid and slip.l10n_co_ne_state not in ('accepted', 'eliminated'):
                     slip.l10n_co_ne_state = 'accepted'
                     if slip.l10n_co_ne_consecutive:
                         slip.number = slip.l10n_co_ne_consecutive
-                elif not valid and is_rejection and slip.l10n_co_ne_state != 'accepted':
+                    slip._ne_marcar_original_eliminado()
+                elif not valid and is_rejection and slip.l10n_co_ne_state not in ('accepted', 'eliminated'):
                     slip.l10n_co_ne_state = 'rejected'
             summary = response.get('StatusDescription') or response.get('StatusMessage') or _('Sin respuesta')
             if set_level:
@@ -1417,8 +1448,12 @@ class HrPayslip(models.Model):
                 'CUNENov': self.l10n_co_ne_adjustment_ref_cune,
                 'value': True,
             }
-            data['tipo_nota'] = '1'  # Reemplazar by default
-            data['reemplazar'] = self._ne_reemplazar(data)
+            if self.l10n_co_ne_adjustment_type == '2':
+                data['tipo_nota'] = '2'
+                data['eliminar'] = self._ne_eliminar(data)
+            else:
+                data['tipo_nota'] = '1'
+                data['reemplazar'] = self._ne_reemplazar(data)
 
         return data
 
@@ -1710,6 +1745,51 @@ class HrPayslip(models.Model):
             if info is not None:
                 fecha = info.get('FechaGen', '')
         return pred.l10n_co_ne_consecutive or '', fecha
+
+    def _ne_eliminar(self, data):
+        """Sección <Eliminar> de la nota de ajuste (H-001, Anexo Técnico 5.5.8 TipoNota=2).
+
+        Solo lleva lo que el XSD admite dentro de <Eliminar>: predecesor, secuencia, lugar de
+        generación, proveedor, QR, información general, notas y empleador. NO lleva periodo,
+        trabajador, pago, devengados, deducciones ni totales. Sin CodigoTrabajador en la
+        secuencia (el XSD de Eliminar no lo admite)."""
+        numero_pred, fecha_gen_pred = self._ne_predecessor_values()
+        numero_secuencia = {
+            k: v for k, v in data['numero_secuencia'].items() if k != 'CodigoTrabajador'}
+        return {
+            'predecesor': {
+                'NumeroPred': numero_pred,
+                'CUNEPred': self.l10n_co_ne_adjustment_ref_cune or '',
+                'FechaGenPred': fecha_gen_pred,
+            },
+            'numero_secuencia': numero_secuencia,
+            'lugar_generacion': data['lugar_generacion'],
+            'proveedor_xml': data['proveedor_xml'],
+            'informacion_general': data['informacion_general'],
+            'empleador': data['empleador'],
+        }
+
+    def _ne_marcar_original_eliminado(self):
+        """H-001: cuando una nota de ajuste tipo Eliminar queda 'accepted', el documento
+        ORIGINAL pasa a 'eliminated'. La DIAN no borra el original ni invalida su CUNE: solo
+        lo marca con una observación (Anexo Técnico), así que el estado propio lo llevamos
+        aquí, para que reportes y conciliación no lo sigan viendo como "Aceptado por DIAN".
+        Se resuelve el original igual que _ne_predecessor_values(): por CUNE de referencia."""
+        for note in self:
+            if not (note.l10n_co_ne_is_adjustment and note.l10n_co_ne_adjustment_type == '2'
+                    and note.l10n_co_ne_state == 'accepted' and note.l10n_co_ne_adjustment_ref_cune):
+                continue
+            original = self.search([
+                ('l10n_co_ne_cune', '=', note.l10n_co_ne_adjustment_ref_cune),
+                ('l10n_co_ne_is_adjustment', '=', False),
+                ('company_id', '=', note.company_id.id),
+            ], limit=1)
+            if original and original.l10n_co_ne_state != 'eliminated':
+                original.l10n_co_ne_state = 'eliminated'
+                original.message_post(body=_(
+                    'La DIAN aceptó la nota de ajuste tipo Eliminar %(nota)s: este documento '
+                    'queda marcado como eliminado (la DIAN no lo borra, solo lo anota).',
+                    nota=note.l10n_co_ne_consecutive or note.name))
 
     def _ne_reemplazar(self, data):
         """Sección <Reemplazar> de la nota de ajuste, reutilizando ``data``."""
@@ -2720,6 +2800,14 @@ class HrPayslip(models.Model):
             raise UserError(_(
                 'Solo puede generar XML para nóminas en estado DIAN '
                 '"Borrador" o "Rechazado".'
+            ))
+
+        if self.l10n_co_ne_is_adjustment and self.l10n_co_ne_adjustment_type == '2':
+            raise UserError(_(
+                'La nota de ajuste tipo Eliminar todavía no puede generar XML: el Anexo Técnico '
+                '(numeral 8.1) no define con qué valores se calcula el CUNE de un documento '
+                'Eliminar (no lleva totales ni trabajador). Falta la definición normativa; '
+                'consúltela antes de habilitar este flujo.'
             ))
 
         company = self.company_id
