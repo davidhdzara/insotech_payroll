@@ -18,3 +18,4 @@ from . import hr_leave_ne
 from . import hr_salary_attachment
 from . import hr_contract_deductions
 from . import hr_contract_retefuente
+from . import l10n_co_pila_ciiu

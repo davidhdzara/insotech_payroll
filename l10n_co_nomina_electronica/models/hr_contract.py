@@ -12,7 +12,7 @@ Referencia: Anexo Técnico – Documento Soporte de Pago de Nómina Electrónica
 V1.0, sección 6.2.8, atributos TipoContrato y SalarioIntegral.
 """
 
-from odoo import fields, models
+from odoo import api, fields, models, _
 
 
 class HrContract(models.Model):
@@ -124,9 +124,12 @@ class HrContract(models.Model):
         string='Centro de Trabajo',
         help='Código del centro de trabajo para ARL.',
     )
-    l10n_co_pila_actividad_economica = fields.Char(
+    l10n_co_pila_actividad_economica = fields.Many2one(
+        'l10n.co.pila.ciiu',
         string='Actividad Económica ARL',
-        help='Código CIIU de la actividad económica para ARL.',
+        domain="['|', ('date_end', '=', False), ('date_end', '>=', context_today().strftime('%Y-%m-%d'))]",
+        help='Actividad económica del Decreto 768 de 2022 (busque por código o por descripción). '
+             'Al elegirla se propone la Clase de Riesgo ARL de esa actividad.',
     )
     l10n_co_pila_indicador_alto_riesgo = fields.Boolean(
         string='Alto Riesgo Pensional',
@@ -137,3 +140,27 @@ class HrContract(models.Model):
         string='Tarifa Especial AFP',
         help='Tarifa especial de AFP si aplica.',
     )
+
+    @api.onchange('l10n_co_pila_actividad_economica')
+    def _onchange_pila_actividad_economica(self):
+        """Propone la Clase de Riesgo de la actividad elegida; el campo sigue editable."""
+        actividad = self.l10n_co_pila_actividad_economica
+        if actividad:
+            self.l10n_co_pila_clase_riesgo = actividad.risk_class
+
+    @api.onchange('l10n_co_pila_clase_riesgo')
+    def _onchange_pila_clase_riesgo_vs_actividad(self):
+        """Avisa (sin bloquear) si la clase editada a mano no coincide con la de la actividad."""
+        actividad = self.l10n_co_pila_actividad_economica
+        if actividad and self.l10n_co_pila_clase_riesgo != actividad.risk_class:
+            etiquetas = dict(self._fields['l10n_co_pila_clase_riesgo'].selection)
+            return {'warning': {
+                'title': _('Clase de riesgo distinta a la de la actividad'),
+                'message': _(
+                    'La actividad %(actividad)s está clasificada en %(esperada)s, pero el contrato '
+                    'tiene %(actual)s. Puede guardar, pero verifique que sea correcto.',
+                    actividad=actividad.display_name,
+                    esperada=etiquetas.get(actividad.risk_class, actividad.risk_class),
+                    actual=etiquetas.get(self.l10n_co_pila_clase_riesgo, self.l10n_co_pila_clase_riesgo or ''),
+                ),
+            }}

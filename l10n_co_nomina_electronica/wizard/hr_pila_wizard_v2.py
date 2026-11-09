@@ -850,8 +850,8 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 or '') if getattr(
                 employee, 'l10n_co_pila_colombiano_exterior', False
             ) else '',
-            'actividad_economica_arl': getattr(
-                contract, 'l10n_co_pila_actividad_economica', '') or '',
+            'actividad_economica_arl': (
+                contract.l10n_co_pila_actividad_economica.code or ''),
         }
 
     # ──────────────────────────────────────────────────────────────────
