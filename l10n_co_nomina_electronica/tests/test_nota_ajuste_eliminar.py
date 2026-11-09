@@ -6,7 +6,7 @@ TipoNota=2).
   información general, notas, empleador), sin CodigoTrabajador, PeriodoNomina ni TipoMoneda.
 - El XML construido valida contra NominaIndividualDeAjusteElectronicaXSDV1.0.6.xsd.
 - Aceptada la nota Eliminar, el original pasa a 'eliminated'; 'eliminated' no se degrada.
-- El CUNE de Eliminar NO está definido en el Anexo: generar el XML levanta un UserError explícito.
+- CUNE de Eliminar: valores fijos del Anexo 8.1.1.4 (ValDev=ValDed=ValTol=0.00, DocEmp=0).
 """
 
 import base64
@@ -178,12 +178,32 @@ class TestNotaAjusteEliminar(TransactionCase):
         nota._ne_marcar_original_eliminado()
         self.assertEqual(original.l10n_co_ne_state, 'accepted')
 
-    def test_generar_xml_de_eliminar_levanta_usererror_por_cune_sin_definir(self):
+    def test_cune_de_eliminar_usa_los_valores_fijos_del_anexo(self):
+        """Anexo 8.1.1.4 (Opción Eliminar): ValDev=ValDed=ValTol=0.00 y DocEmp=0."""
+        nota = self._nota_eliminar(self._original_aceptado())
+        data = nota._collect_payslip_data()
+        self.assertEqual(nota._ne_cune_valores(data), {
+            'val_dev': '0.00', 'val_ded': '0.00', 'val_tol': '0.00', 'doc_trab': '0'})
+
+    def test_cune_de_reemplazar_y_nomina_individual_siguen_con_los_valores_del_documento(self):
+        original = self._original_aceptado()
+        for nota in (self._nota_eliminar(original, l10n_co_ne_adjustment_type='1'), self._payslip()):
+            data = nota._collect_payslip_data()
+            valores = nota._ne_cune_valores(data)
+            self.assertEqual(valores['val_dev'], data['totales']['DevengadosTotal'])
+            self.assertEqual(valores['val_tol'], data['totales']['ComprobanteTotal'])
+            self.assertEqual(valores['doc_trab'], nota.employee_id.identification_id)
+
+    def test_eliminar_ya_no_bloquea_los_prerequisitos_por_el_cune(self):
+        """La definición normativa del CUNE de Eliminar ya existe: _validate_ne_prerequisites
+        no debe rechazarlo por eso (puede rechazarlo por otras causas, p. ej. nómina sin
+        confirmar, pero no con el mensaje de "CUNE sin definir")."""
         nota = self._nota_eliminar(self._original_aceptado())
         nota.state = 'done'
-        with self.assertRaises(UserError) as exc:
+        try:
             nota._validate_ne_prerequisites()
-        self.assertIn('CUNE', str(exc.exception))
+        except UserError as e:
+            self.assertNotIn('todavía no puede generar XML', str(e))
 
     def test_no_se_puede_eliminar_una_nota_de_ajuste(self):
         original = self._original_aceptado()

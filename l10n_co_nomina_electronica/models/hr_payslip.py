@@ -514,15 +514,16 @@ class HrPayslip(models.Model):
 
         # Calcular CUNE (11 campos según Anexo Técnico, incluye Software-Pin)
         company = self.company_id
+        valores = self._ne_cune_valores(payslip_data)
         cune_value, _raw = cune_service.compute_cune(
             num_ne=self.l10n_co_ne_consecutive,
             fec_ne=payslip_data['informacion_general']['FechaGen'],
             hor_ne=payslip_data['informacion_general']['HoraGen'],
-            val_dev=payslip_data['totales']['DevengadosTotal'],
-            val_ded=payslip_data['totales']['DeduccionesTotal'],
-            val_tol=payslip_data['totales']['ComprobanteTotal'],
+            val_dev=valores['val_dev'],
+            val_ded=valores['val_ded'],
+            val_tol=valores['val_tol'],
             nit_ne=dian_utils.clean_nit(company.vat),
-            doc_trab=self.employee_id.identification_id or '',
+            doc_trab=valores['doc_trab'],
             cl_ne='103' if self.l10n_co_ne_is_adjustment else '102',
             software_pin=company.l10n_co_ne_operation_mode_ids.software_pin or '',
             tipo_amb=company.l10n_co_ne_environment or '2',
@@ -1769,6 +1770,24 @@ class HrPayslip(models.Model):
             'empleador': data['empleador'],
         }
 
+    def _ne_cune_valores(self, payslip_data):
+        """Valores variables del CUNE (ValDev, ValDed, ValTol, DocEmp), numeral 8.1.1.4 del Anexo.
+
+        Nómina individual y nota de ajuste Reemplazar: los totales y el documento del trabajador
+        del propio documento. Nota de ajuste Eliminar (H-001): el Anexo fija valores literales
+        -- ValDev=0.00, ValDed=0.00, ValTol=0.00 y DocEmp=0 -- porque ese documento no lleva
+        totales ni trabajador. El resto (NumNIAE, FecNIAE, HorNIAE, NitNIAE, TipoXML, TipAmb)
+        sale igual que en los otros documentos."""
+        self.ensure_one()
+        if self.l10n_co_ne_is_adjustment and self.l10n_co_ne_adjustment_type == '2':
+            return {'val_dev': '0.00', 'val_ded': '0.00', 'val_tol': '0.00', 'doc_trab': '0'}
+        return {
+            'val_dev': payslip_data['totales']['DevengadosTotal'],
+            'val_ded': payslip_data['totales']['DeduccionesTotal'],
+            'val_tol': payslip_data['totales']['ComprobanteTotal'],
+            'doc_trab': self.employee_id.identification_id or '',
+        }
+
     def _ne_marcar_original_eliminado(self):
         """H-001: cuando una nota de ajuste tipo Eliminar queda 'accepted', el documento
         ORIGINAL pasa a 'eliminated'. La DIAN no borra el original ni invalida su CUNE: solo
@@ -2800,14 +2819,6 @@ class HrPayslip(models.Model):
             raise UserError(_(
                 'Solo puede generar XML para nóminas en estado DIAN '
                 '"Borrador" o "Rechazado".'
-            ))
-
-        if self.l10n_co_ne_is_adjustment and self.l10n_co_ne_adjustment_type == '2':
-            raise UserError(_(
-                'La nota de ajuste tipo Eliminar todavía no puede generar XML: el Anexo Técnico '
-                '(numeral 8.1) no define con qué valores se calcula el CUNE de un documento '
-                'Eliminar (no lleva totales ni trabajador). Falta la definición normativa; '
-                'consúltela antes de habilitar este flujo.'
             ))
 
         company = self.company_id
