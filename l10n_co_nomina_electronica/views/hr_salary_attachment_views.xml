@@ -18,7 +18,15 @@
                 <field name="l10n_co_embargo_porcentaje"/>
             </field>
             <field name="date_start" position="after">
-                <field name="l10n_co_embargo_juzgado"/>
+                <field name="l10n_co_es_libranza" invisible="1"/>
+                <field name="l10n_co_es_embargo" invisible="1"/>
+                <field name="l10n_co_partner_id"
+                       required="l10n_co_es_libranza or l10n_co_es_embargo"
+                       options="{'no_create': True}"/>
+                <field name="l10n_co_embargo_juzgado"
+                       invisible="not l10n_co_embargo_juzgado"/>
+                <field name="l10n_co_saldo_pendiente"
+                       invisible="not l10n_co_es_libranza"/>
             </field>
         </field>
     </record>

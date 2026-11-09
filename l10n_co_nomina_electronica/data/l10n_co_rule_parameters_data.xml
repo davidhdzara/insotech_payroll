@@ -1227,4 +1227,22 @@ término fijo, que no tiene este piso.</p>
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
+
+    <record id="rule_parameter_pct_tope_libranzas" model="hr.rule.parameter">
+        <field name="name">Colombia: % Mínimo del Neto de Ley que Debe Quedar al Trabajador (Libranzas)</field>
+        <field name="code">l10n_co_pct_tope_libranzas</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Ley 1527 de 2012, Art. 3 num. 5: el trabajador no puede quedar con menos
+del 50% de su neto después de descuentos de ley (salud, pensión, retención en la fuente) tras las libranzas.
+El tope de descuento por libranzas es la suma de TODAS las libranzas activas del empleado:
+<code>0,5 x neto de ley - embargos</code> (lectura más protectora, Corte Constitucional T-629/2016).</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero (o decimal) del porcentaje, <strong>NO</strong> la fracción
+decimal equivalente: escriba <strong>50</strong> para representar 50% (no 0.5). Valor vigente: <strong>50</strong>.</p></field>
+    </record>
+    <record id="rule_parameter_pct_tope_libranzas_2012" model="hr.rule.parameter.value">
+        <field name="parameter_value">50</field>
+        <field name="rule_parameter_id" ref="rule_parameter_pct_tope_libranzas"/>
+        <field name="date_from" eval="datetime(2012, 7, 12).date()"/>
+    </record>
 </odoo>

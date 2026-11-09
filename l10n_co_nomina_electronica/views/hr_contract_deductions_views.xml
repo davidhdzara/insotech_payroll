@@ -13,7 +13,6 @@
                            name="deductions_main">
                         <group string="Deducciones Legales"
                                name="deductions_legal">
-                            <field name="l10n_co_ne_libranza"/>
                             <field name="l10n_co_ne_sindicato"/>
                             <field name="l10n_co_ne_sindicato_partner_id" options="{'no_create': True}"
                                    required="l10n_co_ne_sindicato &gt; 0"/>

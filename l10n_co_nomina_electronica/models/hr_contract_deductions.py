@@ -23,13 +23,8 @@ class HrContractDeductions(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # Deducciones Legales
     # ──────────────────────────────────────────────────────────────────
-    l10n_co_ne_libranza = fields.Monetary(
-        string='Libranza Mensual',
-        currency_field='currency_id',
-        help='Valor mensual de descuento por libranza. '
-             'Se aplica automaticamente en cada nomina. '
-             'Si se ingresa un valor manual en la nomina, este tiene prioridad.',
-    )
+    # Libranzas: ya no es un monto en el contrato; viven en Asignaciones
+    # Salariales (hr.salary.attachment, tipo Libranza), una por entidad.
     l10n_co_ne_sindicato = fields.Monetary(
         string='Cuota Sindical Mensual',
         currency_field='currency_id',

@@ -32,3 +32,4 @@ from . import test_consulta_estado_por_cune
 from . import test_actividad_economica_arl
 from . import test_terceros_entidades
 from . import test_terceros_deducciones_contrato
+from . import test_libranzas_tope

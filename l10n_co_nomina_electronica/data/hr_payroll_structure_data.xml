@@ -1117,20 +1117,6 @@ action_calculate_retention_procedure2() promedie los ultimos 12 meses reales al 
 fijo de Procedimiento 2 (Art. 384 ET). No aparece en el recibo ni afecta el neto.</field>
         </record>
 
-        <record id="hr_salary_rule_co_libranzas" model="hr.salary.rule">
-            <field name="name">Libranzas</field>
-            <field name="code">CO_LIBRANZAS</field>
-            <field name="sequence">120</field>
-            <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
-            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
-            <field name="condition_select">python</field>
-            <field name="condition_python">result = inputs.get('CO_LIBRANZAS') and inputs.get('CO_LIBRANZAS').amount > 0</field>
-            <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = -abs(inputs['CO_LIBRANZAS'].amount)</field>
-            <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">Libranza</field>
-        </record>
-
         <record id="hr_salary_rule_co_sindicato" model="hr.salary.rule">
             <field name="name">Cuota Sindical</field>
             <field name="code">CO_SINDICATO</field>
@@ -1190,7 +1176,7 @@ fijo de Procedimiento 2 (Art. 384 ET). No aparece en el recibo ni afecta el neto
         <record id="hr_salary_rule_co_embargo" model="hr.salary.rule">
             <field name="name">Embargo Fiscal</field>
             <field name="code">CO_EMBARGO</field>
-            <field name="sequence">125</field>
+            <field name="sequence">118</field>
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>

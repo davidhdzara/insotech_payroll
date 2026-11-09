@@ -599,7 +599,104 @@ class HrPayslip(models.Model):
                         campo=contract._fields[campo].string,
                     ))
 
+    # ──────────────────────────────────────────────────────────────────
+    # Libranzas (Ley 1527/2012) -- lineas en hr.salary.attachment
+    # ──────────────────────────────────────────────────────────────────
+    def _ne_libranzas_vigentes(self):
+        """Asignaciones salariales de libranza abiertas y vigentes en el
+        periodo, por antiguedad (date_start, id)."""
+        self.ensure_one()
+        return self.employee_id.salary_attachment_ids.filtered(
+            lambda a: a.state == 'open'
+            and a.other_input_type_id.code == 'L10N_CO_LIBRANZA'
+            and a.date_start <= self.date_to
+            and (not a.date_end or a.date_end >= self.date_from)
+        ).sorted(key=lambda a: (a.date_start, a.id))
+
+    def _ne_libranzas_aplican(self):
+        self.ensure_one()
+        return bool(self._ne_libranzas_vigentes())
+
+    def _ne_libranzas_calcular(self, neto_ley, embargo):
+        """Total a descontar por libranzas y su reparto por asignacion.
+
+        Tope sobre la SUMA de las libranzas (Ley 1527/2012, Art. 3 num. 5):
+            cupo = pct_tope x neto_de_ley - embargos   (pct = parametro)
+        Orden de imputacion (decision Tech Lead, principio general de
+        imputacion de pagos, Art. 1654 Codigo Civil): primero el saldo
+        pendiente de periodos anteriores, del mas antiguo al mas reciente, y
+        luego la cuota del periodo con el cupo que quede. Lo que no cabe en
+        el cupo no se pierde: queda como `deferred` y suma al saldo pendiente
+        de la asignacion al confirmar la nomina.
+        Persiste el reparto en l10n.co.payslip.tercero y devuelve el total.
+        """
+        self.ensure_one()
+        pct = self._rule_parameter('l10n_co_pct_tope_libranzas', self.date_from)
+        cupo = max(0.0, neto_ley * pct / 100.0 - embargo)
+        rows = {}
+        for att in self._ne_libranzas_vigentes():
+            if not att.l10n_co_partner_id:
+                raise UserError(_(
+                    'La libranza "%(libranza)s" del empleado %(empleado)s no '
+                    'tiene el contacto de la entidad. Complete "Juzgado / '
+                    'Entidad" en Asignaciones Salariales.',
+                    libranza=att.display_name, empleado=self.employee_id.name))
+            rows[att] = {'arrears_paid': 0.0, 'paid': 0.0, 'deferred': 0.0}
+        for att, r in rows.items():  # 1) atrasado, mas antiguo primero
+            r['arrears_paid'] = min(att.l10n_co_saldo_pendiente, cupo)
+            cupo -= r['arrears_paid']
+        for att, r in rows.items():  # 2) cuota del periodo con el cupo restante
+            cuota = att.monthly_amount
+            if att.has_total_amount:
+                cuota = min(cuota, max(
+                    0.0, att.remaining_amount - att.l10n_co_saldo_pendiente))
+            r['paid'] = min(cuota, cupo)
+            cupo -= r['paid']
+            r['deferred'] = cuota - r['paid']
+        Tercero = self.env['l10n.co.payslip.tercero'].sudo()
+        Tercero.search([('slip_id', '=', self.id), ('rule_code', '=', 'CO_LIBRANZAS'),
+                        ('applied', '=', False)]).unlink()
+        Tercero.create([{
+            'slip_id': self.id, 'rule_code': 'CO_LIBRANZAS',
+            'partner_id': att.l10n_co_partner_id.id, 'attachment_id': att.id,
+            'amount': r['arrears_paid'] + r['paid'],
+            'arrears_paid': r['arrears_paid'], 'deferred': r['deferred'],
+        } for att, r in rows.items()])
+        return sum(r['arrears_paid'] + r['paid'] for r in rows.values())
+
+    def _ne_aplicar_libranzas(self, revertir=False):
+        """Refleja (o revierte) lo descontado en pagado y saldo pendiente."""
+        signo = -1 if revertir else 1
+        for row in self.env['l10n.co.payslip.tercero'].sudo().search([
+                ('slip_id', 'in', self.ids), ('rule_code', '=', 'CO_LIBRANZAS'),
+                ('applied', '=', not revertir)]):
+            att = row.attachment_id
+            att.write({
+                'paid_amount': att.paid_amount + signo * row.amount,
+                'l10n_co_saldo_pendiente':
+                    att.l10n_co_saldo_pendiente + signo * (row.deferred - row.arrears_paid),
+            })
+            row.applied = not revertir
+            if not revertir and att.has_total_amount and not att.remaining_amount \
+                    and att.state == 'open' and att.employee_count == 1:
+                att.action_done()
+
+    def _ne_validar_terceros_attachments(self):
+        """Embargos y libranzas exigen el contacto (juzgado / entidad)."""
+        for slip in self:
+            for att in slip.salary_attachment_ids:
+                code = att.other_input_type_id.code
+                if (att.l10n_co_es_embargo or att.l10n_co_es_libranza) \
+                        and not att.l10n_co_partner_id:
+                    raise UserError(_(
+                        'La asignación salarial "%(att)s" (%(tipo)s) del '
+                        'empleado %(empleado)s no tiene "Juzgado / Entidad". '
+                        'Complételo en Asignaciones Salariales.',
+                        att=att.display_name, tipo=code,
+                        empleado=slip.employee_id.name))
+
     def compute_sheet(self):
+        self._ne_validar_terceros_attachments()
         res = super().compute_sheet()
         self._ne_validar_terceros_deducciones()
         return res
@@ -610,6 +707,7 @@ class HrPayslip(models.Model):
         temporal PRE-NOM al número del payslip en Odoo.
         """
         res = super(HrPayslip, self).action_payslip_done()
+        self._ne_aplicar_libranzas()
         for rec in self:
             company = rec.company_id
             if company.l10n_co_ne_pre_sequence_id:
@@ -2999,3 +3097,11 @@ class HrPayslip(models.Model):
         company = self.company_id
         nit = (company.vat or 'SIN_NIT').replace('-', '').strip()
         return 'ne_%s_%s.xml' % (nit, self.l10n_co_ne_consecutive or 'DRAFT')
+
+    def action_payslip_draft(self):
+        self._ne_aplicar_libranzas(revertir=True)
+        return super().action_payslip_draft()
+
+    def action_payslip_cancel(self):
+        self._ne_aplicar_libranzas(revertir=True)
+        return super().action_payslip_cancel()

@@ -14,9 +14,13 @@ sigue viviendo en la regla salarial CO_EMBARGO
 (data/hr_payroll_structure_data.xml), no en este modelo.
 """
 
-from odoo import api, fields, models
+from odoo import api, fields, models, _
+from odoo.exceptions import ValidationError
 
 _TOPE_CIVIL_CODE = 'L10N_CO_EMBARGO_CIVIL'
+L10N_CO_LIBRANZA_CODE = 'L10N_CO_LIBRANZA'
+L10N_CO_EMBARGO_CODES = (
+    'L10N_CO_EMBARGO_ALIMENTOS', 'L10N_CO_EMBARGO_COOPERATIVA', 'L10N_CO_EMBARGO_CIVIL')
 
 
 class HrSalaryAttachment(models.Model):
@@ -33,7 +37,44 @@ class HrSalaryAttachment(models.Model):
              'un estimado para la vista de lista y el cálculo de fecha '
              'estimada de cierre, no el valor autoritativo.',
     )
-    l10n_co_embargo_juzgado = fields.Char(string='Juzgado / Entidad')
+    l10n_co_partner_id = fields.Many2one(
+        'res.partner', string='Juzgado / Entidad', tracking=True,
+        help='Contacto al que se le paga lo descontado: el juzgado o '
+             'beneficiario del embargo, o la entidad de la libranza.',
+    )
+    l10n_co_embargo_juzgado = fields.Char(
+        string='Juzgado / Entidad (texto legado)',
+        help='Texto libre anterior al contacto. Solo se conserva para los '
+             'registros que no pudieron enlazarse a un contacto; complete '
+             '"Juzgado / Entidad" y deje este vacío.',
+    )
+    l10n_co_saldo_pendiente = fields.Monetary(
+        string='Saldo Pendiente (no descontado)', readonly=True, copy=False,
+        tracking=True,
+        help='Libranza: valor que no se pudo descontar por el tope del 50% '
+             'del neto de ley (Ley 1527/2012). No se pierde: se recupera en '
+             'las nóminas siguientes, primero lo atrasado y luego la cuota '
+             'del período, siempre respetando el tope.',
+    )
+    l10n_co_es_libranza = fields.Boolean(compute='_compute_l10n_co_tipo')
+    l10n_co_es_embargo = fields.Boolean(compute='_compute_l10n_co_tipo')
+
+    @api.depends('other_input_type_id.code')
+    def _compute_l10n_co_tipo(self):
+        for rec in self:
+            code = rec.other_input_type_id.code
+            rec.l10n_co_es_libranza = code == L10N_CO_LIBRANZA_CODE
+            rec.l10n_co_es_embargo = code in L10N_CO_EMBARGO_CODES
+
+    @api.constrains('employee_ids', 'other_input_type_id')
+    def _check_l10n_co_libranza_un_empleado(self):
+        for rec in self:
+            if rec.other_input_type_id.code == L10N_CO_LIBRANZA_CODE \
+                    and len(rec.employee_ids) > 1:
+                raise ValidationError(_(
+                    'La libranza "%s" debe tener un solo empleado: el saldo '
+                    'pendiente y lo pagado se llevan por empleado.',
+                    rec.display_name))
 
     @api.onchange('l10n_co_embargo_porcentaje')
     def _onchange_l10n_co_embargo_porcentaje(self):
