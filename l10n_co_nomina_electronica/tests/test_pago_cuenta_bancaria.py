@@ -15,7 +15,7 @@ rechaza el documento.
 
 from datetime import date
 
-from odoo.exceptions import ValidationError, UserError
+from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase
 
 from odoo.addons.l10n_co_nomina_electronica.services import nomina_xml_builder as builder
@@ -125,32 +125,37 @@ class TestPagoCuentaBancaria(TransactionCase):
         self.assertEqual(pago['NumeroCuenta'], '')
 
     def test_pago_sin_cuenta_y_transferencia_levanta_usererror(self):
-        """Medio Transferencia sin bank_account_id: UserError explícito, nunca
-        un Banco/NumeroCuenta vacíos enviados a la DIAN.
+        """Medio Transferencia sin bank_account_id: UserError explícito al armar <Pago>,
+        nunca un Banco/NumeroCuenta vacíos enviados a la DIAN.
 
-        .91 (hallazgo propio): esta combinación ya no se puede alcanzar por un
-        write()/create() normal -- el constraint del empleado (_check_bank_
-        account_for_transfer, el MISMO caso que prueba test_constraint_bank_
-        account_id_para_transferencia) la bloquea primero con ValidationError.
-        El UserError de _ne_pago() es una segunda defensa, pensada para un
-        estado que pudo quedar inconsistente antes de que ese constraint
-        existiera (ej. datos migrados) -- para poder probarlo hay que forzar
-        ese estado por SQL directo, igual que test_dian_status_recheck.py
-        hace con write_date, nunca alcanzable desde el ORM."""
+        H-021 (2026-11-09): el empleado SÍ puede quedar así (ya no hay constraint en
+        hr.employee), por eso se puede dejar por el ORM normal -- sin el UPDATE por SQL
+        que hacía falta mientras el constraint bloqueaba este estado."""
         payslip = self._make_payslip('SinCuentaTransferencia', payment_method='10')
-        self.env.cr.execute(
-            "UPDATE hr_employee SET l10n_co_ne_payment_method = '1' WHERE id = %s",
-            (payslip.employee_id.id,),
-        )
-        payslip.employee_id.invalidate_recordset(['l10n_co_ne_payment_method'])
+        payslip.employee_id.l10n_co_ne_payment_method = '1'
         with self.assertRaises(UserError) as exc:
             payslip._ne_pago()
         self.assertIn('SinCuentaTransferencia', str(exc.exception))
 
-    def test_constraint_bank_account_id_para_transferencia(self):
-        """El constraint del empleado (ajustado en UX-02) mira bank_account_id,
-        no el campo propio retirado."""
-        payslip = self._make_payslip('ConstraintCuenta', payment_method='10')
-        employee = payslip.employee_id
-        with self.assertRaises(ValidationError):
-            employee.l10n_co_ne_payment_method = '1'
+    def test_empleado_nuevo_transferencia_sin_cuenta_se_guarda(self):
+        """H-021: crear un empleado con los valores por defecto (Transferencia, sin cuenta
+        bancaria) NO debe fallar -- antes lo impedía el constraint de hr.employee."""
+        employee = self.env['hr.employee'].create({
+            'name': 'Empleado Nuevo Sin Cuenta', 'company_id': self.company.id,
+        })
+        self.assertEqual(employee.l10n_co_ne_payment_method, '1')
+        self.assertFalse(employee.bank_account_id)
+        # y cambiarlo después a Transferencia explícita tampoco falla
+        employee.l10n_co_ne_payment_method = '10'
+        employee.l10n_co_ne_payment_method = '1'
+
+    def test_validar_cuenta_transferencia_exige_solo_con_transferencia(self):
+        """La exigencia vive en hr.payslip._ne_validar_cuenta_transferencia(): con
+        Transferencia y sin cuenta falla; con Efectivo, o con cuenta, no."""
+        payslip = self._make_payslip('ValidaCuenta', payment_method='10')
+        payslip._ne_validar_cuenta_transferencia()  # efectivo: no falla
+        payslip.employee_id.l10n_co_ne_payment_method = '1'
+        with self.assertRaises(UserError):
+            payslip._ne_validar_cuenta_transferencia()
+        self._set_bank_account(payslip.employee_id, 'Banco Valida', '5544')
+        payslip._ne_validar_cuenta_transferencia()  # con cuenta: no falla

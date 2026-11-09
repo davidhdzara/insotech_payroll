@@ -355,20 +355,10 @@ class HrEmployee(models.Model):
                     employee.name,
                 ))
 
-    @api.constrains('l10n_co_ne_payment_method', 'bank_account_id')
-    def _check_bank_account_for_transfer(self):
-        """Valida que la cuenta bancaria esté informada si el pago es por transferencia.
-
-        UX-02 (2026-10-11): ahora mira el campo nativo bank_account_id en vez del
-        propio l10n_co_ne_bank_account (retirado)."""
-        for employee in self:
-            if (
-                employee.l10n_co_ne_payment_method == '1'
-                and not employee.bank_account_id
-            ):
-                raise ValidationError(_(
-                    'Debe informar la Cuenta Bancaria (Información privada) cuando '
-                    'el método de pago es Transferencia Bancaria. '
-                    'Empleado: %s',
-                    employee.name,
-                ))
+    # H-021 (2026-11-09): aquí vivía @api.constrains('l10n_co_ne_payment_method',
+    # 'bank_account_id') (_check_bank_account_for_transfer). Corría en CADA guardado, incluido
+    # el primero: como l10n_co_ne_payment_method tiene default '1' (Transferencia), un empleado
+    # nuevo no podía guardarse sin cuenta bancaria. La cuenta solo hace falta para armar el
+    # nodo <Pago> del XML, así que la exigencia vive donde se usa:
+    # hr.payslip._ne_validar_cuenta_transferencia(), llamada desde _ne_pago() y desde
+    # _validate_ne_prerequisites() (antes de gastar el consecutivo).

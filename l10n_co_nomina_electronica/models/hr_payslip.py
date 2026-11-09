@@ -1508,6 +1508,26 @@ class HrPayslip(models.Model):
             ))
         return codigo
 
+    def _ne_validar_cuenta_transferencia(self):
+        """H-021 (2026-11-09): única validación de "Transferencia exige cuenta bancaria".
+
+        Antes era un @api.constrains en hr.employee que corría en cada guardado y le impedía
+        guardar un empleado nuevo (el método por defecto es Transferencia). La cuenta solo
+        hace falta para armar <Pago>, así que se exige aquí, donde se usa. La llaman
+        _ne_pago() y _validate_ne_prerequisites() (esta última, antes de asignar el
+        consecutivo, para no gastar uno en un documento que no se puede armar)."""
+        self.ensure_one()
+        employee = self.employee_id
+        metodo = employee.l10n_co_ne_payment_method or '1'
+        if metodo == '1' and not employee.bank_account_id:
+            raise UserError(_(
+                'El empleado %(employee)s no tiene una Cuenta Bancaria configurada '
+                '(Información privada > Contacto privado) y el método de pago es '
+                'Transferencia Bancaria. Configure la cuenta o cambie el método de '
+                'pago antes de generar la nómina electrónica.',
+                employee=employee.name,
+            ))
+
     def _ne_pago(self):
         """Sección <Pago> del XML de nómina electrónica (UX-02, 2026-10-11, decisión de
         David + Tech Lead).
@@ -1543,14 +1563,7 @@ class HrPayslip(models.Model):
         employee = self.employee_id
         metodo = employee.l10n_co_ne_payment_method or '1'
         cuenta = employee.bank_account_id
-        if metodo == '1' and not cuenta:
-            raise UserError(_(
-                'El empleado %(employee)s no tiene una Cuenta Bancaria configurada '
-                '(Información privada > Contacto privado) y el método de pago es '
-                'Transferencia Bancaria. Configure la cuenta o cambie el método de '
-                'pago antes de generar la nómina electrónica.',
-                employee=employee.name,
-            ))
+        self._ne_validar_cuenta_transferencia()
         return {
             'Forma': '1',  # 1=Contado
             'Metodo': metodo,
@@ -2676,6 +2689,9 @@ class HrPayslip(models.Model):
                 'La nómina %s no tiene contrato asociado.',
                 self.number or self.name,
             ))
+
+        # H-021: antes de que action_generate_ne_xml() asigne el consecutivo.
+        self._ne_validar_cuenta_transferencia()
 
     def _validate_company_ne_config(self, company):
         """Valida la configuración de nómina electrónica de la empresa."""
