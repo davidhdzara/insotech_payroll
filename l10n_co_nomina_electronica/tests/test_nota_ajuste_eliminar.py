@@ -152,6 +152,13 @@ class TestNotaAjusteEliminar(TransactionCase):
         self.assertNotIn('TipoMoneda', info.attrib)
         secuencia = doc.find('.//{*}Eliminar/{*}NumeroSecuenciaXML')
         self.assertNotIn('CodigoTrabajador', secuencia.attrib)
+        # El builder deja UBLExtensions VACÍO: el <UBLExtension> real con la firma lo inserta
+        # xml_signer al firmar. Este test prueba la FORMA de <Eliminar>, no la firma, así que se
+        # agrega un UBLExtension mínimo (sin firma real) solo para satisfacer el XSD.
+        ubl = doc.find('{*}UBLExtensions')
+        ns_ext = etree.QName(ubl).namespace
+        extension = etree.SubElement(ubl, '{%s}UBLExtension' % ns_ext)
+        etree.SubElement(extension, '{%s}ExtensionContent' % ns_ext)
         esquema = etree.XMLSchema(etree.parse(_ruta_xsd()))
         esquema.validate(doc)
         errores = [str(e) for e in esquema.error_log]
