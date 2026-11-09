@@ -174,3 +174,65 @@ class HrSalaryRule(models.Model):
              'UGPP, separadas por punto y coma (;). Ejemplo: '
              '"510506;510527;520506".',
     )
+
+    # ──────────────────────────────────────────────────────────────────
+    # Tercero del asiento contable (contacto al que se paga lo causado)
+    # ──────────────────────────────────────────────────────────────────
+    l10n_co_tercero_origen = fields.Selection(
+        selection=[
+            ('employee_eps', 'EPS del empleado'),
+            ('employee_afp', 'AFP del empleado'),
+            ('employee_ccf', 'Caja de compensación del empleado'),
+            ('company_arl', 'ARL de la compañía'),
+            ('company_sena', 'SENA de la compañía'),
+            ('company_icbf', 'ICBF de la compañía'),
+            ('company_dian', 'DIAN (compañía)'),
+            ('contract_sindicato', 'Sindicato del contrato'),
+            ('contract_afc', 'Entidad AFC del contrato'),
+            ('contract_pension_voluntaria', 'Fondo de pensión voluntaria del contrato'),
+            ('contract_plan_complementario', 'Plan complementario del contrato'),
+            ('contract_cooperativa', 'Cooperativa del contrato'),
+            ('contract_educacion', 'Entidad de educación del contrato'),
+            ('distribution', 'Reparto por asignación salarial (embargos, libranzas)'),
+        ],
+        string='Tercero del Asiento',
+        help='De dónde sale el contacto (partner) de la línea del asiento '
+             'contable en la cuenta por pagar de esta regla. Vacío: la línea '
+             'se genera sin tercero.',
+    )
+
+    # Codigo de regla -> origen del tercero. Solo se escribe donde el campo
+    # esta vacio (no pisa lo que configure el usuario).
+    _L10N_CO_TERCERO_ORIGEN_POR_CODIGO = {
+        'CO_SALUD_EMP': 'employee_eps', 'CO_SALUD_CIA': 'employee_eps',
+        'CO_PENSION_EMP': 'employee_afp', 'CO_PENSION_CIA': 'employee_afp',
+        'CO_FSP': 'employee_afp',
+        'CO_CCF_CIA': 'employee_ccf',
+        'CO_ARL_CIA': 'company_arl',
+        'CO_SENA_CIA': 'company_sena', 'CO_ICBF_CIA': 'company_icbf',
+        'CO_RETEFUENTE': 'company_dian', 'CO_PRIMA_RETE': 'company_dian',
+        'CO_LIQ_RETE': 'company_dian', 'CO_BON_RETE': 'company_dian',
+        'CO_SINDICATO': 'contract_sindicato', 'CO_AFC': 'contract_afc',
+        'CO_PENSION_VOL': 'contract_pension_voluntaria',
+        'CO_PLAN_COMP': 'contract_plan_complementario',
+        'CO_COOPERATIVA': 'contract_cooperativa',
+        'CO_EDUCACION': 'contract_educacion',
+        'CO_EMBARGO': 'distribution', 'CO_LIBRANZAS': 'distribution',
+    }
+
+    @api.model
+    def _l10n_co_cargar_origen_tercero(self):
+        """Asigna el origen del tercero a las reglas del modulo (todas las
+        estructuras comparten codigo) que aun no lo tienen."""
+        for code, origen in self._L10N_CO_TERCERO_ORIGEN_POR_CODIGO.items():
+            self.search([
+                ('code', '=', code), ('l10n_co_tercero_origen', '=', False),
+            ]).write({'l10n_co_tercero_origen': origen})
+        return True
+
+    def _l10n_co_cuenta_pasivo(self):
+        """Cuenta por pagar de la regla: account_credit si existe (aportes
+        de empresa: gasto en debito, pasivo en credito); si no, account_debit
+        (deducciones: el monto negativo hace caer el pasivo en credito)."""
+        self.ensure_one()
+        return self.account_credit or self.account_debit

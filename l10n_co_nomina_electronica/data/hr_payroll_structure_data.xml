@@ -1189,62 +1189,14 @@ result = (inputs.get('CO_EMBARGO') and inputs.get('CO_EMBARGO').amount &gt; 0) o
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-# Embargo con topes legales Art. 155 CST (civil, 20% del excedente sobre
-# SMMLV) y Art. 156 CST (alimentos/cooperativa, 50% del salario). Ninguno
-# de los dos articulos fija un tope CONJUNTO cuando concurren varios
-# embargos -- cada uno opera de forma independiente por texto expreso del
-# CST (confirmado por David, normativa 2026-09-07).
-#
-# Pero existe un PISO jurisprudencial de minimo vital que si limita el
-# resultado agregado: Corte Constitucional T-864/14 (los descuentos
-# simultaneos -- embargos y libranzas -- no pueden dejar al trabajador
-# por debajo de lo necesario para su subsistencia) y Corte Suprema de
-# Justicia, Sala de Casacion Laboral, sentencia de febrero de 2026
-# ("ningun embargo puede dejar al trabajador sin el equivalente al
-# salario minimo para cubrir sus necesidades basicas, incluso cuando
-# existan deudas alimentarias que permitan llegar al 50%"). Esto aplica
-# incluso a UN SOLO embargo de alimentos en salarios bajos, no solo
-# cuando concurren varios tipos.
-#
-# Mecanismo (2026-09-07, confirmado por David): al concurrir varios
-# embargos, se aplican en orden de prelacion legal -- alimentos/
-# cooperativa (Art. 156) antes que civil/ordinario (Art. 155) -- y se
-# reduce el de menor prelacion hasta que el remanente (salario_neto -
-# total_embargado) no baje del SMMLV. El input manual CO_EMBARGO
-# (override de RRHH) tambien respeta este piso (2026-09-07, confirmado
-# via QA): la cita de la Corte Suprema no distingue el mecanismo del
-# descuento -- protege el remanente del trabajador sin importar si el
-# monto vino del calculo automatico o de un valor digitado a mano.
-#
-# Base = salario NETO (devengados - deducciones ya calculadas hasta aqui),
-# no el bruto -- mismo criterio que usa CO_NETO (categories['DEV'] + categories['DEDU']).
-# Limitacion conocida: CO_EMBARGO corre en sequence 125, antes de otras
-# deducciones (ej. CO_PLAN_COMP, sequence 126) -- este "neto" es el neto
-# hasta este punto del pipeline, no el neto final del periodo completo.
+# Topes Art. 155/156 CST, prelacion y piso de minimo vital (T-864/14, CSJ 2026):
+# la logica vive en hr.payslip._ne_embargos_calcular, que tambien persiste el
+# reparto por juzgado/beneficiario para el asiento contable. Base = salario
+# NETO de ley (esta regla corre antes de libranzas y deducciones voluntarias).
 _smmlv = payslip._rule_parameter('l10n_co_smmlv', payslip.date_from)
 _salario_neto = categories['DEV'] + categories['DEDU']
-_PRIORIDAD_EMBARGO = {
-    'L10N_CO_EMBARGO_ALIMENTOS': 0,
-    'L10N_CO_EMBARGO_COOPERATIVA': 1,
-    'L10N_CO_EMBARGO_CIVIL': 2,
-}
-_embargos_activos = employee.salary_attachment_ids.filtered(
-    lambda a: a.state == 'open' and a.other_input_type_id.code in _PRIORIDAD_EMBARGO)
-_embargos_ordenados = _embargos_activos.sorted(key=lambda a: _PRIORIDAD_EMBARGO.get(a.other_input_type_id.code, 99))
-_total_embargo = 0.0
-for embargo in _embargos_ordenados:
-    _monto_individual = embargo._l10n_co_compute_embargo_amount(
-        _salario_neto, _smmlv, payslip.date_from,
-        factor_embargo_civil=payslip._rule_parameter('l10n_co_factor_embargo_civil', payslip.date_from),
-        pct_tope_embargo_alimentos=payslip._rule_parameter('l10n_co_pct_tope_embargo_alimentos', payslip.date_from),
-    )
-    _espacio_antes_del_piso = max(0.0, (_salario_neto - _total_embargo) - _smmlv)
-    _total_embargo += min(_monto_individual, _espacio_antes_del_piso)
-if inputs.get('CO_EMBARGO') and inputs.get('CO_EMBARGO').amount &gt; 0:
-    _tope_minimo_vital = max(0.0, _salario_neto - _smmlv)
-    _monto_manual = min(inputs['CO_EMBARGO'].amount, _tope_minimo_vital)
-    _total_embargo = max(_total_embargo, _monto_manual)
-result = -abs(_total_embargo) if _total_embargo &gt; 0 else 0
+_manual = (inputs.get('CO_EMBARGO') and inputs.get('CO_EMBARGO').amount) or 0
+result = -payslip._ne_embargos_calcular(_salario_neto, _smmlv, _manual)
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">EmbargoFiscal</field>

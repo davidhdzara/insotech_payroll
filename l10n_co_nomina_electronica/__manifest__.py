@@ -1,6 +1,6 @@
 {
     'name': 'Colombia - Nómina',
-    'version': '18.0.3.0.122',
+    'version': '18.0.3.0.123',
     'category': 'Human Resources/Payroll',
     'countries': ['co'],
     'summary': 'Generación y envío de Nómina Electrónica a la DIAN (Resolución 000013 de 2021)',
@@ -63,6 +63,7 @@ Funcionalidades principales:
         'data/l10n_co_ausencias_data.xml',
         'data/hr_payroll_structure_special_data.xml',
         'data/hr_salary_rule_auto_deductions.xml',
+        'data/hr_salary_rule_tercero_origen.xml',
         'data/hr_retefuente_data.xml',
         'data/ir_cron_habilitacion.xml',
         'data/ir_cron_dian_status_recheck.xml',

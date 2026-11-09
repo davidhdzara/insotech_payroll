@@ -33,3 +33,5 @@ from . import test_actividad_economica_arl
 from . import test_terceros_entidades
 from . import test_terceros_deducciones_contrato
 from . import test_libranzas_tope
+from . import test_asiento_tercero
+from . import test_embargos_refactor

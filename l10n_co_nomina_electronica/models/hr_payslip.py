@@ -653,16 +653,71 @@ class HrPayslip(models.Model):
             r['paid'] = min(cuota, cupo)
             cupo -= r['paid']
             r['deferred'] = cuota - r['paid']
-        Tercero = self.env['l10n.co.payslip.tercero'].sudo()
-        Tercero.search([('slip_id', '=', self.id), ('rule_code', '=', 'CO_LIBRANZAS'),
-                        ('applied', '=', False)]).unlink()
-        Tercero.create([{
-            'slip_id': self.id, 'rule_code': 'CO_LIBRANZAS',
+        self._ne_guardar_reparto('CO_LIBRANZAS', [{
             'partner_id': att.l10n_co_partner_id.id, 'attachment_id': att.id,
             'amount': r['arrears_paid'] + r['paid'],
             'arrears_paid': r['arrears_paid'], 'deferred': r['deferred'],
         } for att, r in rows.items()])
         return sum(r['arrears_paid'] + r['paid'] for r in rows.values())
+
+    def _ne_guardar_reparto(self, rule_code, filas):
+        """Reemplaza el reparto por tercero (aun no aplicado) de una regla."""
+        self.ensure_one()
+        Tercero = self.env['l10n.co.payslip.tercero'].sudo()
+        Tercero.search([('slip_id', '=', self.id), ('rule_code', '=', rule_code),
+                        ('applied', '=', False)]).unlink()
+        Tercero.create([dict(f, slip_id=self.id, rule_code=rule_code) for f in filas])
+
+    # Prelacion legal de embargos: alimentos/cooperativa (Art. 156 CST) antes
+    # que civil/ordinario (Art. 155 CST).
+    _NE_PRIORIDAD_EMBARGO = {
+        'L10N_CO_EMBARGO_ALIMENTOS': 0,
+        'L10N_CO_EMBARGO_COOPERATIVA': 1,
+        'L10N_CO_EMBARGO_CIVIL': 2,
+    }
+
+    def _ne_embargos_calcular(self, salario_neto, smmlv, manual=0.0):
+        """Total de embargos a descontar y su reparto por asignacion.
+
+        Misma logica que tenia la regla CO_EMBARGO en linea: cada embargo con
+        su tope (Art. 155/156 CST), en orden de prelacion, reducido hasta que
+        el remanente no baje del SMMLV (piso de minimo vital). El input manual
+        `manual` tambien respeta el piso; como no tiene juzgado, si excede lo
+        que reparten las asignaciones con tercero se rechaza (sin tercero no
+        hay asiento por tercero).
+        """
+        self.ensure_one()
+        activos = self.employee_id.salary_attachment_ids.filtered(
+            lambda a: a.state == 'open'
+            and a.other_input_type_id.code in self._NE_PRIORIDAD_EMBARGO)
+        ordenados = activos.sorted(
+            key=lambda a: self._NE_PRIORIDAD_EMBARGO.get(a.other_input_type_id.code, 99))
+        factor = self._rule_parameter('l10n_co_factor_embargo_civil', self.date_from)
+        pct = self._rule_parameter('l10n_co_pct_tope_embargo_alimentos', self.date_from)
+        total = 0.0
+        filas = []
+        for emb in ordenados:
+            individual = emb._l10n_co_compute_embargo_amount(
+                salario_neto, smmlv, self.date_from,
+                factor_embargo_civil=factor, pct_tope_embargo_alimentos=pct)
+            espacio = max(0.0, (salario_neto - total) - smmlv)
+            aplicado = min(individual, espacio)
+            total += aplicado
+            filas.append({
+                'partner_id': emb.l10n_co_partner_id.id,
+                'attachment_id': emb.id, 'amount': aplicado})
+        if manual and manual > 0:
+            manual_topado = min(manual, max(0.0, salario_neto - smmlv))
+            if manual_topado > total + 0.005:
+                raise UserError(_(
+                    'El ajuste manual de embargo (%(manual).2f) de la nomina '
+                    '"%(nomina)s" excede lo que reparten las asignaciones '
+                    'salariales con juzgado/entidad (%(total).2f). Registre el '
+                    'embargo en Asignaciones Salariales con su "Juzgado / '
+                    'Entidad".',
+                    manual=manual_topado, nomina=self.display_name, total=total))
+        self._ne_guardar_reparto('CO_EMBARGO', filas)
+        return total
 
     def _ne_aplicar_libranzas(self, revertir=False):
         """Refleja (o revierte) lo descontado en pagado y saldo pendiente."""
@@ -700,6 +755,105 @@ class HrPayslip(models.Model):
         res = super().compute_sheet()
         self._ne_validar_terceros_deducciones()
         return res
+
+    # ──────────────────────────────────────────────────────────────────
+    # Asiento contable por tercero
+    # ──────────────────────────────────────────────────────────────────
+    _NE_TERCERO_ORIGEN_CAMPO = {
+        'employee_eps': ('employee_id', 'l10n_co_pila_eps_id'),
+        'employee_afp': ('employee_id', 'l10n_co_pila_afp_id'),
+        'employee_ccf': ('employee_id', 'l10n_co_pila_ccf_id'),
+        'company_arl': ('company_id', 'l10n_co_pila_arl_id'),
+        'company_sena': ('company_id', 'l10n_co_sena_partner_id'),
+        'company_icbf': ('company_id', 'l10n_co_icbf_partner_id'),
+        'company_dian': ('company_id', 'l10n_co_dian_partner_id'),
+        'contract_sindicato': ('contract_id', 'l10n_co_ne_sindicato_partner_id'),
+        'contract_afc': ('contract_id', 'l10n_co_ne_afc_partner_id'),
+        'contract_pension_voluntaria': ('contract_id', 'l10n_co_ne_pension_voluntaria_partner_id'),
+        'contract_plan_complementario': ('contract_id', 'l10n_co_ne_plan_complementario_partner_id'),
+        'contract_cooperativa': ('contract_id', 'l10n_co_ne_cooperativa_partner_id'),
+        'contract_educacion': ('contract_id', 'l10n_co_ne_educacion_partner_id'),
+    }
+
+    def _ne_repartos_tercero(self, line):
+        """[(partner, peso)] del tercero de una linea de nomina segun el
+        origen configurado en su regla. Sin tercero resoluble: UserError."""
+        origen = line.salary_rule_id.l10n_co_tercero_origen
+        if origen == 'distribution':
+            filas = self.env['l10n.co.payslip.tercero'].sudo().search([
+                ('slip_id', '=', self.id), ('rule_code', '=', line.code)])
+            filas = filas.filtered(lambda f: f.amount)
+            if any(not f.partner_id for f in filas):
+                raise UserError(_(
+                    'La nomina "%(nomina)s" tiene un reparto de "%(regla)s" '
+                    'sin contacto. Complete "Juzgado / Entidad".',
+                    nomina=self.display_name, regla=line.name))
+            if abs(sum(filas.mapped('amount')) - abs(line.total)) > 0.01:
+                raise UserError(_(
+                    'El reparto por tercero de "%(regla)s" (%(reparto).2f) no '
+                    'coincide con el valor de la linea (%(linea).2f) en la '
+                    'nomina "%(nomina)s". Recalcule la nomina.',
+                    regla=line.name, reparto=sum(filas.mapped('amount')),
+                    linea=abs(line.total), nomina=self.display_name))
+            return [(f.partner_id, f.amount) for f in filas]
+        modelo, campo = self._NE_TERCERO_ORIGEN_CAMPO[origen]
+        partner = self[modelo][campo]
+        if not partner:
+            raise UserError(_(
+                'No se puede generar el asiento de la nomina "%(nomina)s": '
+                'la regla "%(regla)s" paga a un tercero y falta el campo '
+                '"%(campo)s" en %(donde)s "%(nombre)s".',
+                nomina=self.display_name, regla=line.name,
+                campo=self[modelo]._fields[campo].string,
+                donde=self[modelo]._description, nombre=self[modelo].display_name))
+        return [(partner, 1.0)]
+
+    def _prepare_slip_lines(self, date, line_ids):
+        new_lines = super()._prepare_slip_lines(date, line_ids)
+        precision = self.company_id.currency_id.decimal_places
+        procesadas = []
+        for line in self.line_ids.filtered(lambda l: l.category_id):
+            regla = line.salary_rule_id
+            if not regla.l10n_co_tercero_origen or not line.total:
+                continue
+            cuenta = regla._l10n_co_cuenta_pasivo()
+            if not cuenta:
+                continue
+            if self.company_id.batch_payroll_move_lines:
+                raise UserError(_(
+                    'El asiento por tercero no es compatible con el ajuste '
+                    '"Agrupar líneas de asiento de nómina" (lote). '
+                    'Desactívelo para generar asientos de la nomina "%s".',
+                    self.display_name))
+            nombre = line.name if regla.split_move_lines else regla.name
+            candidatas = [
+                e for e in new_lines
+                if e['name'] == nombre and e['account_id'] == cuenta.id
+                and id(e) not in procesadas]
+            if not candidatas:
+                continue  # monto neteado a cero por el nativo
+            entrada = candidatas[0]
+            reparto = self._ne_repartos_tercero(line)
+            pesos = sum(p for _p, p in reparto)
+            if not pesos:
+                continue
+            posicion = new_lines.index(entrada)
+            nuevas = []
+            acum_d = acum_c = 0.0
+            for i, (partner, peso) in enumerate(reparto):
+                nueva = dict(entrada, partner_id=partner.id)
+                if i == len(reparto) - 1:
+                    nueva['debit'] = round(entrada['debit'] - acum_d, precision)
+                    nueva['credit'] = round(entrada['credit'] - acum_c, precision)
+                else:
+                    nueva['debit'] = round(entrada['debit'] * peso / pesos, precision)
+                    nueva['credit'] = round(entrada['credit'] * peso / pesos, precision)
+                acum_d += nueva['debit']
+                acum_c += nueva['credit']
+                nuevas.append(nueva)
+                procesadas.append(id(nueva))
+            new_lines[posicion:posicion + 1] = nuevas
+        return new_lines
 
     def action_payslip_done(self):
         """

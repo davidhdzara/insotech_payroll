@@ -17,6 +17,12 @@
                         </group>
                     </group>
 
+                    <group string="Asiento Contable" name="tercero_asiento">
+                        <group>
+                            <field name="l10n_co_tercero_origen"/>
+                        </group>
+                    </group>
+
                     <group string="Clasificación UGPP" name="ugpp_classification">
                         <group>
                             <field name="l10n_co_ugpp_payment_type"
