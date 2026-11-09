@@ -46,7 +46,7 @@
                  Odoo 18 prohíbe usar el atributo "string" como selector de
                  herencia de vistas ("View inheritance may not use attribute
                  'string' as a selector", reproducido por Tech Lead en el
-                 servidor) -- se ancla en el div id="localization_text" del
+                 servidor): se ancla en el div id="localization_text" del
                  botón nativo (el único id real y estable que existe ahí) y
                  se sube al <setting> ancestro. -->
             <xpath expr="//div[@id='localization_text']/ancestor::setting"
