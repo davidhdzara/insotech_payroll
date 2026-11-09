@@ -357,21 +357,35 @@ class ResCompany(models.Model):
         string='Tipo Aportante PILA',
         default='1',
     )
-    l10n_co_pila_arl_code = fields.Char(
-        string='Código ARL',
-        help='Código de la ARL según tabla de administradoras PILA (ej: 14-11).',
+    l10n_co_pila_arl_id = fields.Many2one(
+        'res.partner', string='ARL',
+        domain=[('l10n_co_entity_type', '=', 'arl')],
+        help='Contacto de la ARL a la que está afiliada la empresa. La '
+             'afiliación es de toda la compañía; el código PILA se toma del '
+             'contacto.',
     )
-    # Doc 11 (ficha consolidada): nombre legible de la ARL, a nivel de
-    # compañía -- no por empleado. La afiliación a ARL en Colombia es de
-    # toda la empresa, no individual (todos los empleados comparten la
-    # misma ARL); duplicar un campo de nombre por cada ficha de empleado
-    # obligaría a actualizar N registros si la empresa cambia de ARL.
+    l10n_co_pila_arl_code = fields.Char(
+        string='Código ARL', related='l10n_co_pila_arl_id.l10n_co_pila_entity_code',
+        help='Código PILA derivado del contacto de la ARL (ej: 14-11).',
+    )
     l10n_co_pila_arl_name = fields.Char(
-        string='Nombre ARL',
-        help='Nombre comercial de la Administradora de Riesgos Laborales '
-             'de la empresa (ej: "Positiva ARL", "Sura ARL"). Complementa '
-             'el Código ARL (código PILA) -- este campo es solo para '
-             'mostrar un nombre legible en pantalla.',
+        string='Nombre ARL', related='l10n_co_pila_arl_id.display_name',
+        help='Nombre del contacto de la ARL.',
+    )
+    l10n_co_sena_partner_id = fields.Many2one(
+        'res.partner', string='SENA',
+        domain=[('l10n_co_entity_type', '=', 'sena')],
+        help='Contacto al que se causa el aporte parafiscal al SENA.',
+    )
+    l10n_co_icbf_partner_id = fields.Many2one(
+        'res.partner', string='ICBF',
+        domain=[('l10n_co_entity_type', '=', 'icbf')],
+        help='Contacto al que se causa el aporte parafiscal al ICBF.',
+    )
+    l10n_co_dian_partner_id = fields.Many2one(
+        'res.partner', string='DIAN',
+        domain=[('l10n_co_entity_type', '=', 'dian')],
+        help='Contacto de la DIAN, tercero de la retención en la fuente.',
     )
     l10n_co_pila_forma_presentacion = fields.Selection(
         selection=[

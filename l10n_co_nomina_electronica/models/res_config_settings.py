@@ -98,8 +98,10 @@ class ResConfigSettings(models.TransientModel):
 
     # PILA
     l10n_co_pila_tipo_aportante = fields.Selection(related='company_id.l10n_co_pila_tipo_aportante', readonly=False)
-    l10n_co_pila_arl_code = fields.Char(related='company_id.l10n_co_pila_arl_code', readonly=False)
-    l10n_co_pila_arl_name = fields.Char(related='company_id.l10n_co_pila_arl_name', readonly=False)
+    l10n_co_pila_arl_id = fields.Many2one(related='company_id.l10n_co_pila_arl_id', readonly=False)
+    l10n_co_sena_partner_id = fields.Many2one(related='company_id.l10n_co_sena_partner_id', readonly=False)
+    l10n_co_icbf_partner_id = fields.Many2one(related='company_id.l10n_co_icbf_partner_id', readonly=False)
+    l10n_co_dian_partner_id = fields.Many2one(related='company_id.l10n_co_dian_partner_id', readonly=False)
     l10n_co_pila_forma_presentacion = fields.Selection(related='company_id.l10n_co_pila_forma_presentacion', readonly=False)
     l10n_co_pila_codigo_sucursal = fields.Char(related='company_id.l10n_co_pila_codigo_sucursal', readonly=False)
     l10n_co_pila_nombre_sucursal = fields.Char(related='company_id.l10n_co_pila_nombre_sucursal', readonly=False)

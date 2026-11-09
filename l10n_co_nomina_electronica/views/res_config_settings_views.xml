@@ -164,11 +164,17 @@
                         <setting string="Tipo Aportante PILA" help="Tipo de aportante según la tabla de la Planilla Integrada de Liquidación de Aportes (Empleador, Independiente, Entidad Promotora de Salud, etc.).">
                             <field name="l10n_co_pila_tipo_aportante"/>
                         </setting>
-                        <setting string="Código ARL" help="Código de la ARL a la que está afiliada la empresa, según la tabla de administradoras de riesgos laborales de PILA (ej: 14-11).">
-                            <field name="l10n_co_pila_arl_code"/>
+                        <setting string="ARL" help="Contacto de la ARL a la que está afiliada la empresa. El código PILA (ej: 14-11) se toma del contacto.">
+                            <field name="l10n_co_pila_arl_id" options="{'no_create': True}"/>
                         </setting>
-                        <setting string="Nombre ARL" help="Nombre comercial de la ARL (ej: &quot;Positiva ARL&quot;, &quot;Sura ARL&quot;) -- complementa el Código ARL con un nombre legible para pantallas de consulta.">
-                            <field name="l10n_co_pila_arl_name"/>
+                        <setting string="SENA" help="Contacto al que se causa el aporte parafiscal al SENA.">
+                            <field name="l10n_co_sena_partner_id" options="{'no_create': True}"/>
+                        </setting>
+                        <setting string="ICBF" help="Contacto al que se causa el aporte parafiscal al ICBF.">
+                            <field name="l10n_co_icbf_partner_id" options="{'no_create': True}"/>
+                        </setting>
+                        <setting string="DIAN" help="Contacto de la DIAN, tercero de la retención en la fuente.">
+                            <field name="l10n_co_dian_partner_id" options="{'no_create': True}"/>
                         </setting>
                         <setting string="Forma Presentación PILA" help="Forma de presentación de la planilla ante el operador: Único (un solo pago consolidado) o Sucursal (aportante que declara por sucursales separadas).">
                             <field name="l10n_co_pila_forma_presentacion"/>

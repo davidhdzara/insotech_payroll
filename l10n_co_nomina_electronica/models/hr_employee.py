@@ -268,17 +268,34 @@ class HrEmployee(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # PILA — Administradoras de Seguridad Social
     # ──────────────────────────────────────────────────────────────────
+    l10n_co_pila_eps_id = fields.Many2one(
+        'res.partner', string='EPS',
+        domain=[('l10n_co_entity_type', '=', 'eps')],
+        help='Contacto de la EPS del empleado. El código PILA se toma del '
+             'contacto.',
+    )
+    l10n_co_pila_afp_id = fields.Many2one(
+        'res.partner', string='AFP',
+        domain=[('l10n_co_entity_type', '=', 'afp')],
+        help='Contacto del Fondo de Pensiones del empleado. También es el '
+             'tercero del Fondo de Solidaridad Pensional.',
+    )
+    l10n_co_pila_ccf_id = fields.Many2one(
+        'res.partner', string='Caja de Compensación',
+        domain=[('l10n_co_entity_type', '=', 'ccf')],
+        help='Contacto de la Caja de Compensación Familiar del empleado.',
+    )
     l10n_co_pila_eps_code = fields.Char(
-        string='Código EPS',
-        help='Código de la EPS según tabla de administradoras PILA.',
+        string='Código EPS', related='l10n_co_pila_eps_id.l10n_co_pila_entity_code',
+        help='Código PILA derivado del contacto de la EPS.',
     )
     l10n_co_pila_afp_code = fields.Char(
-        string='Código AFP',
-        help='Código de la AFP (Fondo de Pensiones) según tabla PILA.',
+        string='Código AFP', related='l10n_co_pila_afp_id.l10n_co_pila_entity_code',
+        help='Código PILA derivado del contacto de la AFP.',
     )
     l10n_co_pila_ccf_code = fields.Char(
-        string='Código CCF',
-        help='Código de la Caja de Compensación Familiar según tabla PILA.',
+        string='Código CCF', related='l10n_co_pila_ccf_id.l10n_co_pila_entity_code',
+        help='Código PILA derivado del contacto de la Caja de Compensación.',
     )
     l10n_co_pila_afp_traslado = fields.Char(
         string='AFP Traslado',

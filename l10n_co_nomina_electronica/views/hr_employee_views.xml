@@ -57,9 +57,9 @@
 
                 <group string="PILA - Administradoras" name="pila_administradoras">
                     <group>
-                        <field name="l10n_co_pila_eps_code"/>
-                        <field name="l10n_co_pila_afp_code"/>
-                        <field name="l10n_co_pila_ccf_code"/>
+                        <field name="l10n_co_pila_eps_id" options="{'no_create': True}"/>
+                        <field name="l10n_co_pila_afp_id" options="{'no_create': True}"/>
+                        <field name="l10n_co_pila_ccf_id" options="{'no_create': True}"/>
                     </group>
                     <group>
                         <field name="l10n_co_pila_afp_traslado"/>

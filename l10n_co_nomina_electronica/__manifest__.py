@@ -1,6 +1,6 @@
 {
     'name': 'Colombia - Nómina',
-    'version': '18.0.3.0.116',
+    'version': '18.0.3.0.117',
     'category': 'Human Resources/Payroll',
     'countries': ['co'],
     'summary': 'Generación y envío de Nómina Electrónica a la DIAN (Resolución 000013 de 2021)',
@@ -85,6 +85,7 @@ Funcionalidades principales:
         # hr_salary_rule_views.xml -- su boton "Abrir Cuentas
         # Contables" referencia action_hr_salary_rule_account_ne,
         # definida ahi.
+        'views/res_partner_views.xml',
         'views/res_config_settings_views.xml',
         'views/hr_employee_views.xml',
         'views/hr_contract_views.xml',

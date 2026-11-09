@@ -256,8 +256,8 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         errors = []
         if not company.l10n_co_pila_arl_code:
             errors.append(
-                '- Compania: Falta configurar el codigo ARL '
-                '(Configuracion > Compania > PILA).'
+                '- Compania: Falta configurar la ARL (con su codigo PILA) '
+                '(Configuracion > Nomina > PILA).'
             )
         if not company.vat:
             errors.append(
@@ -278,7 +278,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             # Validar código EPS
             if not getattr(emp, 'l10n_co_pila_eps_code', None):
                 errors.append(
-                    '- %s: Falta codigo EPS.' % emp_name
+                    '- %s: Falta EPS o el contacto no tiene Codigo PILA.' % emp_name
                 )
 
             # Validar código AFP
@@ -288,13 +288,13 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                     emp, 'l10n_co_ne_foreigner_no_pension', False
                 ):
                     errors.append(
-                        '- %s: Falta codigo AFP.' % emp_name
+                        '- %s: Falta AFP o el contacto no tiene Codigo PILA.' % emp_name
                     )
 
             # Validar código CCF
             if not getattr(emp, 'l10n_co_pila_ccf_code', None):
                 errors.append(
-                    '- %s: Falta codigo CCF.' % emp_name
+                    '- %s: Falta CCF o el contacto no tiene Codigo PILA.' % emp_name
                 )
 
             # Validar número de identificación
