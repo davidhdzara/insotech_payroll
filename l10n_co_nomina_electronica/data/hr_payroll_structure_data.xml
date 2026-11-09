@@ -123,6 +123,20 @@
             <field name="country_id" ref="base.co"/>
         </record>
 
+        <!-- Estructura por defecto del tipo "Empleado Colombia" (.102, pedido de David):
+             sin esto, el campo nativo "Regular Pay Structure" (default_struct_id) del tipo
+             queda vacío y el usuario tiene que elegir la estructura a mano. Se escribe SOLO
+             sobre el tipo colombiano de este módulo (su propio xml-id), nunca sobre el
+             tipo genérico ni sobre el de otra localización - default_struct_id es un
+             campo plano de cada registro, sin default global (verificado en
+             hr_payroll/models/hr_payroll_structure_type.py por el Tech Lead, 2026-11-09).
+             Record parcial sobre el xmlid ya creado arriba (mismo patrón que
+             l10n_co_embargo_input_types_data.xml); este archivo es noupdate="0", así que
+             un -u lo aplica. -->
+        <record id="hr_payroll_structure_type_co" model="hr.payroll.structure.type">
+            <field name="default_struct_id" ref="hr_payroll_structure_co_nomina"/>
+        </record>
+
         <!-- ============================================================ -->
         <!--                                                                -->
         <!--  REGLAS SALARIALES — DEVENGADOS                               -->

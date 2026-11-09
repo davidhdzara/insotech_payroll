@@ -23,3 +23,4 @@ from . import test_ui_sin_colores_propios
 from . import test_certification_wizard_period
 from . import test_localizacion_nomina
 from . import test_migracion_payroll_package
+from . import test_structure_type_default
