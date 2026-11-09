@@ -97,3 +97,99 @@ class TestLibranzasTope(TransactionCase):
         for codigo in ('CO_SINDICATO', 'CO_AFC', 'CO_PENSION_VOL', 'CO_COOPERATIVA'):
             r = reglas.search([('code', '=', codigo), ('struct_id', '=', self.slip.struct_id.id)])
             self.assertLess(lib.sequence, r.sequence)
+
+
+class TestLibranzasNominaReal(TransactionCase):
+    """compute_sheet() sobre una nomina real: ejercita el amount_python_compute
+    de CO_LIBRANZAS (caso mas frecuente: libranza SIN embargo) y el orden
+    embargo -> libranza con ambos."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.company = cls.env['res.company'].create({'name': 'Compañía Prueba Libranzas Nómina'})
+        cls.env = cls.company.with_company(cls.company).env
+        cls.structure_type = cls.env['hr.payroll.structure.type'].create({
+            'name': 'Prueba Estructura Libranzas',
+            'country_id': cls.env.ref('base.co').id,
+        })
+        cls.structure = cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
+        cls.tipo_lib = cls.env.ref('l10n_co_nomina_electronica.input_l10n_co_libranza')
+        cls.tipo_emb = cls.env.ref('l10n_co_nomina_electronica.input_l10n_co_embargo_civil')
+        cls.entidad = cls.env['res.partner'].create({'name': 'Banco Nómina'})
+        cls.juzgado = cls.env['res.partner'].create({'name': 'Juzgado Nómina'})
+
+    def _payslip(self, name, wage=5000000.0):
+        employee = self.env['hr.employee'].create({
+            'name': name, 'company_id': self.company.id,
+            'l10n_co_ne_payment_method': '10'})
+        contract = self.env['hr.contract'].create({
+            'name': 'Contrato %s' % name, 'employee_id': employee.id,
+            'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
+            'wage': wage, 'date_start': '2024-01-01', 'state': 'open'})
+        return self.env['hr.payslip'].create({
+            'name': 'Nómina %s' % name, 'employee_id': employee.id,
+            'contract_id': contract.id, 'company_id': self.company.id,
+            'struct_id': self.structure.id,
+            'date_from': '2026-09-01', 'date_to': '2026-09-30'})
+
+    def _asignacion(self, slip, tipo, monto, partner, **extra):
+        vals = {
+            'description': 'Asignación %s' % tipo.code,
+            'employee_ids': [(6, 0, [slip.employee_id.id])],
+            'company_id': self.company.id, 'other_input_type_id': tipo.id,
+            'monthly_amount': monto, 'date_start': '2026-01-01',
+            'no_end_date': True, 'l10n_co_partner_id': partner.id}
+        vals.update(extra)
+        return self.env['hr.salary.attachment'].create(vals)
+
+    def _linea(self, slip, code):
+        return slip.line_ids.filtered(lambda l: l.code == code)
+
+    def test_libranza_sin_embargo_calcula_la_nomina(self):
+        slip = self._payslip('SoloLibranza')
+        att = self._asignacion(slip, self.tipo_lib, 300000.0, self.entidad)
+        slip.compute_sheet()
+        self.assertFalse(self._linea(slip, 'CO_EMBARGO'))
+        lib = self._linea(slip, 'CO_LIBRANZAS')
+        self.assertEqual(len(lib), 1)
+        self.assertAlmostEqual(lib.total, -300000.0, delta=0.01)
+        fila = self.env['l10n.co.payslip.tercero'].search([('slip_id', '=', slip.id)])
+        self.assertEqual(fila.attachment_id, att)
+        self.assertEqual(fila.partner_id, self.entidad)
+
+    def test_libranza_mayor_al_cupo_se_recorta_y_queda_saldo(self):
+        slip = self._payslip('LibranzaGrande')
+        att = self._asignacion(slip, self.tipo_lib, 4000000.0, self.entidad)
+        slip.compute_sheet()
+        lib = self._linea(slip, 'CO_LIBRANZAS')
+        fila = self.env['l10n.co.payslip.tercero'].search([('slip_id', '=', slip.id)])
+        self.assertAlmostEqual(-lib.total, fila.amount, delta=0.01)
+        self.assertLess(-lib.total, 4000000.0)
+        self.assertAlmostEqual(fila.amount + fila.deferred, 4000000.0, delta=0.01)
+        slip._ne_aplicar_libranzas()
+        self.assertAlmostEqual(att.l10n_co_saldo_pendiente, fila.deferred, delta=0.01)
+
+    def test_con_embargo_y_libranza_respeta_orden_y_tope(self):
+        slip = self._payslip('EmbargoYLibranza')
+        self._asignacion(slip, self.tipo_emb, 500000.0, self.juzgado)
+        self._asignacion(slip, self.tipo_lib, 4000000.0, self.entidad)
+        slip.compute_sheet()
+        emb = self._linea(slip, 'CO_EMBARGO')
+        lib = self._linea(slip, 'CO_LIBRANZAS')
+        self.assertTrue(emb and lib)
+        self.assertLess(emb.salary_rule_id.sequence, lib.salary_rule_id.sequence)
+        pct = slip._rule_parameter('l10n_co_pct_tope_libranzas', slip.date_from)
+        # cupo = pct x neto_ley - embargo; neto_ley = neto despues de ley (embargo aun sin restar)
+        fila = self.env['l10n.co.payslip.tercero'].search(
+            [('slip_id', '=', slip.id), ('rule_code', '=', 'CO_LIBRANZAS')])
+        self.assertAlmostEqual(-lib.total, fila.amount, delta=0.01)
+        self.assertLessEqual(-lib.total, pct / 100.0 * (self._neto_ley(slip, emb)) - (-emb.total) + 0.01)
+
+    def _neto_ley(self, slip, emb):
+        # categories['DEV'] + categories['DEDU'] al correr CO_LIBRANZAS ya incluye al embargo
+        dev = sum(l.total for l in slip.line_ids if l.category_id.code == 'DEV'
+                  and l.salary_rule_id.sequence < 119)
+        ded = sum(l.total for l in slip.line_ids
+                  if l.salary_rule_id.sequence < 119 and l.category_id.code in ('DEDU', 'SS_EMP'))
+        return dev + ded - emb.total
