@@ -126,3 +126,24 @@ class TestActividadEconomicaArl(TransactionCase):
         self.assertFalse(inexacto.l10n_co_pila_actividad_economica)
         # no pisa la clase de riesgo ya guardada
         self.assertEqual(exacto.l10n_co_pila_clase_riesgo, '1')
+
+
+class TestCatalogoCiiuDecreto768(TransactionCase):
+    """Contenido cargado desde data/l10n_co_pila_ciiu.xml (Anexo técnico del Decreto 768 de 2022,
+    fuente oficial depurada por David: 1.108 filas con 4 duplicados exactos = 1.104 actividades)."""
+
+    def test_se_cargaron_las_1104_actividades(self):
+        cargadas = self.env['ir.model.data'].search_count([
+            ('module', '=', 'l10n_co_nomina_electronica'),
+            ('model', '=', 'l10n.co.pila.ciiu'), ('name', '=like', 'ciiu_%')])
+        self.assertEqual(cargadas, 1104)
+
+    def test_clase_de_riesgo_es_el_primer_digito_del_codigo(self):
+        for xmlid_name in ('ciiu_2016101', 'ciiu_1131201', 'ciiu_5931201'):
+            actividad = self.env.ref('l10n_co_nomina_electronica.' + xmlid_name)
+            self.assertEqual(actividad.risk_class, actividad.code[0], xmlid_name)
+
+    def test_actividad_conocida_con_su_descripcion(self):
+        actividad = self.env.ref('l10n_co_nomina_electronica.ciiu_2016101')
+        self.assertEqual(actividad.risk_class, '2')
+        self.assertTrue(actividad.name.startswith('Actividades de apoyo a la agricultura'))
