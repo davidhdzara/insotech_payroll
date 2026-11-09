@@ -94,5 +94,11 @@ class TestNetWage(TransactionCase):
                 'employee_id': payslip.employee_id.id,
                 'quantity': 1.0, 'rate': 100.0, 'amount': 777000.0,
             })
-            payslip.invalidate_recordset(['net_wage'])
-            self.assertAlmostEqual(payslip.net_wage, 777000.0, delta=0.01, msg=code)
+            # La línea se creó a mano: no hay garantía de que el disparador de dependencias
+            # (line_ids.total) haya marcado net_wage para recalcular antes de leerlo (en el
+            # servidor leyó 0.0 con invalidate_recordset). Se fuerza el recálculo explícito.
+            payslip.env.add_to_compute(payslip._fields['net_wage'], payslip)
+            self.assertAlmostEqual(
+                payslip.net_wage, 777000.0, delta=0.01,
+                msg='%s | líneas: %s' % (code, [
+                    (l.code, l.total) for l in payslip.line_ids]))
