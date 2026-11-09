@@ -28,3 +28,4 @@ from . import test_arl_clase_riesgo
 from . import test_net_wage
 from . import test_contrato_etiquetas
 from . import test_nota_ajuste_eliminar
+from . import test_consulta_estado_por_cune

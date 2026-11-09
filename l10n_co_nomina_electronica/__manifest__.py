@@ -1,6 +1,6 @@
 {
     'name': 'Colombia - Nómina',
-    'version': '18.0.3.0.111',
+    'version': '18.0.3.0.112',
     'category': 'Human Resources/Payroll',
     'countries': ['co'],
     'summary': 'Generación y envío de Nómina Electrónica a la DIAN (Resolución 000013 de 2021)',
@@ -98,6 +98,7 @@ Funcionalidades principales:
         # Wizards
         'wizard/l10n_co_nomina_ugpp_wizard_views.xml',
         'wizard/hr_liquidacion_wizard_views.xml',
+        'wizard/l10n_co_ne_status_cune_wizard_views.xml',
         'wizard/hr_pila_wizard_v2_views.xml',
     ],
     'installable': True,
