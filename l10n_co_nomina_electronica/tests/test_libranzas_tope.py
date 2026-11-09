@@ -180,16 +180,20 @@ class TestLibranzasNominaReal(TransactionCase):
         self.assertTrue(emb and lib)
         self.assertLess(emb.salary_rule_id.sequence, lib.salary_rule_id.sequence)
         pct = slip._rule_parameter('l10n_co_pct_tope_libranzas', slip.date_from)
-        # cupo = pct x neto_ley - embargo; neto_ley = neto despues de ley (embargo aun sin restar)
         fila = self.env['l10n.co.payslip.tercero'].search(
             [('slip_id', '=', slip.id), ('rule_code', '=', 'CO_LIBRANZAS')])
         self.assertAlmostEqual(-lib.total, fila.amount, delta=0.01)
-        self.assertLessEqual(-lib.total, pct / 100.0 * (self._neto_ley(slip, emb)) - (-emb.total) + 0.01)
+        cupo = pct / 100.0 * self._neto_ley(slip, emb) - (-emb.total)
+        self.assertGreater(cupo, 0.0)
+        # la cuota (4.000.000) excede el cupo: el descuento es exactamente el cupo
+        self.assertAlmostEqual(-lib.total, cupo, delta=1.0)
 
     def _neto_ley(self, slip, emb):
-        # categories['DEV'] + categories['DEDU'] al correr CO_LIBRANZAS ya incluye al embargo
-        dev = sum(l.total for l in slip.line_ids if l.category_id.code == 'DEV'
-                  and l.salary_rule_id.sequence < 119)
-        ded = sum(l.total for l in slip.line_ids
-                  if l.salary_rule_id.sequence < 119 and l.category_id.code in ('DEDU', 'SS_EMP'))
-        return dev + ded - emb.total
+        """Neto despues de descuentos de ley, antes de embargos y libranzas:
+        lo que ven categories['DEV'] + categories['DEDU'] (incluye hijas) al
+        correr CO_LIBRANZAS, mas el embargo ya descontado."""
+        def en(line, codigo):
+            cat = line.category_id
+            return cat.code == codigo or cat.parent_id.code == codigo
+        previas = slip.line_ids.filtered(lambda l: l.salary_rule_id.sequence < 119)
+        return sum(l.total for l in previas if en(l, 'DEV') or en(l, 'DEDU')) - emb.total

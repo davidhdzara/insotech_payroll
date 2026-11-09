@@ -669,7 +669,7 @@ class HrPayslip(models.Model):
         signo = -1 if revertir else 1
         for row in self.env['l10n.co.payslip.tercero'].sudo().search([
                 ('slip_id', 'in', self.ids), ('rule_code', '=', 'CO_LIBRANZAS'),
-                ('applied', '=', not revertir)]):
+                ('applied', '=', revertir)]):
             att = row.attachment_id
             att.write({
                 'paid_amount': att.paid_amount + signo * row.amount,
