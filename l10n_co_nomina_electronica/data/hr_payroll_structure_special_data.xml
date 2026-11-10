@@ -576,6 +576,76 @@ Para contrato indefinido: no requiere ningun input, el calculo diferencia entre 
         </record>
 
         <!-- ==================== CO_LIQ_SALUD ==================== -->
+        <record id="hr_salary_rule_co_liq_dias_sp" model="hr.salary.rule">
+            <field name="name">Dias Cotizados Salud y Pension Liquidacion (interno)</field>
+            <field name="code">CO_DIAS_SP</field>
+            <field name="sequence">89</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_dias_cotizados()['sp']</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Dias del tramo del ultimo mes (ING/RET delimitan).</field>
+        </record>
+
+        <record id="hr_salary_rule_co_liq_ibc_salarial" model="hr.salary.rule">
+            <field name="name">IBC Salarial Liquidacion (interno)</field>
+            <field name="code">CO_IBC_SALARIAL</field>
+            <field name="sequence">90</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_salarial_liquidacion(categories, contract)</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Salario pendiente del tramo del ultimo mes.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_liq_ibc_remuneracion" model="hr.salary.rule">
+            <field name="name">IBC Remuneracion Base 40% Liquidacion (interno)</field>
+            <field name="code">CO_IBC_REMUN</field>
+            <field name="sequence">92</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_remuneracion(contract, result_rules['CO_IBC_SALARIAL']['total'])</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Remuneracion base de la regla del 40%.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_liq_ibc_pactados" model="hr.salary.rule">
+            <field name="name">IBC Pactados No Salariales Liquidacion (interno)</field>
+            <field name="code">CO_IBC_PACTADOS</field>
+            <field name="sequence">93</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_pactados(result_rules)</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Pagos no salariales por pacto.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_liq_ibc_sp" model="hr.salary.rule">
+            <field name="name">IBC Salud y Pension Liquidacion (interno)</field>
+            <field name="code">CO_IBC_SP</field>
+            <field name="sequence">94</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+_r = result_rules
+result = payslip._ne_ibc_limites(
+    _r['CO_IBC_SALARIAL']['total'], 0.0,
+    _r['CO_IBC_REMUN']['total'], _r['CO_IBC_PACTADOS']['total'], _r['CO_DIAS_SP']['total'])
+            </field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">IBC unico de salud y pension de la liquidacion (40%, piso y techo). Lo leen CO_LIQ_SALUD, CO_LIQ_PENSION y PILA.</field>
+        </record>
+
         <record id="hr_salary_rule_co_liq_salud" model="hr.salary.rule">
             <field name="name">Descuento Salud Liquidacion (4%)</field>
             <field name="code">CO_LIQ_SALUD</field>
@@ -587,9 +657,7 @@ Para contrato indefinido: no requiere ningun input, el calculo diferencia entre 
             <field name="amount_python_compute">
 # Descuento salud sobre IBC (devengados salariales)
 # En la liquidacion, el IBC incluye los salarios pendientes
-_ibc = categories['DEV_SAL']
-if contract.l10n_co_ne_integral_salary:
-    _ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+_ibc = result_rules['CO_IBC_SP']['total']  # IBC unico de la liquidacion (H-017b)
 result = -abs(_ibc * payslip._rule_parameter('l10n_co_pct_salud_empleado', payslip.date_from) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -611,9 +679,7 @@ result = not employee.l10n_co_ne_foreigner_no_pension
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Descuento pension sobre IBC
-_ibc = categories['DEV_SAL']
-if contract.l10n_co_ne_integral_salary:
-    _ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+_ibc = result_rules['CO_IBC_SP']['total']  # IBC unico de la liquidacion (H-017b)
 result = -abs(_ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', payslip.date_from) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>

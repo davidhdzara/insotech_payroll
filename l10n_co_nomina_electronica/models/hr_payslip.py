@@ -2700,6 +2700,17 @@ class HrPayslip(models.Model):
                 + self._ne_ibc_incap(
                     contract, result_rules, codigos=('CO_LIC_MAT', 'CO_LIC_PAT')))
 
+    def _ne_ibc_salarial_liquidacion(self, categories, contract):
+        """Parte salarial del IBC en la liquidacion: el salario pendiente del tramo
+        (DEV_SAL = CO_LIQ_SALARIOS) o, con salario integral, factor x salario. No cotizan
+        (CST Art. 127/128, Ley 1393): vacaciones compensadas, prima, cesantias, intereses
+        e indemnizacion."""
+        self.ensure_one()
+        if contract.l10n_co_ne_integral_salary:
+            return contract.wage * self._rule_parameter(
+                'l10n_co_factor_integral_salary', self.date_from)
+        return categories['DEV_SAL']
+
     def _ne_ibc_remuneracion(self, contract, salarial):
         """Base del 40%: remuneracion total. Integral: 100% del salario pactado."""
         if contract.l10n_co_ne_integral_salary:

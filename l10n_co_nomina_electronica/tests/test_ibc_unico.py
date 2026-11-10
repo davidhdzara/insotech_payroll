@@ -130,3 +130,29 @@ class TestIbcUnico(TransactionCase):
         slip.compute_sheet()
         factor = slip._rule_parameter('l10n_co_factor_integral_salary', slip.date_from)
         self.assertAlmostEqual(self._linea(slip, 'CO_IBC_SP').total, 20000000.0 * factor, delta=0.01)
+
+
+class TestIbcUnicoCiaYLiquidacion(TestIbcUnico):
+    """Commit 3a: los aportes patronales y la liquidacion leen el IBC unico."""
+
+    def test_aportes_patronales_usan_el_ibc_unico_no_el_bruto(self):
+        slip = self._payslip('Cia1', 1800000.0)   # con auxilio de transporte
+        slip.compute_sheet()
+        ibc = self._linea(slip, 'CO_IBC_SP').total
+        self.assertAlmostEqual(ibc, 1800000.0, delta=0.01)
+        pension = self._linea(slip, 'CO_PENSION_CIA')
+        pct = slip._rule_parameter('l10n_co_pct_pension_empleador', slip.date_from)
+        self.assertAlmostEqual(pension.total, ibc * pct / 100, delta=1.0)
+        arl = self._linea(slip, 'CO_ARL_CIA')
+        self.assertAlmostEqual(arl.total, self._linea(slip, 'CO_IBC_ARL').total * slip._ne_pct_arl() / 100, delta=1.0)
+        ccf = self._linea(slip, 'CO_CCF_CIA')
+        pct_ccf = slip._rule_parameter('l10n_co_pct_ccf', slip.date_from)
+        self.assertAlmostEqual(ccf.total, self._linea(slip, 'CO_IBC_PARAF').total * pct_ccf / 100, delta=1.0)
+
+    def test_aportes_patronales_con_piso_y_techo(self):
+        alto = self._payslip('Cia2', 60000000.0)
+        alto.compute_sheet()
+        self.assertAlmostEqual(
+            self._linea(alto, 'CO_PENSION_CIA').total,
+            25 * self._smmlv(alto) * alto._rule_parameter('l10n_co_pct_pension_empleador', alto.date_from) / 100,
+            delta=1.0)

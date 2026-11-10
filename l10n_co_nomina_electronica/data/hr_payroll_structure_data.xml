@@ -1437,16 +1437,12 @@ result = -payslip._ne_embargos_calcular(_salario_neto, _smmlv, _manual)
 # Criterio centralizado en res.company._is_exonerado_parafiscales --
 # unica fuente de verdad, compartida con CO_SENA_CIA/CO_ICBF_CIA y con
 # el wizard de PILA.
-ibc = categories['DEV_SAL']
-if contract.l10n_co_ne_integral_salary:
-    ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+ibc = result_rules['CO_IBC_SP']['total']  # IBC unico del recibo (H-017b)
 result = not employee.company_id._is_exonerado_parafiscales(ibc, payslip.date_from)
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = categories['DEV_SAL']
-if contract.l10n_co_ne_integral_salary:
-    ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+ibc = result_rules['CO_IBC_SP']['total']  # IBC unico del recibo (H-017b)
 result = ibc * payslip._rule_parameter('l10n_co_pct_salud_empleador', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
@@ -1463,9 +1459,7 @@ result = ibc * payslip._rule_parameter('l10n_co_pct_salud_empleador', payslip.da
             <field name="condition_python">result = not employee.l10n_co_ne_foreigner_no_pension</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = categories['DEV_SAL']
-if contract.l10n_co_ne_integral_salary:
-    ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+ibc = result_rules['CO_IBC_SP']['total']  # IBC unico del recibo (H-017b)
 result = ibc * payslip._rule_parameter('l10n_co_pct_pension_empleador', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
@@ -1485,9 +1479,7 @@ result = ibc * payslip._rule_parameter('l10n_co_pct_pension_empleador', payslip.
 # (l10n_co_pila_clase_riesgo) via payslip._ne_pct_arl(), que lee el hr.rule.parameter de esa
 # clase (Clase I: l10n_co_pct_arl_default; II a V: l10n_co_pct_arl_clase_N). Antes se usaba
 # siempre la Clase I. Decreto 768/2022 (clasificacion), Art. 2.2.4.3.5 Decreto 1072/2015 (tarifas).
-ibc = categories['DEV_SAL']
-if contract.l10n_co_ne_integral_salary:
-    ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+ibc = result_rules['CO_IBC_ARL']['total']  # IBC unico del recibo (H-017b)
 result = ibc * payslip._ne_pct_arl() / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
@@ -1503,9 +1495,7 @@ result = ibc * payslip._ne_pct_arl() / 100
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = categories['DEV_SAL']
-if contract.l10n_co_ne_integral_salary:
-    ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+ibc = result_rules['CO_IBC_PARAF']['total']  # IBC unico del recibo (H-017b)
 result = ibc * payslip._rule_parameter('l10n_co_pct_ccf', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
@@ -1525,16 +1515,12 @@ result = ibc * payslip._rule_parameter('l10n_co_pct_ccf', payslip.date_from) / 1
 # Criterio centralizado en res.company._is_exonerado_parafiscales --
 # unica fuente de verdad, compartida con CO_SALUD_CIA/CO_ICBF_CIA y con
 # el wizard de PILA.
-ibc = categories['DEV_SAL']
-if contract.l10n_co_ne_integral_salary:
-    ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+ibc = result_rules['CO_IBC_PARAF']['total']  # IBC unico del recibo (H-017b)
 result = not employee.company_id._is_exonerado_parafiscales(ibc, payslip.date_from)
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = categories['DEV_SAL']
-if contract.l10n_co_ne_integral_salary:
-    ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+ibc = result_rules['CO_IBC_PARAF']['total']  # IBC unico del recibo (H-017b)
 result = ibc * payslip._rule_parameter('l10n_co_pct_sena', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
@@ -1554,16 +1540,12 @@ result = ibc * payslip._rule_parameter('l10n_co_pct_sena', payslip.date_from) / 
 # Criterio centralizado en res.company._is_exonerado_parafiscales --
 # unica fuente de verdad, compartida con CO_SALUD_CIA/CO_SENA_CIA y con
 # el wizard de PILA.
-ibc = categories['DEV_SAL']
-if contract.l10n_co_ne_integral_salary:
-    ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+ibc = result_rules['CO_IBC_PARAF']['total']  # IBC unico del recibo (H-017b)
 result = not employee.company_id._is_exonerado_parafiscales(ibc, payslip.date_from)
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = categories['DEV_SAL']
-if contract.l10n_co_ne_integral_salary:
-    ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+ibc = result_rules['CO_IBC_PARAF']['total']  # IBC unico del recibo (H-017b)
 result = ibc * payslip._rule_parameter('l10n_co_pct_icbf', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
