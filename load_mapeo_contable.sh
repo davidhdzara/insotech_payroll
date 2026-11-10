@@ -38,7 +38,11 @@
 # ================================================================
 set -e
 
-odoo-bin shell -d guapante-staging-produccion-37396060 --no-http <<'PYEOF'
+# La base de datos es OBLIGATORIA (sin valor por defecto: este script COMMITEA).
+# Uso: ./load_mapeo_contable.sh <nombre_de_la_base>   (ej: guapante-staging-main-41537906)
+DB="${1:?Falta el nombre de la base de datos. Uso: $0 <base>}"
+
+odoo-bin shell -d "$DB" --no-http <<'PYEOF'
 env = self.env
 cr = env.cr
 company = env.user.company_id
