@@ -101,3 +101,119 @@ class TestLiquidacionTramoAusencias(TransactionCase):
             'LnrAgosto', date(2026, 8, 3), date(2026, 8, 7), leave_type=self.leave_type_lic_nr)
         self.assertEqual(slip._ne_dias_pagables(), 10)
         self.assertEqual(slip._ne_dias_sln(), 5)
+
+    # --- Pago de las ausencias del ultimo tramo (CO_LIQ_VAC_DISFRUTADAS / CO_LIQ_LIC_REM) ----
+    # Contrato $1.800.000: valor dia 60.000; tramo 1-15 de agosto = 15 dias comerciales.
+
+    def _liquidacion_con_ausencias(self, name, ausencias):
+        """ausencias = [(tipo, desde, hasta), ...] validadas antes de calcular la liquidacion."""
+        employee = self.env['hr.employee'].create({
+            'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
+        contract = self.env['hr.contract'].create({
+            'name': 'Contrato %s' % name, 'employee_id': employee.id,
+            'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
+            'wage': 1800000.0, 'date_start': date(2026, 1, 1), 'state': 'open'})
+        contract.generate_work_entries(date(2026, 1, 1), RETIRO)
+        for tipo, desde, hasta in ausencias:
+            leave = self.env['hr.leave'].create({
+                'employee_id': employee.id, 'holiday_status_id': tipo.id,
+                'request_date_from': desde, 'request_date_to': hasta})
+            leave.action_validate()
+        slip = self.env['hr.payslip'].create({
+            'name': 'Liquidación %s' % name, 'employee_id': employee.id,
+            'contract_id': contract.id, 'company_id': self.company.id,
+            'struct_id': self.liquidacion.id,
+            'date_from': contract.date_start, 'date_to': RETIRO})
+        slip.compute_sheet()
+        return slip
+
+    def _linea(self, slip, code):
+        return slip.line_ids.filtered(lambda l: l.code == code)
+
+    def test_vacaciones_disfrutadas_del_tramo_se_pagan_y_el_empleado_cobra_los_15_dias(self):
+        slip = self._liquidacion_con_ausencias(
+            'PagoVac', [(self.leave_type_vac, date(2026, 8, 3), date(2026, 8, 7))])
+        salarios = self._linea(slip, 'CO_LIQ_SALARIOS')
+        vac = self._linea(slip, 'CO_LIQ_VAC_DISFRUTADAS')
+        self.assertEqual((salarios.quantity, salarios.total), (10.0, 600000.0))
+        self.assertEqual(vac.quantity, 5.0)
+        self.assertAlmostEqual(vac.amount, 60000.0, places=2)
+        self.assertAlmostEqual(vac.total, 300000.0, places=2)
+        # Salario + vacaciones disfrutadas = 15 dias completos (sin la regla eran solo 600.000).
+        self.assertAlmostEqual(salarios.total + vac.total, 900000.0, places=2)
+
+    def test_vacaciones_de_meses_anteriores_no_generan_linea_de_pago(self):
+        slip = self._liquidacion_con_ausencias(
+            'SinPagoVac', [(self.leave_type_vac, date(2026, 3, 2), date(2026, 3, 6))])
+        self.assertFalse(self._linea(slip, 'CO_LIQ_VAC_DISFRUTADAS'))
+        self.assertEqual(self._linea(slip, 'CO_LIQ_SALARIOS').quantity, 15.0)
+
+    def test_licencia_remunerada_del_tramo_se_paga(self):
+        slip = self._liquidacion_con_ausencias(
+            'PagoLic', [(self.leave_type_lic_rem, date(2026, 8, 3), date(2026, 8, 7))])
+        lic = self._linea(slip, 'CO_LIQ_LIC_REM')
+        self.assertEqual(lic.quantity, 5.0)
+        self.assertAlmostEqual(lic.total, 300000.0, places=2)
+
+    def test_xml_solo_reporta_las_vacaciones_del_tramo(self):
+        """Marzo (ya declarada en su documento) y 3-7 de agosto (la que paga esta liquidacion):
+        el nodo VacacionesComunes trae solo la de agosto, con Cantidad 5 y Pago 300.000."""
+        slip = self._liquidacion_con_ausencias('XmlVac', [
+            (self.leave_type_vac, date(2026, 3, 2), date(2026, 3, 6)),
+            (self.leave_type_vac, date(2026, 8, 3), date(2026, 8, 7))])
+        devengados = {}
+        slip._dev_prestaciones(slip._group_lines_by_concept(), devengados)
+        items = devengados['Vacaciones']['VacacionesComunes']
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]['FechaInicio'], '2026-08-03')
+        self.assertEqual(items[0]['FechaFin'], '2026-08-07')
+        self.assertEqual(items[0]['Cantidad'], '5')
+        self.assertEqual(items[0]['Pago'], '300000.00')
+
+    def test_ibc_de_la_liquidacion_incluye_las_vacaciones_del_tramo(self):
+        """Sin nomina previa el ultimo IBC es el salario: 600.000 (10 dias) + 1.800.000/30 x 5."""
+        slip = self._liquidacion_con_ausencias(
+            'IbcVac', [(self.leave_type_vac, date(2026, 8, 3), date(2026, 8, 7))])
+        self.assertAlmostEqual(self._linea(slip, 'CO_IBC_SALARIAL').total, 900000.0, places=2)
+
+    def test_ibc_usa_el_ultimo_ibc_de_la_nomina_general_anterior(self):
+        """Con una nomina general confirmada (IBC 2.100.000 en julio): 600.000 + 2.100.000/30 x 5
+        = 950.000."""
+        employee = self.env['hr.employee'].create({
+            'name': 'IbcPrevio', 'company_id': self.company.id,
+            'l10n_co_ne_payment_method': '10'})
+        contract = self.env['hr.contract'].create({
+            'name': 'Contrato IbcPrevio', 'employee_id': employee.id,
+            'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
+            'wage': 1800000.0, 'date_start': date(2026, 1, 1), 'state': 'open'})
+        general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
+        previa = self.env['hr.payslip'].create({
+            'name': 'Nómina julio', 'employee_id': employee.id, 'contract_id': contract.id,
+            'company_id': self.company.id, 'struct_id': general.id,
+            'date_from': date(2026, 7, 1), 'date_to': date(2026, 7, 31)})
+        regla = self.env['hr.salary.rule'].search(
+            [('code', '=', 'CO_SS_BASE_IBC'), ('struct_id', '=', general.id)], limit=1)
+        self.env['hr.payslip.line'].create({
+            'slip_id': previa.id, 'salary_rule_id': regla.id, 'code': 'CO_SS_BASE_IBC',
+            'name': 'IBC', 'contract_id': contract.id, 'employee_id': employee.id,
+            'quantity': 1.0, 'rate': 100.0, 'amount': 2100000.0, 'total': 2100000.0})
+        previa.state = 'done'
+        contract.generate_work_entries(date(2026, 1, 1), RETIRO)
+        leave = self.env['hr.leave'].create({
+            'employee_id': employee.id, 'holiday_status_id': self.leave_type_vac.id,
+            'request_date_from': date(2026, 8, 3), 'request_date_to': date(2026, 8, 7)})
+        leave.action_validate()
+        slip = self.env['hr.payslip'].create({
+            'name': 'Liquidación IbcPrevio', 'employee_id': employee.id,
+            'contract_id': contract.id, 'company_id': self.company.id,
+            'struct_id': self.liquidacion.id, 'date_from': contract.date_start,
+            'date_to': RETIRO})
+        slip.compute_sheet()
+        self.assertAlmostEqual(self._linea(slip, 'CO_IBC_SALARIAL').total, 950000.0, places=2)
+
+    def test_las_reglas_nuevas_se_tratan_como_salario_para_embargos_y_libranzas(self):
+        for code in ('CO_LIQ_VAC_DISFRUTADAS', 'CO_LIQ_LIC_REM'):
+            regla = self.env['hr.salary.rule'].search(
+                [('code', '=', code), ('struct_id', '=', self.liquidacion.id)], limit=1)
+            self.assertTrue(regla, code)
+            self.assertEqual(regla.l10n_co_liq_tratamiento, 'salario')

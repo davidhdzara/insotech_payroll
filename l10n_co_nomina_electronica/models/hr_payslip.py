@@ -2662,6 +2662,15 @@ class HrPayslip(models.Model):
         return sum(self._ne_ausencia_habil(codigo, tramo_ini, tramo_fin)[0]
                    for codigo in sorted(codigos))
 
+    def _ne_ausencia_habil_tramo(self, work_entry_code):
+        """Ausencias en dias HABILES acotadas al tramo pagable del recibo: lo que este documento
+        paga y reporta. Un recibo de un solo mes: el periodo completo (igual que
+        _ne_ausencia_habil()); Liquidacion (date_from = inicio de contrato): solo el ultimo mes,
+        porque los meses anteriores ya se pagaron y reportaron en sus propios documentos."""
+        self.ensure_one()
+        tramo_ini, tramo_fin = self._ne_tramo_pagable_periodo()
+        return self._ne_ausencia_habil(work_entry_code, tramo_ini, tramo_fin)
+
     def _ne_ausencia_habil(self, work_entry_code, desde=None, hasta=None):
         """Única fuente de días HÁBILES (vía worked_days/hr.work.entry) para Vacaciones/
         LicenciaR/LicenciaNR (H-016, 2026-10-08, QA en staging -- NE0000000099).
@@ -2806,7 +2815,7 @@ class HrPayslip(models.Model):
         dias_ausencia, _detalle = self._ne_ausencia_calendario(work_entry_code)
         return self._ne_resolver_dias_novedad(dias_ausencia, input_code, inputs, work_entry_code)
 
-    def _ne_ultimo_ibc_anterior(self, contract):
+    def _ne_ultimo_ibc_anterior(self, contract, estructura=None, antes_de=None):
         """Último IBC de seguridad social confirmado antes de esta nómina (H-017a,
         2026-10-11, punto a del diseño -- decisión de David + Tech Lead).
 
@@ -2822,11 +2831,13 @@ class HrPayslip(models.Model):
         anterior tal cual, NUNCA un valor prorrateado al salario nuevo.
         """
         self.ensure_one()
+        # estructura / antes_de (opcionales): la liquidacion no tiene historial propio; su "ultimo
+        # IBC anterior" es el de la nomina general del contrato antes del tramo.
         payslip_anterior = self.env['hr.payslip'].search([
             ('contract_id', '=', contract.id),
-            ('struct_id', '=', self.struct_id.id),
+            ('struct_id', '=', (estructura or self.struct_id).id),
             ('state', '=', 'done'),
-            ('date_from', '<', self.date_from),
+            ('date_from', '<', antes_de or self.date_from),
         ], order='date_from desc', limit=1)
         if not payslip_anterior:
             return contract.wage
@@ -2895,7 +2906,24 @@ class HrPayslip(models.Model):
         if contract.l10n_co_ne_integral_salary:
             return contract.wage * self._rule_parameter(
                 'l10n_co_factor_integral_salary', self._ne_fecha_parametros()) * self._ne_factor_dias_integral()
-        return categories['DEV_SAL']
+        # Vacaciones disfrutadas y licencia remunerada del tramo (se pagan en CO_LIQ_VAC_DISFRUTADAS
+        # y CO_LIQ_LIC_REM): cotizan con el mismo criterio de _ne_ibc_salarial -- ultimo IBC
+        # anterior (de la nomina general, antes del tramo) prorrateado por dias.
+        ibc = categories['DEV_SAL']
+        tramo_ini = self._ne_tramo_pagable_periodo()[0]
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
+        ultimo_ibc = None
+        for work_entry_code in ('CO_VAC', 'CO_LIC_REM'):
+            dias = self._ne_ausencia_habil_tramo(work_entry_code)[0]
+            if dias > 0:
+                if ultimo_ibc is None:
+                    ultimo_ibc = self._ne_ultimo_ibc_anterior(
+                        contract,
+                        estructura=self.env.ref(
+                            'l10n_co_nomina_electronica.hr_payroll_structure_co_nomina'),
+                        antes_de=tramo_ini)
+                ibc += (ultimo_ibc / dias_mes) * dias
+        return ibc
 
     def _ne_ibc_remuneracion(self, contract, salarial):
         """Base del 40%: remuneracion total. Integral: 100% del salario pactado."""
@@ -3136,7 +3164,7 @@ class HrPayslip(models.Model):
                 # (_ne_ausencia_habil()), no días calendario puros
                 # (_get_overlapping_leaves_data(), causa real del defecto reportado por QA
                 # en NE0000000099).
-                dias_totales, detalle = self._ne_ausencia_habil('CO_VAC')
+                dias_totales, detalle = self._ne_ausencia_habil_tramo('CO_VAC')
                 if detalle:
                     items = []
                     total_pago = sum(l.total for l in vac_comunes)
@@ -3309,7 +3337,7 @@ class HrPayslip(models.Model):
         }
         for xml_key, work_entry_code in licencia_concepts.items():
             concept_key = xml_key
-            dias_totales, detalle = self._ne_ausencia_habil(work_entry_code)
+            dias_totales, detalle = self._ne_ausencia_habil_tramo(work_entry_code)
 
             if detalle:
                 items = []

@@ -242,6 +242,7 @@ class HrSalaryRule(models.Model):
         'CO_LIQ_SALARIOS': 'salario', 'CO_LIQ_VACACIONES': 'vacaciones',
         'CO_LIQ_PRIMA': 'prestacion', 'CO_LIQ_CESANTIAS': 'prestacion',
         'CO_LIQ_INT_CES': 'prestacion', 'CO_LIQ_INDEMNIZACION': 'indemnizacion',
+        'CO_LIQ_VAC_DISFRUTADAS': 'salario', 'CO_LIQ_LIC_REM': 'salario',
     }
 
     # Codigo de regla (identificador interno del modulo, no un valor

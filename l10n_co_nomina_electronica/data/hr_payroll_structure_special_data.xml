@@ -436,6 +436,58 @@ result_qty = _dias
             <field name="l10n_co_ugpp_payment_type">tp_prestaciones</field>
         </record>
 
+        <!-- ==================== CO_LIQ_VAC_DISFRUTADAS ==================== -->
+        <record id="hr_salary_rule_co_liq_vac_disfrutadas" model="hr.salary.rule">
+            <field name="name">Vacaciones Disfrutadas</field>
+            <field name="code">CO_LIQ_VAC_DISFRUTADAS</field>
+            <field name="sequence">35</field>
+            <field name="category_id" ref="hr_salary_rule_category_vacaciones"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">
+# Dias habiles de esta ausencia dentro del tramo del ultimo mes (los de meses anteriores ya se
+# pagaron en su nomina) -- misma fuente con la que _ne_dias_pagables() los resta del sueldo.
+result = payslip._ne_ausencia_habil_tramo('CO_VAC')[0] &gt; 0
+            </field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+# Valor dia x dias habiles de la ausencia en el tramo (como CO_VAC de la nomina general).
+_dias = payslip._ne_ausencia_habil_tramo('CO_VAC')[0]
+result = contract.wage / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_to)
+result_qty = _dias
+            </field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">VacacionesComunes</field>
+            <field name="l10n_co_ugpp_payment_type">tp_vacaciones</field>
+            <field name="note">Vacaciones disfrutadas dentro del ultimo tramo del contrato (ausencias validadas de tipo Vacaciones Disfrutadas). Se pagan como salario ordinario; los dias del tramo ya no se descuentan dos veces ni se pierden. Las de meses anteriores ya se pagaron en su nomina.</field>
+        </record>
+
+        <!-- ==================== CO_LIQ_LIC_REM ==================== -->
+        <record id="hr_salary_rule_co_liq_lic_rem" model="hr.salary.rule">
+            <field name="name">Licencia Remunerada</field>
+            <field name="code">CO_LIQ_LIC_REM</field>
+            <field name="sequence">36</field>
+            <field name="category_id" ref="hr_salary_rule_category_vacaciones"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">
+# Dias habiles de esta ausencia dentro del tramo del ultimo mes (los de meses anteriores ya se
+# pagaron en su nomina) -- misma fuente con la que _ne_dias_pagables() los resta del sueldo.
+result = payslip._ne_ausencia_habil_tramo('CO_LIC_REM')[0] &gt; 0
+            </field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+# Valor dia x dias habiles de la ausencia en el tramo (como CO_LIC_REM de la nomina general).
+_dias = payslip._ne_ausencia_habil_tramo('CO_LIC_REM')[0]
+result = contract.wage / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_to)
+result_qty = _dias
+            </field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">LicenciaR</field>
+            <field name="l10n_co_ugpp_payment_type">tp_licencia_remunerada</field>
+            <field name="note">Licencia remunerada dentro del ultimo tramo del contrato, a cargo del empleador. Las de meses anteriores ya se pagaron en su nomina.</field>
+        </record>
+
         <!-- ==================== CO_LIQ_VACACIONES ==================== -->
         <record id="hr_salary_rule_co_liq_vacaciones" model="hr.salary.rule">
             <field name="name">Vacaciones Compensadas</field>
