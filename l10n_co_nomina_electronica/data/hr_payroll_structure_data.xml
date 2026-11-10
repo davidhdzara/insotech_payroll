@@ -821,7 +821,7 @@ result = inputs['CO_INT_CES'].amount
 # ver _ne_ibc_seguridad_social(). Alcance H-017a: solo esta regla y
 # CO_PENSION_EMP/CO_FSP. Las 6 reglas patronales (CIA) y PILA/UGPP quedan
 # para H-017b -- no cambian aqui.
-ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); SLN lo asume el empleador
+ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); en SLN el trabajador no paga su cuota ni nadie la asume
 result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_salud_empleado', payslip.date_from) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -843,7 +843,7 @@ result = not employee.l10n_co_ne_foreigner_no_pension
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
-ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); SLN lo asume el empleador
+ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); en SLN el trabajador no paga su cuota ni nadie la asume
 result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', payslip.date_from) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -863,7 +863,7 @@ result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', pays
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
 SMMLV = payslip._rule_parameter('l10n_co_smmlv', payslip.date_from)
 _umbral_base = payslip._rule_parameter('l10n_co_fsp_umbral_base', payslip.date_from)
-ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); SLN lo asume el empleador
+ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); en SLN el trabajador no paga su cuota ni nadie la asume
 result = ibc &gt;= SMMLV * _umbral_base
             </field>
             <field name="amount_select">code</field>
@@ -873,7 +873,7 @@ result = ibc &gt;= SMMLV * _umbral_base
 # desde fsp_umbral_tier1 SMMLV (tramos de subsistencia).
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
 SMMLV = payslip._rule_parameter('l10n_co_smmlv', payslip.date_from)
-ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); SLN lo asume el empleador
+ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); en SLN el trabajador no paga su cuota ni nadie la asume
 
 _pct_base = payslip._rule_parameter('l10n_co_fsp_pct_base', payslip.date_from) / 100
 _umbral_t1 = payslip._rule_parameter('l10n_co_fsp_umbral_tier1', payslip.date_from)
@@ -1437,13 +1437,20 @@ result = -payslip._ne_embargos_calcular(_salario_neto, _smmlv, _manual)
 # Criterio centralizado en res.company._is_exonerado_parafiscales --
 # unica fuente de verdad, compartida con CO_SENA_CIA/CO_ICBF_CIA y con
 # el wizard de PILA.
-ibc = result_rules['CO_IBC_SP']['total']  # IBC unico del recibo (H-017b)
-result = not employee.company_id._is_exonerado_parafiscales(ibc, payslip.date_from)
+# SLN: la base de continuidad NO es remuneracion devengada, asi que la exoneracion no la
+# cubre (Art. 114-1 ET): el 8.5% patronal sobre la base SLN se paga siempre.
+ibc_sp = result_rules['CO_IBC_SP']['total']
+ibc_sln = result_rules['CO_IBC_SLN']['total']
+exonerado = employee.company_id._is_exonerado_parafiscales(max(0.0, ibc_sp - ibc_sln), payslip.date_from)
+result = ibc_sln > 0 or not exonerado
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = result_rules['CO_IBC_SP']['total']  # IBC unico del recibo (H-017b)
-result = ibc * payslip._rule_parameter('l10n_co_pct_salud_empleador', payslip.date_from) / 100
+ibc_sp = result_rules['CO_IBC_SP']['total']
+ibc_sln = result_rules['CO_IBC_SLN']['total']
+exonerado = employee.company_id._is_exonerado_parafiscales(max(0.0, ibc_sp - ibc_sln), payslip.date_from)
+base = ibc_sln + (0.0 if exonerado else max(0.0, ibc_sp - ibc_sln))
+result = base * payslip._rule_parameter('l10n_co_pct_salud_empleador', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
             <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
@@ -1459,7 +1466,11 @@ result = ibc * payslip._rule_parameter('l10n_co_pct_salud_empleador', payslip.da
             <field name="condition_python">result = not employee.l10n_co_ne_foreigner_no_pension</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc = result_rules['CO_IBC_SP']['total']  # IBC unico del recibo (H-017b)
+# La pension patronal sobre la base SLN es opcional en el sector privado (Concepto MinProteccion
+# 134658, CST art. 53): la decide la compania (l10n_co_ne_pension_patronal_sln).
+ibc = result_rules['CO_IBC_SP']['total']
+if not employee.company_id.l10n_co_ne_pension_patronal_sln:
+    ibc = max(0.0, ibc - result_rules['CO_IBC_SLN']['total'])
 result = ibc * payslip._rule_parameter('l10n_co_pct_pension_empleador', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>

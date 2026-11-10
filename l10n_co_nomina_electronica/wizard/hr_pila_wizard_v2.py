@@ -656,6 +656,25 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     # ──────────────────────────────────────────────────────────────────
     # Builder: Datos de cotizante (Tipo 02)
     # ──────────────────────────────────────────────────────────────────
+    def _aportes_salud_pension(self, ibc_sp, ibc_sln, dias_sp, dias_sln, tarifa_afp, tarifa_eps, _p):
+        """Salud y pensión del cotizante con la regla de SLN.
+
+        Sobre los días de suspensión o licencia no remunerada el trabajador no paga su cuota;
+        el empleador paga solo su tarifa de salud y, si la compañía lo decide (opcional en el
+        sector privado: Concepto Min. Protección Social 134658, CST art. 53), su tarifa de
+        pensión. Sin pensión SLN, IBC y días de pensión excluyen los días SLN."""
+        cotiza = self.company_id.l10n_co_ne_pension_patronal_sln
+        ibc_normal = ibc_sp - ibc_sln
+        return {
+            'ibc_pension': ibc_sp if cotiza else ibc_normal,
+            'dias_pension': dias_sp if cotiza else dias_sp - dias_sln,
+            'cotizacion_pension': round(
+                ibc_normal * tarifa_afp
+                + (ibc_sln * _p('l10n_co_pct_pension_empleador') / 100 if cotiza else 0.0)),
+            'cotizacion_salud': round(
+                ibc_normal * tarifa_eps + ibc_sln * _p('l10n_co_pct_salud_empleador') / 100),
+        }
+
     def _build_cotizante_data(self, payslip, seq, payslips=None):
         """Construye el diccionario de datos de un cotizante (Tipo 02).
 
@@ -767,15 +786,22 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         # -- mismo criterio centralizado que usan las reglas salariales
         # CO_SENA_CIA/CO_ICBF_CIA/CO_SALUD_CIA, para que PILA y nómina no
         # puedan divergir para el mismo empleado.
+        ibc_sln = min(consolidado.ibc_sln, ibc_sp)
+        dias_sln = min(consolidado.dias_sln, dias_sp)
+        # La base SLN no es remuneracion devengada: no cuenta para el umbral de exoneracion.
         exonerado = 'S' if self.company_id._is_exonerado_parafiscales(
-            ibc_sp, payslip.date_from) else 'N'
+            ibc_sp - ibc_sln, payslip.date_from) else 'N'
 
         # Cálculos de aportes
         # Sobre el IBC consolidado (lo que realmente se paga en la planilla). Las lineas de
         # los recibos pueden diferir en meses con varios documentos; la diferencia queda
         # auditable en l10n.co.ibc.mensual (ajuste patronal), no se reescribe el recibo.
-        cotizacion_pension = round(ibc_sp * tarifa_afp)
-        cotizacion_salud = round(ibc_sp * tarifa_eps)
+        sp = self._aportes_salud_pension(
+            ibc_sp, ibc_sln, dias_sp, dias_sln, tarifa_afp, tarifa_eps, _p)
+        ibc_pension = sp['ibc_pension']
+        dias_pension = sp['dias_pension']
+        cotizacion_pension = sp['cotizacion_pension']
+        cotizacion_salud = sp['cotizacion_salud']
         cotizacion_arl = round(ibc_arl * tarifa_arl)
         aporte_ccf_val = round(ibc_paraf * tarifa_ccf)
         aporte_sena_val = round(ibc_paraf * tarifa_sena)
@@ -837,7 +863,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 employee, 'l10n_co_pila_ccf_code', '') or '',
 
             # Días cotizados
-            'dias_pension': dias_sp,
+            'dias_pension': dias_pension,
             'dias_salud': dias_sp,
             'dias_arl': dias_arl,
             'dias_ccf': dias_paraf,
@@ -847,7 +873,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             'salario_integral': 'X' if integral else '',
 
             # IBC por subsistema
-            'ibc_pension': ibc_sp,
+            'ibc_pension': ibc_pension,
             'ibc_salud': ibc_sp,
             'ibc_arl': ibc_arl,
             'ibc_ccf': ibc_paraf,

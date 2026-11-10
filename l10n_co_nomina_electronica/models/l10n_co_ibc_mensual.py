@@ -35,6 +35,13 @@ class L10nCoIbcMensual(models.Model):
     dias_sp = fields.Integer(string='Días Salud y Pensión')
     dias_arl = fields.Integer(string='Días ARL')
     dias_paraf = fields.Integer(string='Días Parafiscales')
+    ibc_sln = fields.Monetary(
+        string='IBC de Días SLN',
+        help='Parte del IBC de Salud y Pensión que corresponde a días de suspensión o licencia '
+             'no remunerada (base de continuidad: último IBC prorrateado). Sobre ella el '
+             'trabajador no paga su cuota; el empleador paga salud (sin exoneración) y la '
+             'pensión patronal si la compañía así lo decide.')
+    dias_sln = fields.Integer(string='Días SLN')
     ibc_recibos_sp = fields.Monetary(string='Suma IBC de los recibos (S+P)')
     ibc_recibos_arl = fields.Monetary(string='Suma IBC de los recibos (ARL)')
     ibc_recibos_paraf = fields.Monetary(string='Suma IBC de los recibos (Paraf.)')
@@ -94,6 +101,13 @@ class L10nCoIbcMensual(models.Model):
         return slips.filtered(lambda s: s.line_ids.filtered(lambda l: l.code == 'CO_IBC_SP'))
 
     @api.model
+    def _valores_sln(self, slips, ibc_sp, dias_sp):
+        """Base y días SLN del mes, acotados al total de salud y pensión del consolidado."""
+        ibc = sum(l.total for s in slips for l in s.line_ids if l.code == 'CO_IBC_SLN')
+        dias = sum(s._ne_dias_sln() for s in slips)
+        return {'ibc_sln': min(ibc, ibc_sp), 'dias_sln': int(min(dias, dias_sp))}
+
+    @api.model
     def _refrescar(self, company, employee, period):
         """Recalcula (idempotente) el consolidado del empleado en el mes de `period`.
         Sin recibos con IBC, elimina el registro y devuelve uno vacio."""
@@ -118,12 +132,14 @@ class L10nCoIbcMensual(models.Model):
         dias_sp = int(min(suma('CO_DIAS_SP'), dias_mes))
         dias_arl = int(min(suma('CO_DIAS_ARL'), dias_mes))
         dias_paraf = int(min(suma('CO_DIAS_PARAF'), dias_mes))
+        ibc_sp = ref._ne_ibc_limites(salarial, incap, remuneracion, pactados, dias_sp)
         vals = {
             'payslip_ids': [(6, 0, slips.ids)],
-            'ibc_sp': ref._ne_ibc_limites(salarial, incap, remuneracion, pactados, dias_sp),
+            'ibc_sp': ibc_sp,
             'ibc_arl': ref._ne_ibc_limites(salarial, 0.0, remuneracion, pactados, dias_arl),
             'ibc_paraf': ref._ne_ibc_limites(salarial, 0.0, remuneracion, pactados, dias_paraf),
             'dias_sp': dias_sp, 'dias_arl': dias_arl, 'dias_paraf': dias_paraf,
+            **self._valores_sln(slips, ibc_sp, dias_sp),
             'ibc_recibos_sp': suma('CO_IBC_SP'),
             'ibc_recibos_arl': suma('CO_IBC_ARL'),
             'ibc_recibos_paraf': suma('CO_IBC_PARAF'),

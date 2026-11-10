@@ -95,6 +95,7 @@ class ResConfigSettings(models.TransientModel):
 
     # Parámetros Nómina Colombia
     l10n_co_ne_exoneration_1607 = fields.Boolean(related='company_id.l10n_co_ne_exoneration_1607', readonly=False)
+    l10n_co_ne_pension_patronal_sln = fields.Boolean(related='company_id.l10n_co_ne_pension_patronal_sln', readonly=False)
 
     # PILA
     l10n_co_pila_tipo_aportante = fields.Selection(related='company_id.l10n_co_pila_tipo_aportante', readonly=False)

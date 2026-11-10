@@ -304,6 +304,16 @@ class ResCompany(models.Model):
              'con salario inferior a 10 SMMLV (Art. 114-1 ET).',
     )
 
+    l10n_co_ne_pension_patronal_sln = fields.Boolean(
+        string='Cotizar pensión patronal en licencia no remunerada',
+        default=True,
+        help='En los días de suspensión o licencia no remunerada (SLN) el empleador paga '
+             'salud sobre la base de continuidad; la pensión patronal sobre esos días es '
+             'opcional en el sector privado (Concepto Min. Protección Social 134658, CST '
+             'art. 53). Si se desmarca, nómina y PILA no cotizan pensión sobre los días SLN. '
+             'El trabajador no paga su cuota sobre esos días en ningún caso.',
+    )
+
     def _is_exonerado_parafiscales(self, ibc, date):
         """Determina si un IBC está exonerado de SENA/ICBF/Salud Empleador.
 
