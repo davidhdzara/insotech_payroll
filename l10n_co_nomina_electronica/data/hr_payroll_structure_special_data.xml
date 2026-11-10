@@ -22,7 +22,7 @@
             <field name="name">Base Prima de Servicios</field>
             <field name="code">CO_PRIMA_BASE</field>
             <field name="sequence">10</field>
-            <field name="category_id" ref="hr_salary_rule_category_prestaciones"/>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
             <field name="struct_id" ref="hr_payroll_structure_co_prima"/>
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
@@ -44,9 +44,7 @@ if contract.l10n_co_ne_integral_salary:
 else:
     result = _salario + _aux_transporte
             </field>
-            <field name="appears_on_payslip" eval="True"/>
-            <field name="l10n_co_ne_dian_concept">Primas</field>
-            <field name="l10n_co_ugpp_payment_type">tp_prestaciones</field>
+            <field name="appears_on_payslip" eval="False"/>
         </record>
 
         <!-- ==================== CO_PRIMA_VALOR ==================== -->
