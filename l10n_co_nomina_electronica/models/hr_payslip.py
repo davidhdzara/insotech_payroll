@@ -2433,6 +2433,52 @@ class HrPayslip(models.Model):
             return self.date_to
         return self.date_from
 
+    def _ne_liq_vacaciones_dias(self):
+        """Dias de vacaciones causadas, ya tomadas y pendientes del contrato al retiro.
+
+        Causadas: (date_to - inicio de contrato + 1) x dias_mes / divisor_vacaciones (15 dias
+        habiles por 360 de servicio, Art. 186 CST; con los parametros 30 y 720 = dias / 24).
+        Ya tomadas, de las mismas fuentes que paga la nomina mensual (una sola fuente):
+        - disfrutadas: hr.leave validadas CO_VAC en dias HABILES del calendario del contrato
+          (_ne_ausencia_habil; el recibo de liquidacion va de inicio de contrato a retiro) y
+          dias del input CO_VAC en recibos confirmados del mismo contrato (respaldo manual;
+          nunca coexiste con una ausencia en un mismo recibo, ver _ne_resolver_dias_novedad);
+        - compensadas en dinero: lineas CO_VAC_COMP (monto) de recibos confirmados, a
+          valor-dia salario/dias_mes.
+        Pendientes = max(0, causadas - disfrutadas - compensadas): quien tomo mas de lo causado
+        no genera valor negativo. Solo ve lo registrado en el sistema."""
+        self.ensure_one()
+        contract = self.contract_id
+        fecha = self._ne_fecha_parametros()
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', fecha)
+        divisor = self._rule_parameter('l10n_co_divisor_vacaciones', fecha)
+        dias_servicio = max(0, (self.date_to - contract.date_start).days + 1)
+        causados = dias_servicio * dias_mes / divisor
+
+        disfrutados, _detalle = self._ne_ausencia_habil('CO_VAC')
+        compensado_dinero = 0.0
+        previos = self.env['hr.payslip'].search([
+            ('contract_id', '=', contract.id),
+            ('id', '!=', self.id),
+            ('state', 'in', ('done', 'paid')),
+            ('struct_id', '!=', self.struct_id.id),
+            ('credit_note', '=', False),
+            ('l10n_co_ne_is_adjustment', '=', False),
+        ])
+        for previo in previos:
+            disfrutados += sum(
+                previo.input_line_ids.filtered(lambda i: i.code == 'CO_VAC').mapped('amount'))
+            compensado_dinero += sum(
+                previo.line_ids.filtered(lambda l: l.code == 'CO_VAC_COMP').mapped('total'))
+        valor_dia = contract.wage / dias_mes
+        compensados = compensado_dinero / valor_dia if valor_dia else 0.0
+        pendientes = max(0.0, causados - disfrutados - compensados)
+        return {
+            'causados': causados, 'disfrutados': disfrutados,
+            'compensados': compensados, 'pendientes': pendientes,
+            'valor_dia': valor_dia,
+        }
+
     def _ne_tramo_pagable_periodo(self):
         """(periodo_ini, periodo_fin) -- el tramo del período de la nómina que realmente es
         pagable bajo la convención de mes comercial de 30 días.

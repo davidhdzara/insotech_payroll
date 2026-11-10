@@ -436,31 +436,21 @@ result = _cesantias * (payslip._rule_parameter('l10n_co_pct_intereses_cesantias'
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-# Vacaciones compensadas = salario * dias_trabajados / divisor_vacaciones
-# 15 dias habiles por cada ano de servicio (Art. 186 CST)
-# Base: salario sin auxilio de transporte (Art. 192 CST)
-_salario = contract.wage
-_fecha_fin = payslip.date_to
-_fecha_inicio = contract.date_start
-
-# Total de dias desde el inicio del contrato
-_dias_totales = (_fecha_fin - _fecha_inicio).days + 1
-if _dias_totales &lt; 0:
-    _dias_totales = 0
-
-# Vacaciones compensadas proporcionales
-# Formula: salario_mensual * dias_trabajados / divisor_vacaciones
-# (divisor_vacaciones = dias_anio_comercial * 2, porque son 15 dias de
-# vacaciones por dias_anio_comercial dias de trabajo)
-result = _salario * _dias_totales / payslip._rule_parameter('l10n_co_divisor_vacaciones', payslip.date_to)
+# Vacaciones compensadas = valor dia x dias pendientes (Art. 186 y 189 CST).
+# 15 dias habiles por cada 360 de servicio, menos los ya disfrutados (Ausencias) o
+# compensados en dinero registrados en el sistema -- ver HrPayslip._ne_liq_vacaciones_dias().
+# Base: salario sin auxilio de transporte (Art. 192 CST). La Cantidad de la linea son los
+# dias pendientes (es lo que lee el XML como Cantidad de VacacionesCompensadas).
+_vac = payslip._ne_liq_vacaciones_dias()
+result = _vac['valor_dia']
+result_qty = _vac['pendientes']
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">VacacionesCompensadas</field>
             <field name="l10n_co_ugpp_payment_type">tp_vacaciones_terminacion</field>
             <field name="note">Vacaciones compensadas al terminar el contrato.
-Se calculan sobre el total de dias trabajados desde el inicio del contrato.
-NO incluye auxilio de transporte en la base (Art. 192 CST).
-El trabajador puede haber disfrutado vacaciones parcialmente; ajustar via input CO_LIQ_VAC_DISFRUTADAS si es necesario.</field>
+Dias pendientes = 15 dias habiles por cada 360 de servicio, menos las vacaciones ya disfrutadas (Ausencias validadas de tipo Vacaciones Disfrutadas, o el input CO_VAC de recibos confirmados) y las compensadas en dinero (CO_VAC_COMP) registradas en el sistema. Nunca negativo.
+NO incluye auxilio de transporte en la base (Art. 192 CST).</field>
         </record>
 
         <!-- ==================== CO_LIQ_INDEMNIZACION ==================== -->
