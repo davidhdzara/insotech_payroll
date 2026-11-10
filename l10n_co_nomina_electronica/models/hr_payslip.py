@@ -1003,7 +1003,9 @@ class HrPayslip(models.Model):
             acum_d = acum_c = 0.0
             for i, (partner, peso) in enumerate(reparto):
                 nueva = dict(entrada, partner_id=partner.id)
-                if i == len(reparto) - 1:
+                if len(reparto) == 1:
+                    pass  # un solo tercero: la entrada nativa queda intacta
+                elif i == len(reparto) - 1:
                     nueva['debit'] = round(entrada['debit'] - acum_d, precision)
                     nueva['credit'] = round(entrada['credit'] - acum_c, precision)
                 else:
