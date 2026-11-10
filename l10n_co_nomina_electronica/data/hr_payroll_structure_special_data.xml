@@ -15,6 +15,12 @@
             <field name="name">Prima de Servicios - Colombia</field>
             <field name="type_id" ref="hr_payroll_structure_type_co"/>
             <field name="country_id" ref="base.co"/>
+            <!-- Esta estructura no usa dias trabajados: el valor sale de la base y los dias del periodo
+                 (prima) o del input (bonificacion). Sin esto, la pestana "Dias trabajados" mostraba
+                 las horas del calendario de todo el periodo (p. ej. 119 dias / 952 h en un semestre)
+                 con un importe nativo que nada usa. Explicito en False: un -u no cambia un campo
+                 ausente en el registro de datos. -->
+            <field name="use_worked_day_lines" eval="False"/>
         </record>
 
         <!-- ==================== CO_PRIMA_BASE ==================== -->
@@ -863,6 +869,12 @@ result = categories['DEV'] + categories['DEDU']
             <field name="name">Bonificaciones Extraordinarias - Colombia</field>
             <field name="type_id" ref="hr_payroll_structure_type_co"/>
             <field name="country_id" ref="base.co"/>
+            <!-- Esta estructura no usa dias trabajados: el valor sale de la base y los dias del periodo
+                 (prima) o del input (bonificacion). Sin esto, la pestana "Dias trabajados" mostraba
+                 las horas del calendario de todo el periodo (p. ej. 119 dias / 952 h en un semestre)
+                 con un importe nativo que nada usa. Explicito en False: un -u no cambia un campo
+                 ausente en el registro de datos. -->
+            <field name="use_worked_day_lines" eval="False"/>
         </record>
 
         <!-- ==================== CO_BON_VALOR ==================== -->
