@@ -2662,6 +2662,14 @@ class HrPayslip(models.Model):
         linea_ibc = payslip_anterior.line_ids.filtered(lambda l: l.code == 'CO_SS_BASE_IBC')
         return linea_ibc.total if linea_ibc else contract.wage
 
+    def _ne_factor_dias_integral(self):
+        """Fraccion del mes comercial que cubre este recibo, para prorratear el salario
+        integral (que no sale de lineas de devengado sino del contrato). Con ella, dos
+        recibos del mismo mes (nomina + liquidacion) suman UN IBC, no dos (H-017b)."""
+        self.ensure_one()
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        return min(self._ne_dias_bajo_contrato(), dias_mes) / dias_mes
+
     def _ne_ibc_salarial(self, categories, contract, inputs, worked_days):
         """Parte SALARIAL del IBC (H-017a): DEV_SAL + vacaciones y licencia remunerada
         (base = ultimo IBC anterior, prorrateado por dias). Salario integral:
@@ -2669,7 +2677,7 @@ class HrPayslip(models.Model):
         self.ensure_one()
         if contract.l10n_co_ne_integral_salary:
             return contract.wage * self._rule_parameter(
-                'l10n_co_factor_integral_salary', self.date_from)
+                'l10n_co_factor_integral_salary', self.date_from) * self._ne_factor_dias_integral()
         ibc = categories['DEV_SAL']
         dias_mes_comercial = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
         ultimo_ibc = None
@@ -2715,13 +2723,13 @@ class HrPayslip(models.Model):
         self.ensure_one()
         if contract.l10n_co_ne_integral_salary:
             return contract.wage * self._rule_parameter(
-                'l10n_co_factor_integral_salary', self.date_from)
+                'l10n_co_factor_integral_salary', self.date_from) * self._ne_factor_dias_integral()
         return categories['DEV_SAL']
 
     def _ne_ibc_remuneracion(self, contract, salarial):
         """Base del 40%: remuneracion total. Integral: 100% del salario pactado."""
         if contract.l10n_co_ne_integral_salary:
-            return contract.wage
+            return contract.wage * self._ne_factor_dias_integral()
         return salarial
 
     def _ne_ibc_pactados(self, result_rules):

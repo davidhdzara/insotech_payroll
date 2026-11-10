@@ -206,9 +206,11 @@ class L10nCoNominaUgpp(models.Model):
         # Buscar nóminas del período
         payslips = self.env['hr.payslip'].search([
             ('company_id', '=', self.company_id.id),
-            ('date_from', '>=', self.date_from),
+            # date_to y no date_from: la liquidacion tiene date_from = inicio de contrato
+            # (H-017b); y los recibos pagados tambien se reportan.
+            ('date_to', '>=', self.date_from),
             ('date_to', '<=', self.date_to),
-            ('state', '=', 'done'),
+            ('state', 'in', ('done', 'paid')),
             # doc 39 (2026-10-04): excluir empleados sintéticos del
             # wizard de habilitación DIAN -- nunca son personal real,
             # no deben contarse en un reporte UGPP real.

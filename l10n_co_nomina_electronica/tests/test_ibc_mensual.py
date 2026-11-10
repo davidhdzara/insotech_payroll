@@ -101,11 +101,31 @@ class TestIbcMensual(TransactionCase):
 
     def test_pila_incluye_pagados_y_filtra_por_date_to(self):
         employee, contract = self._empleado('Pila', 3000000.0)
-        slip = self._recibo(employee, contract, date(2026, 9, 1), date(2026, 9, 30))
-        slip.state = 'paid'
+        estructura = self.structure
+        # Recibo normal pagado
+        normal = self.env['hr.payslip'].create({
+            'name': 'Nómina Pila', 'employee_id': employee.id, 'contract_id': contract.id,
+            'company_id': self.company.id, 'struct_id': estructura.id,
+            'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30), 'state': 'paid'})
+        # Tipo liquidacion: date_from = inicio de contrato, date_to en el mes (creado ya
+        # con sus fechas: mutar date_from de un recibo existente dispara recalculo nativo)
+        liquidacion = self.env['hr.payslip'].create({
+            'name': 'Liquidación Pila', 'employee_id': employee.id, 'contract_id': contract.id,
+            'company_id': self.company.id, 'struct_id': estructura.id,
+            'date_from': date(2024, 1, 1), 'date_to': date(2026, 9, 20), 'state': 'done'})
         wizard = self.env['l10n.co.hr.pila.wizard.v2']
         encontrados = wizard._get_period_payslips(self.company, 2026, 9)
-        self.assertIn(slip, encontrados)
-        # una liquidacion con date_from = inicio de contrato (2024) pero date_to en el mes
-        slip.date_from = date(2024, 1, 1)
-        self.assertIn(slip, wizard._get_period_payslips(self.company, 2026, 9))
+        self.assertIn(normal, encontrados)
+        self.assertIn(liquidacion, encontrados)
+
+    def test_integral_en_dos_recibos_suma_un_solo_ibc(self):
+        employee, contract = self._empleado('Integral', 20000000.0)
+        contract.l10n_co_ne_integral_salary = True
+        a = self._recibo(employee, contract, date(2026, 9, 1), date(2026, 9, 15))
+        b = self._recibo(employee, contract, date(2026, 9, 16), date(2026, 9, 30))
+        self._confirmar(a, b)
+        cons = self.Consolidado.search([('employee_id', '=', employee.id)])
+        factor = a._rule_parameter('l10n_co_factor_integral_salary', a.date_from)
+        # 70% del integral UNA vez (cada recibo aporta la mitad), no el doble
+        self.assertAlmostEqual(cons.ibc_sp, 20000000.0 * factor, delta=1.0)
+        self.assertEqual(cons.dias_sp, 30)
