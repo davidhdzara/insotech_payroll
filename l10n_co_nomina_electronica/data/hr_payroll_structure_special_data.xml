@@ -45,6 +45,11 @@ else:
     result = _salario + _aux_transporte
             </field>
             <field name="appears_on_payslip" eval="False"/>
+            <!-- Explicitos (eval="False"): un -u no borra un campo que ya no aparece en el registro de
+                 datos; sin esto, una base ya instalada conserva el concepto DIAN 'Primas' y el tipo
+                 UGPP 'tp_prestaciones' y seguiria sumando al XML y a UGPP. -->
+            <field name="l10n_co_ne_dian_concept" eval="False"/>
+            <field name="l10n_co_ugpp_payment_type" eval="False"/>
         </record>
 
         <!-- ==================== CO_PRIMA_VALOR ==================== -->
