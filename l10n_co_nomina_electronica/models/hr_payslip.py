@@ -2677,12 +2677,16 @@ class HrPayslip(models.Model):
         return ibc
 
     def _ne_ibc_incap(self, contract, result_rules):
-        """Base de maternidad/paternidad: lo que la licencia ya pago (solo cuenta a
-        salud y pension, no a ARL ni parafiscales). Integral: 0 (como H-017a)."""
+        """Base de las ausencias de pago por tercero (maternidad/paternidad e
+        incapacidades): el valor del auxilio que la novedad ya pago (Decreto 780/2016
+        Art. 3.2.5.1; decision de David, 2026-11-10). Solo cuenta a salud y pension,
+        no a ARL ni parafiscales; el descuento al empleado es el normal (Art.
+        3.2.1.10), a diferencia de SLN. Integral: 0 (como H-017a)."""
         if contract.l10n_co_ne_integral_salary:
             return 0.0
-        return (result_rules.get('CO_LIC_MAT', {}).get('total', 0.0)
-                + result_rules.get('CO_LIC_PAT', {}).get('total', 0.0))
+        return sum(
+            result_rules.get(codigo, {}).get('total', 0.0)
+            for codigo in sorted(_NOVEDAD_AUSENCIA_CALENDARIO_CODES))
 
     def _ne_ibc_seguridad_social(self, categories, contract, inputs, worked_days, result_rules):
         """IBC de seguridad social de H-017a (parte salarial + maternidad/paternidad),

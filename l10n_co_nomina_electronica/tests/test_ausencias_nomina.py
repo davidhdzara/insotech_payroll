@@ -1073,16 +1073,13 @@ class TestAusenciasNomina(TransactionCase):
         ibc_esperado = wage * 0.70
         self.assertEqual(round(abs(salud), 2), round(ibc_esperado * 0.04, 2))
 
-    def test_incapacidad_suma_dias_cotizados_a_salud_pension_pero_no_a_arl(self):
-        """H-017b commit 2 (2026-11-10) SUPERA la limitacion temporal de H-017a ("las
-        incapacidades no entran a la base todavia"): por decision de David las incapacidades
-        (IGE) SI cuentan como dias cotizados de salud y pension -- pero NO de ARL ni
-        parafiscales (CO_DIAS_SP = 30, CO_DIAS_ARL = 28). Efecto sobre el IBC: el piso de 1
-        SMMLV se prorratea sobre 30 dias y, como el basico de 28 dias (1.680.000) queda por
-        debajo, el IBC de salud/pension es el piso (1.750.905), no el basico.
-        LIMITE CONOCIDO, pendiente de decision normativa: la BASE de los dias de incapacidad
-        (IBC anterior prorrateado, como en SLN) todavia no se suma al IBC; hoy el piso la
-        enmascara. Cuando se decida, este test debe actualizarse."""
+    def test_incapacidad_suma_dias_y_base_a_salud_pension_pero_no_a_arl(self):
+        """H-017b (2026-11-10) SUPERA la limitacion temporal de H-017a ("las incapacidades
+        no entran a la base todavia"), por decision de David: la incapacidad (IGE) cuenta
+        como DIAS cotizados de salud y pension (CO_DIAS_SP = 30, no ARL: CO_DIAS_ARL = 28)
+        y su BASE es el auxilio pagado (Decreto 780/2016 Art. 3.2.5.1): IBC = basico de los
+        dias trabajados + CO_INC_COMUN. El descuento al empleado es el normal (4%) sobre ese
+        IBC -- a diferencia de SLN, el empleador no lo asume."""
         wage = 1800000.0
         employee, contract = self._make_contract('IbcIncapacidad', wage=wage)
         self._make_validated_leave(
@@ -1090,13 +1087,16 @@ class TestAusenciasNomina(TransactionCase):
         payslip = self._make_payslip(employee, contract, date(2026, 9, 1), date(2026, 9, 30))
         payslip.compute_sheet()
 
+        basico = self._sueldo_basico(payslip)
         inc = self._novedad(payslip, 'CO_INC_COMUN')
         self.assertGreater(inc, 0)
         self.assertEqual(round(self._novedad(payslip, 'CO_DIAS_SP'), 2), 30.0)
         self.assertEqual(round(self._novedad(payslip, 'CO_DIAS_ARL'), 2), 28.0)
         smmlv = payslip._rule_parameter('l10n_co_smmlv', payslip.date_from)
+        esperado = max(basico + inc, smmlv)   # piso de 30 dias
         ibc_sp = self._novedad(payslip, 'CO_IBC_SP')
-        self.assertEqual(round(ibc_sp, 2), round(smmlv, 2))   # piso, ver docstring
+        self.assertEqual(round(ibc_sp, 2), round(esperado, 2))
+        self.assertGreater(ibc_sp, basico)    # la base de la incapacidad SI entra
         salud = self._novedad(payslip, 'CO_SALUD_EMP')
         self.assertEqual(round(abs(salud), 2), round(ibc_sp * 0.04, 2))
 
