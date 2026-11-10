@@ -2589,6 +2589,43 @@ class HrPayslip(models.Model):
             dias_excluidos += self._ne_ausencia_calendario(codigo)[0]
         return dias_bajo_contrato - dias_excluidos
 
+    def _ne_pago_ausencia_calendario(self, codigo, dias):
+        """Valor a pagar por `dias` calendario corridos de una ausencia de pago por el empleador
+        o por terceros: CO_INC_COMUN, CO_INC_LABORAL, CO_LIC_MAT, CO_LIC_PAT. Unico lugar del
+        calculo, compartido por las reglas de la nomina general y de la liquidacion.
+
+        - CO_INC_COMUN (Decreto 780/2016 Art. 3.2.1.10 par. 1; H-013 paso 3): por tramos --
+          los primeros dias_incapacidad_empleador al pct_incapacidad_empleador (66,67 %); hasta
+          el limite 3-90 el pct_incapacidad_3_90 (EPS); mas alla el pct_incapacidad_91_mas.
+        - CO_INC_LABORAL: ARL al 100 % desde el primer dia. CO_LIC_MAT y CO_LIC_PAT: 100 % del
+          salario, a cargo de la EPS (H-014, CST Art. 236 mod. Ley 2114/2021).
+        Parametros normativos desde hr.rule.parameter a la fecha de _ne_fecha_parametros().
+        Sin piso de SMMLV (el criterio vigente de la regla; decision pendiente de David)."""
+        self.ensure_one()
+        if codigo not in _NOVEDAD_AUSENCIA_CALENDARIO_CODES:
+            raise UserError(_(
+                'Código de ausencia "%(codigo)s" sin fórmula de pago (solo %(validos)s).',
+                codigo=codigo, validos=', '.join(sorted(_NOVEDAD_AUSENCIA_CALENDARIO_CODES))))
+        if dias <= 0:
+            return 0.0
+        fecha = self._ne_fecha_parametros()
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', fecha)
+        valor_dia = self.contract_id.wage / dias_mes
+        if codigo != 'CO_INC_COMUN':
+            return valor_dia * dias
+        dias_emp = self._rule_parameter('l10n_co_dias_incapacidad_empleador', fecha)
+        pct_emp = self._rule_parameter('l10n_co_pct_incapacidad_empleador', fecha) / 100
+        pct_3_90 = self._rule_parameter('l10n_co_pct_incapacidad_3_90', fecha) / 100
+        pct_91_mas = self._rule_parameter('l10n_co_pct_incapacidad_91_mas', fecha) / 100
+        limite_3_90 = self._rule_parameter('l10n_co_dias_incapacidad_limite_3_90', fecha)
+        if dias <= dias_emp:
+            return valor_dia * pct_emp * dias
+        if dias <= limite_3_90:
+            return valor_dia * pct_emp * dias_emp + valor_dia * pct_3_90 * (dias - dias_emp)
+        return (valor_dia * pct_emp * dias_emp
+                + valor_dia * pct_3_90 * (limite_3_90 - dias_emp)
+                + valor_dia * pct_91_mas * (dias - limite_3_90))
+
     def _ne_ausencia_calendario(self, work_entry_code):
         """Única fuente de días CALENDARIO corridos (lunes a domingo, festivos incluidos)
         para un concepto de ausencia -- CO_LIC_MAT/CO_LIC_PAT/CO_INC_COMUN/CO_INC_LABORAL

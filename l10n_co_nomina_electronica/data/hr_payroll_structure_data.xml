@@ -494,26 +494,12 @@ result = _dias_aus > 0 or _dias_inp > 0
 # Ausencias (hr.leave, _ne_ausencia_calendario) o, de respaldo, del input manual -- nunca
 # de los dos a la vez (_ne_dias_novedad_calendario falla explicito si coinciden). Unica
 # fuente que tambien usa _ne_dias_pagables() para descontar el basico.
-_dias_emp = payslip._rule_parameter('l10n_co_dias_incapacidad_empleador', payslip.date_from)
-_pct_emp = payslip._rule_parameter('l10n_co_pct_incapacidad_empleador', payslip.date_from) / 100
-_pct_3_90 = payslip._rule_parameter('l10n_co_pct_incapacidad_3_90', payslip.date_from) / 100
-_pct_91_mas = payslip._rule_parameter('l10n_co_pct_incapacidad_91_mas', payslip.date_from) / 100
-_limite_3_90 = payslip._rule_parameter('l10n_co_dias_incapacidad_limite_3_90', payslip.date_from)
 dias = payslip._ne_dias_novedad_calendario('CO_INC_COMUN', 'CO_INC_COMUN', inputs)
-valor_dia = contract.wage / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_from)
-if dias &lt;= _dias_emp:
-    result = valor_dia * _pct_emp * dias
-elif dias &lt;= _limite_3_90:
-    result = valor_dia * _pct_emp * _dias_emp + (valor_dia * _pct_3_90 * (dias - _dias_emp))
-else:
-    result = (
-        valor_dia * _pct_emp * _dias_emp
-        + (valor_dia * _pct_3_90 * (_limite_3_90 - _dias_emp))
-        + (valor_dia * _pct_91_mas * (dias - _limite_3_90))
-    )
-# Cantidad = dias; valor unitario = promedio por dia de los tramos (el total no cambia).
+# Calculo por tramos en un solo lugar: HrPayslip._ne_pago_ausencia_calendario() (compartido con la
+# liquidacion). Cantidad = dias; valor unitario = promedio por dia (el total no cambia).
+_pago = payslip._ne_pago_ausencia_calendario('CO_INC_COMUN', dias)
 result_qty = dias
-result = result / dias if dias else 0.0
+result = _pago / dias if dias else 0.0
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Incapacidad</field>
@@ -536,8 +522,9 @@ result = _dias_aus > 0 or _dias_inp > 0
 # ARL paga 100% desde el primer día. H-014 (2026-10-08): dias CALENDARIO corridos desde
 # Ausencias o input manual de respaldo, nunca los dos -- ver _ne_dias_novedad_calendario().
 dias = payslip._ne_dias_novedad_calendario('CO_INC_LABORAL', 'CO_INC_LABORAL', inputs)
-result = contract.wage / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_from)
+_pago = payslip._ne_pago_ausencia_calendario('CO_INC_LABORAL', dias)
 result_qty = dias
+result = _pago / dias if dias else 0.0
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Incapacidad</field>
@@ -561,8 +548,9 @@ result = _dias_aus > 0 or _dias_inp > 0
 # 236 mod. Ley 2114/2021): dias CALENDARIO corridos desde Ausencias o input manual de
 # respaldo, nunca los dos -- ver _ne_dias_novedad_calendario().
 dias = payslip._ne_dias_novedad_calendario('CO_LIC_MAT', 'CO_LIC_MAT', inputs)
-result = contract.wage / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_from)
+_pago = payslip._ne_pago_ausencia_calendario('CO_LIC_MAT', dias)
 result_qty = dias
+result = _pago / dias if dias else 0.0
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">LicenciaMP</field>
@@ -586,8 +574,9 @@ result = _dias_aus > 0 or _dias_inp > 0
 # 2114/2021): dias CALENDARIO corridos desde Ausencias o input manual de respaldo, nunca
 # los dos -- ver _ne_dias_novedad_calendario().
 dias = payslip._ne_dias_novedad_calendario('CO_LIC_PAT', 'CO_LIC_PAT', inputs)
-result = contract.wage / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_from)
+_pago = payslip._ne_pago_ausencia_calendario('CO_LIC_PAT', dias)
 result_qty = dias
+result = _pago / dias if dias else 0.0
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">LicenciaMP</field>

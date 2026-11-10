@@ -494,6 +494,122 @@ result_qty = _dias
             <field name="note">Licencia remunerada dentro del ultimo tramo del contrato, a cargo del empleador. Las de meses anteriores ya se pagaron en su nomina.</field>
         </record>
 
+        <!-- ==================== CO_INC_COMUN (liquidacion) ==================== -->
+        <record id="hr_salary_rule_co_liq_inc_comun" model="hr.salary.rule">
+            <field name="name">Incapacidad Enfermedad General</field>
+            <field name="code">CO_INC_COMUN</field>
+            <field name="sequence">37</field>
+            <field name="category_id" ref="hr_salary_rule_category_incapacidades"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">
+# Dias calendario de esta ausencia dentro del tramo del ultimo mes y de la actividad del contrato
+# (los de meses anteriores ya se pagaron en su nomina) -- misma fuente con la que
+# _ne_dias_pagables() los resta del sueldo.
+result = payslip._ne_ausencia_calendario('CO_INC_COMUN')[0] &gt; 0
+            </field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+# Mismo calculo que la regla de la nomina general (un solo lugar): HrPayslip._ne_pago_ausencia_calendario().
+dias = payslip._ne_ausencia_calendario('CO_INC_COMUN')[0]
+_pago = payslip._ne_pago_ausencia_calendario('CO_INC_COMUN', dias)
+result_qty = dias
+result = _pago / dias if dias else 0.0
+            </field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">Incapacidad</field>
+            <field name="l10n_co_ugpp_payment_type">tp_incapacidad</field>
+            <field name="l10n_co_liq_tratamiento">salario</field>
+            <field name="note">Incapacidad por enfermedad general dentro del ultimo tramo del contrato (por tramos, como en la nomina general). Las de meses anteriores ya se pagaron en su nomina. Se registra el valor total como devengado, sin recobro a la EPS (igual que la general).</field>
+        </record>
+
+        <!-- ==================== CO_INC_LABORAL (liquidacion) ==================== -->
+        <record id="hr_salary_rule_co_liq_inc_laboral" model="hr.salary.rule">
+            <field name="name">Incapacidad Accidente de Trabajo</field>
+            <field name="code">CO_INC_LABORAL</field>
+            <field name="sequence">38</field>
+            <field name="category_id" ref="hr_salary_rule_category_incapacidades"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">
+# Dias calendario de esta ausencia dentro del tramo del ultimo mes y de la actividad del contrato
+# (los de meses anteriores ya se pagaron en su nomina) -- misma fuente con la que
+# _ne_dias_pagables() los resta del sueldo.
+result = payslip._ne_ausencia_calendario('CO_INC_LABORAL')[0] &gt; 0
+            </field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+# Mismo calculo que la regla de la nomina general (un solo lugar): HrPayslip._ne_pago_ausencia_calendario().
+dias = payslip._ne_ausencia_calendario('CO_INC_LABORAL')[0]
+_pago = payslip._ne_pago_ausencia_calendario('CO_INC_LABORAL', dias)
+result_qty = dias
+result = _pago / dias if dias else 0.0
+            </field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">Incapacidad</field>
+            <field name="l10n_co_ugpp_payment_type">tp_incapacidad</field>
+            <field name="l10n_co_liq_tratamiento">salario</field>
+            <field name="note">Incapacidad de origen laboral (ARL al 100 %) dentro del ultimo tramo del contrato.</field>
+        </record>
+
+        <!-- ==================== CO_LIC_MAT (liquidacion) ==================== -->
+        <record id="hr_salary_rule_co_liq_lic_mat" model="hr.salary.rule">
+            <field name="name">Licencia de Maternidad</field>
+            <field name="code">CO_LIC_MAT</field>
+            <field name="sequence">41</field>
+            <field name="category_id" ref="hr_salary_rule_category_incapacidades"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">
+# Dias calendario de esta ausencia dentro del tramo del ultimo mes y de la actividad del contrato
+# (los de meses anteriores ya se pagaron en su nomina) -- misma fuente con la que
+# _ne_dias_pagables() los resta del sueldo.
+result = payslip._ne_ausencia_calendario('CO_LIC_MAT')[0] &gt; 0
+            </field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+# Mismo calculo que la regla de la nomina general (un solo lugar): HrPayslip._ne_pago_ausencia_calendario().
+dias = payslip._ne_ausencia_calendario('CO_LIC_MAT')[0]
+_pago = payslip._ne_pago_ausencia_calendario('CO_LIC_MAT', dias)
+result_qty = dias
+result = _pago / dias if dias else 0.0
+            </field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">LicenciaMP</field>
+            <field name="l10n_co_ugpp_payment_type">tp_licencia_mat_pat</field>
+            <field name="l10n_co_liq_tratamiento">salario</field>
+            <field name="note">Licencia de maternidad dentro del ultimo tramo del contrato, recortada a la actividad del contrato (hasta el retiro).</field>
+        </record>
+
+        <!-- ==================== CO_LIC_PAT (liquidacion) ==================== -->
+        <record id="hr_salary_rule_co_liq_lic_pat" model="hr.salary.rule">
+            <field name="name">Licencia de Paternidad</field>
+            <field name="code">CO_LIC_PAT</field>
+            <field name="sequence">42</field>
+            <field name="category_id" ref="hr_salary_rule_category_incapacidades"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">
+# Dias calendario de esta ausencia dentro del tramo del ultimo mes y de la actividad del contrato
+# (los de meses anteriores ya se pagaron en su nomina) -- misma fuente con la que
+# _ne_dias_pagables() los resta del sueldo.
+result = payslip._ne_ausencia_calendario('CO_LIC_PAT')[0] &gt; 0
+            </field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+# Mismo calculo que la regla de la nomina general (un solo lugar): HrPayslip._ne_pago_ausencia_calendario().
+dias = payslip._ne_ausencia_calendario('CO_LIC_PAT')[0]
+_pago = payslip._ne_pago_ausencia_calendario('CO_LIC_PAT', dias)
+result_qty = dias
+result = _pago / dias if dias else 0.0
+            </field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">LicenciaMP</field>
+            <field name="l10n_co_ugpp_payment_type">tp_licencia_mat_pat</field>
+            <field name="l10n_co_liq_tratamiento">salario</field>
+            <field name="note">Licencia de paternidad dentro del ultimo tramo del contrato, recortada a la actividad del contrato (hasta el retiro).</field>
+        </record>
+
         <!-- ==================== CO_LIQ_VACACIONES ==================== -->
         <record id="hr_salary_rule_co_liq_vacaciones" model="hr.salary.rule">
             <field name="name">Vacaciones Compensadas</field>
@@ -687,6 +803,19 @@ Para contrato indefinido: no requiere ningun input, el calculo diferencia entre 
             <field name="note">Pagos no salariales por pacto.</field>
         </record>
 
+        <record id="hr_salary_rule_co_liq_ibc_incap" model="hr.salary.rule">
+            <field name="name">IBC Incapacidades y Licencias MP Liquidacion (interno)</field>
+            <field name="code">CO_IBC_INCAP</field>
+            <field name="sequence">91</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_incap(contract, result_rules)</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Base de incapacidades y licencias de maternidad/paternidad del tramo: solo salud y pension (igual que la nomina general).</field>
+        </record>
+
         <record id="hr_salary_rule_co_liq_ibc_sp" model="hr.salary.rule">
             <field name="name">IBC Salud y Pension Liquidacion (interno)</field>
             <field name="code">CO_IBC_SP</field>
@@ -698,7 +827,7 @@ Para contrato indefinido: no requiere ningun input, el calculo diferencia entre 
             <field name="amount_python_compute">
 _r = result_rules
 result = payslip._ne_ibc_limites(
-    _r['CO_IBC_SALARIAL']['total'], 0.0,
+    _r['CO_IBC_SALARIAL']['total'], _r['CO_IBC_INCAP']['total'],
     _r['CO_IBC_REMUN']['total'], _r['CO_IBC_PACTADOS']['total'], _r['CO_DIAS_SP']['total'])
             </field>
             <field name="appears_on_payslip" eval="False"/>
