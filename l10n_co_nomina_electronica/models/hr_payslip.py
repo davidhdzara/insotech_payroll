@@ -2579,11 +2579,7 @@ class HrPayslip(models.Model):
         # distinto al básico (Art. 186 CST, Ley 100/1993, etc.). Por eso se excluyen SIEMPRE
         # estos códigos (data/l10n_co_ausencias_data.xml), sin importar su unpaid real.
         dias_excluidos_codes = unpaid_codes | _NOVEDAD_AUSENCIA_WORKED_DAYS_CODES
-        dias_excluidos = sum(
-            wd.number_of_days
-            for wd in self.worked_days_line_ids
-            if wd.work_entry_type_id.code in dias_excluidos_codes
-        )
+        dias_excluidos = self._ne_dias_habiles_excluidos(dias_excluidos_codes)
         # H-014 (2026-10-08, QA Bloque 5): CO_LIC_MAT/CO_LIC_PAT/CO_INC_COMUN/CO_INC_LABORAL
         # se pagan en días CALENDARIO corridos (ver _ne_ausencia_calendario) -- se excluyen
         # del básico por la misma cuenta, nunca por worked_days (ahí solo existirían los
@@ -2650,7 +2646,23 @@ class HrPayslip(models.Model):
                 dias_totales += dias
         return dias_totales, detalle
 
-    def _ne_ausencia_habil(self, work_entry_code):
+    def _ne_dias_habiles_excluidos(self, codigos):
+        """Dias HABILES de las ausencias de worked_days (CO_VAC, CO_LIC_REM, CO_LIC_NR y tipos
+        'unpaid') que se excluyen del sueldo, acotados al tramo pagable.
+
+        Un recibo de un solo mes: suma de worked_days, como siempre. Un recibo que cruza meses
+        (Liquidacion: date_from = inicio de contrato, el sueldo es solo del ultimo mes):
+        worked_days cubre toda la vida del contrato y restaria ausencias de meses ya pagados;
+        se cuentan solo las del tramo (_ne_ausencia_habil con desde/hasta)."""
+        self.ensure_one()
+        tramo_ini, tramo_fin = self._ne_tramo_pagable_periodo()
+        if tramo_ini == self.date_from:
+            return sum(wd.number_of_days for wd in self.worked_days_line_ids
+                       if wd.work_entry_type_id.code in codigos)
+        return sum(self._ne_ausencia_habil(codigo, tramo_ini, tramo_fin)[0]
+                   for codigo in sorted(codigos))
+
+    def _ne_ausencia_habil(self, work_entry_code, desde=None, hasta=None):
         """Única fuente de días HÁBILES (vía worked_days/hr.work.entry) para Vacaciones/
         LicenciaR/LicenciaNR (H-016, 2026-10-08, QA en staging -- NE0000000099).
 
@@ -2680,23 +2692,29 @@ class HrPayslip(models.Model):
         termina en un día sin work entry (festivo, sábado, lunes no laborable) -- a la DIAN
         va la fecha real de la ausencia, no la del primer/último día efectivamente pagado.
 
+        desde/hasta (opcionales, por defecto date_from/date_to del recibo) acotan la cuenta a
+        una ventana: en Liquidacion date_from es el inicio de contrato y el sueldo pendiente es
+        solo el tramo del ultimo mes (_ne_tramo_pagable_periodo()).
+
         Devuelve (dias_totales, detalle) -- detalle = [(leave, dias, fecha_ini, fecha_fin)],
         mismo shape que _ne_ausencia_calendario() para que _dev_novedades()/
         _dev_prestaciones() los traten igual.
         """
         self.ensure_one()
+        desde = desde or self.date_from
+        hasta = hasta or self.date_to
         leaves = self.env['hr.leave'].search([
             ('employee_id', '=', self.employee_id.id),
             ('state', '=', 'validate'),
             ('holiday_status_id.work_entry_type_id.code', '=', work_entry_code),
-            ('request_date_from', '<=', self.date_to),
-            ('request_date_to', '>=', self.date_from),
+            ('request_date_from', '<=', hasta),
+            ('request_date_to', '>=', desde),
         ])
         if not leaves:
             return 0, []
 
-        periodo_ini_dt = datetime.combine(self.date_from, datetime.min.time())
-        periodo_fin_dt = datetime.combine(self.date_to + timedelta(days=1), datetime.min.time())
+        periodo_ini_dt = datetime.combine(desde, datetime.min.time())
+        periodo_fin_dt = datetime.combine(hasta + timedelta(days=1), datetime.min.time())
         work_entries = self.env['hr.work.entry'].search([
             ('employee_id', '=', self.employee_id.id),
             ('leave_id', 'in', leaves.ids),
@@ -2716,8 +2734,8 @@ class HrPayslip(models.Model):
                 continue
             dias = len({entry.date_start.date() for entry in entries})
             if dias > 0:
-                ini = max(leave.request_date_from, self.date_from)
-                fin = min(leave.request_date_to, self.date_to)
+                ini = max(leave.request_date_from, desde)
+                fin = min(leave.request_date_to, hasta)
                 detalle.append((leave, dias, ini, fin))
                 dias_totales += dias
         return dias_totales, detalle
@@ -2915,8 +2933,7 @@ class HrPayslip(models.Model):
         codigos = set(unpaid.mapped('work_entry_type_id.code')) - {False}
         codigos.add('CO_LIC_NR')
         codigos -= {'CO_VAC', 'CO_LIC_REM'}
-        return sum(wd.number_of_days for wd in self.worked_days_line_ids
-                   if wd.work_entry_type_id.code in codigos)
+        return self._ne_dias_habiles_excluidos(codigos)
 
     def _ne_dias_cotizados(self):
         """Dias cotizados por subsistema (tabla de David, 2026-11-09).

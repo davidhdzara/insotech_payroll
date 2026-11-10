@@ -33,8 +33,11 @@ class TestLiquidacionTramoAusencias(TransactionCase):
         cls.liquidacion = cls.env.ref(
             'l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion')
         cls.leave_type_vac = cls.env.ref('l10n_co_nomina_electronica.hr_leave_type_co_vac')
+        cls.leave_type_lic_rem = cls.env.ref(
+            'l10n_co_nomina_electronica.hr_leave_type_co_lic_rem')
+        cls.leave_type_lic_nr = cls.env.ref('l10n_co_nomina_electronica.hr_leave_type_co_lic_nr')
 
-    def _liquidacion_con_vacaciones(self, name, vac_desde, vac_hasta):
+    def _liquidacion_con_vacaciones(self, name, vac_desde, vac_hasta, leave_type=None):
         employee = self.env['hr.employee'].create({
             'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
         contract = self.env['hr.contract'].create({
@@ -44,7 +47,7 @@ class TestLiquidacionTramoAusencias(TransactionCase):
         # Precondicion operativa real: work entries del contrato antes de validar la ausencia.
         contract.generate_work_entries(date(2026, 1, 1), RETIRO)
         leave = self.env['hr.leave'].create({
-            'employee_id': employee.id, 'holiday_status_id': self.leave_type_vac.id,
+            'employee_id': employee.id, 'holiday_status_id': (leave_type or self.leave_type_vac).id,
             'request_date_from': vac_desde, 'request_date_to': vac_hasta})
         leave.action_validate()
         self.assertEqual(leave.state, 'validate')
@@ -76,3 +79,25 @@ class TestLiquidacionTramoAusencias(TransactionCase):
             'VacAgosto', date(2026, 8, 3), date(2026, 8, 7))
         self.assertEqual(slip._ne_dias_pagables(), 10)
         self.assertEqual(self._salarios(slip).quantity, 10.0)
+
+    def test_licencia_remunerada_de_un_mes_anterior_no_descuenta_el_ultimo_tramo(self):
+        """Lunes 6 a viernes 10 de abril (5 dias habiles de licencia remunerada) ya se pagaron
+        en su nomina: no restan de los 15 dias de agosto."""
+        slip = self._liquidacion_con_vacaciones(
+            'LicAbril', date(2026, 4, 6), date(2026, 4, 10), leave_type=self.leave_type_lic_rem)
+        self.assertEqual(slip._ne_dias_pagables(), 15)
+        self.assertEqual(self._salarios(slip).quantity, 15.0)
+
+    def test_licencia_no_remunerada_de_un_mes_anterior_no_cuenta_como_sln_del_tramo(self):
+        """La suspension de mayo no es SLN del ultimo tramo: ni resta dias del sueldo de agosto
+        ni cuenta en los dias SLN de PILA/UGPP de la liquidacion."""
+        slip = self._liquidacion_con_vacaciones(
+            'LnrMayo', date(2026, 5, 4), date(2026, 5, 8), leave_type=self.leave_type_lic_nr)
+        self.assertEqual(slip._ne_dias_pagables(), 15)
+        self.assertEqual(slip._ne_dias_sln(), 0)
+
+    def test_licencia_no_remunerada_dentro_del_tramo_si_cuenta(self):
+        slip = self._liquidacion_con_vacaciones(
+            'LnrAgosto', date(2026, 8, 3), date(2026, 8, 7), leave_type=self.leave_type_lic_nr)
+        self.assertEqual(slip._ne_dias_pagables(), 10)
+        self.assertEqual(slip._ne_dias_sln(), 5)
