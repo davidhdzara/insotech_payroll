@@ -27,6 +27,12 @@
                        invisible="not l10n_co_embargo_juzgado"/>
                 <field name="l10n_co_saldo_pendiente"
                        invisible="not l10n_co_es_libranza"/>
+                <field name="l10n_co_autoriza_liquidacion"
+                       invisible="not l10n_co_es_libranza"/>
+                <field name="l10n_co_alcanza_prestaciones"
+                       invisible="not l10n_co_es_embargo"/>
+                <field name="l10n_co_alcanza_indemnizacion"
+                       invisible="not l10n_co_es_embargo"/>
             </field>
         </field>
     </record>

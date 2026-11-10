@@ -668,6 +668,43 @@ result = -abs(_valor) if _valor &gt; 0 else 0
             <field name="l10n_co_ne_dian_concept">RetencionFuente</field>
         </record>
 
+        <!-- ==================== CO_LIQ_EMBARGO / CO_LIQ_LIBRANZAS ====================
+             Despues de los descuentos de ley (SS_EMP y CO_LIQ_RETE) y en este orden:
+             embargos y luego libranzas (T-168/2016, T-629/2016). El tratamiento por
+             concepto vive en hr.payslip._ne_liq_* (CST arts. 154-156 y 344,
+             Ley 1527/2012, SL3208-2022). -->
+        <record id="hr_salary_rule_co_liq_embargo" model="hr.salary.rule">
+            <field name="name">Embargos Liquidacion</field>
+            <field name="code">CO_LIQ_EMBARGO</field>
+            <field name="sequence">111</field>
+            <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">result = payslip._ne_liq_embargos_aplican()</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = -payslip._ne_liq_embargos_calcular(result_rules, categories['DEDU'])</field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">EmbargoFiscal</field>
+        </record>
+
+        <record id="hr_salary_rule_co_liq_libranzas" model="hr.salary.rule">
+            <field name="name">Libranzas Liquidacion</field>
+            <field name="code">CO_LIQ_LIBRANZAS</field>
+            <field name="sequence">112</field>
+            <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">result = payslip._ne_liq_libranzas_aplican()</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+# categories['DEDU'] ya incluye el embargo (seq 111): los descuentos de ley son el resto.
+_legal = abs(categories['DEDU']) - abs(result_rules['CO_LIQ_EMBARGO']['total'])
+result = -payslip._ne_liq_libranzas_calcular(result_rules, _legal)
+            </field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">Libranza</field>
+        </record>
+
         <!-- ==================== CO_LIQ_NETO ==================== -->
         <record id="hr_salary_rule_co_liq_neto" model="hr.salary.rule">
             <field name="name">Neto Liquidacion</field>

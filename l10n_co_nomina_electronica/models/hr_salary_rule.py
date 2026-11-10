@@ -201,7 +201,26 @@ class HrSalaryRule(models.Model):
              'se genera sin tercero.',
     )
 
-    # Codigo de regla -> origen del tercero. Solo se escribe donde el campo
+    l10n_co_liq_tratamiento = fields.Selection(
+        selection=[
+            ('salario', 'Salario'),
+            ('vacaciones', 'Vacaciones compensadas'),
+            ('prestacion', 'Prestación social (prima, cesantías, intereses)'),
+            ('indemnizacion', 'Indemnización'),
+        ],
+        string='Tratamiento en Liquidación',
+        help='Clasifica el concepto de la liquidación para aplicar embargos y '
+             'libranzas (CST arts. 154-156 y 344; Ley 1527/2012; SL3208-2022).',
+    )
+
+    _L10N_CO_LIQ_TRATAMIENTO_POR_CODIGO = {
+        'CO_LIQ_SALARIOS': 'salario', 'CO_LIQ_VACACIONES': 'vacaciones',
+        'CO_LIQ_PRIMA': 'prestacion', 'CO_LIQ_CESANTIAS': 'prestacion',
+        'CO_LIQ_INT_CES': 'prestacion', 'CO_LIQ_INDEMNIZACION': 'indemnizacion',
+    }
+
+    # Codigo de regla (identificador interno del modulo, no un valor
+    # normativo) -> origen del tercero. Solo se escribe donde el campo
     # esta vacio (no pisa lo que configure el usuario).
     _L10N_CO_TERCERO_ORIGEN_POR_CODIGO = {
         'CO_SALUD_EMP': 'employee_eps', 'CO_SALUD_CIA': 'employee_eps',
@@ -218,6 +237,9 @@ class HrSalaryRule(models.Model):
         'CO_COOPERATIVA': 'contract_cooperativa',
         'CO_EDUCACION': 'contract_educacion',
         'CO_EMBARGO': 'distribution', 'CO_LIBRANZAS': 'distribution',
+        'CO_LIQ_EMBARGO': 'distribution', 'CO_LIQ_LIBRANZAS': 'distribution',
+        'CO_LIQ_SALUD': 'employee_eps', 'CO_LIQ_PENSION': 'employee_afp',
+        'CO_LIQ_RETE': 'company_dian',
     }
 
     @api.model
@@ -228,6 +250,10 @@ class HrSalaryRule(models.Model):
             self.search([
                 ('code', '=', code), ('l10n_co_tercero_origen', '=', False),
             ]).write({'l10n_co_tercero_origen': origen})
+        for code, trat in self._L10N_CO_LIQ_TRATAMIENTO_POR_CODIGO.items():
+            self.search([
+                ('code', '=', code), ('l10n_co_liq_tratamiento', '=', False),
+            ]).write({'l10n_co_liq_tratamiento': trat})
         return True
 
     def _l10n_co_cuenta_pasivo(self):

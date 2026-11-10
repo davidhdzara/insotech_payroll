@@ -719,11 +719,153 @@ class HrPayslip(models.Model):
         self._ne_guardar_reparto('CO_EMBARGO', filas)
         return total
 
+    # ──────────────────────────────────────────────────────────────────
+    # Liquidacion: embargos y libranzas por tipo de concepto
+    # (CST arts. 154-156 y 344; Ley 1527/2012; SL3208-2022)
+    # ──────────────────────────────────────────────────────────────────
+    def _ne_liq_montos(self, result_rules):
+        """Valor positivo de cada tipo de concepto de la liquidacion, segun
+        el tratamiento (l10n_co_liq_tratamiento) de las reglas de la estructura."""
+        self.ensure_one()
+        montos = dict.fromkeys(
+            ('salario', 'vacaciones', 'prestacion', 'indemnizacion'), 0.0)
+        for regla in self.struct_id.rule_ids:
+            if regla.l10n_co_liq_tratamiento:
+                montos[regla.l10n_co_liq_tratamiento] += abs(
+                    result_rules[regla.code]['total'])
+        return montos
+
+    def _ne_liq_embargos_vigentes(self):
+        self.ensure_one()
+        return self.employee_id.salary_attachment_ids.filtered(
+            lambda a: a.state == 'open'
+            and a.other_input_type_id.code in self._NE_PRIORIDAD_EMBARGO
+            and a.date_start <= self.date_to
+            and (not a.date_end or a.date_end >= self.date_from)
+        ).sorted(key=lambda a: self._NE_PRIORIDAD_EMBARGO[a.other_input_type_id.code])
+
+    def _ne_liq_libranzas_autorizadas(self):
+        self.ensure_one()
+        return self._ne_libranzas_vigentes().filtered(
+            lambda a: a.l10n_co_autoriza_liquidacion
+            and (a.remaining_amount if a.has_total_amount else a.l10n_co_saldo_pendiente) > 0)
+
+    def _ne_liq_embargos_aplican(self):
+        return bool(self._ne_liq_embargos_vigentes())
+
+    def _ne_liq_libranzas_aplican(self):
+        return bool(self._ne_liq_libranzas_autorizadas())
+
+    def _ne_liq_embargos_distribuir(self, montos, legal):
+        """Reparto de embargos sobre la liquidacion (sin persistir).
+
+        Salario y vacaciones compensadas forman un solo grupo (las vacaciones
+        se tratan como salario). Civil: 1/5 del excedente sobre el SMMLV y
+        solo sobre ese grupo. Alimentos/cooperativa: hasta el 50% del grupo y,
+        si la orden alcanza prestaciones (Art. 344), hasta el 50% de ellas,
+        limitado a la deuda si tiene monto total. La indemnizacion solo si la
+        orden la alcanza. Piso de minimo vital solo sobre el grupo salarial.
+        Devuelve (filas, disponible) con lo que queda por concepto.
+        """
+        self.ensure_one()
+        smmlv = self._rule_parameter('l10n_co_smmlv', self.date_from)
+        factor = self._rule_parameter('l10n_co_factor_embargo_civil', self.date_from)
+        pct = self._rule_parameter('l10n_co_pct_tope_embargo_alimentos', self.date_from)
+        sal, vac = montos['salario'], montos['vacaciones']
+        pres, ind = montos['prestacion'], montos['indemnizacion']
+        # descuentos de ley: primero contra salario, el resto contra vacaciones
+        sal_ley = max(0.0, sal - legal)
+        vac_ley = max(0.0, vac - max(0.0, legal - sal))
+        base_grupo = sal_ley + vac_ley
+        usado_grupo = usado_ind = usado_pres = 0.0
+        filas = []
+        for emb in self._ne_liq_embargos_vigentes():
+            con_ind = emb.l10n_co_alcanza_indemnizacion
+            base = base_grupo + (ind if con_ind else 0.0)
+            individual = emb._l10n_co_compute_embargo_amount(
+                base, smmlv, self.date_from,
+                factor_embargo_civil=factor, pct_tope_embargo_alimentos=pct)
+            espacio = max(0.0, (base - usado_grupo - usado_ind) - smmlv)
+            aplicado = min(individual, espacio)
+            en_grupo = min(aplicado, max(0.0, base_grupo - usado_grupo))
+            en_ind = aplicado - en_grupo
+            usado_grupo += en_grupo
+            usado_ind += en_ind
+            en_pres = 0.0
+            if emb.other_input_type_id.code != 'L10N_CO_EMBARGO_CIVIL' \
+                    and emb.l10n_co_alcanza_prestaciones and pres:
+                en_pres = max(0.0, min(pres * pct / 100.0 - usado_pres, pres - usado_pres))
+                if emb.has_total_amount:
+                    en_pres = min(en_pres, max(0.0, emb.remaining_amount - aplicado))
+                usado_pres += en_pres
+            filas.append({
+                'partner_id': emb.l10n_co_partner_id.id,
+                'attachment_id': emb.id, 'amount': aplicado + en_pres})
+        emb_sal = min(usado_grupo, sal_ley)
+        disponible = {
+            'salario_ley': sal_ley, 'emb_salario': emb_sal,
+            'salario': sal_ley - emb_sal,
+            'vacaciones': vac_ley - (usado_grupo - emb_sal),
+            'prestacion': pres - usado_pres,
+            'indemnizacion': ind - usado_ind,
+        }
+        return filas, disponible
+
+    def _ne_liq_embargos_calcular(self, result_rules, legal):
+        self.ensure_one()
+        filas, _disp = self._ne_liq_embargos_distribuir(
+            self._ne_liq_montos(result_rules), abs(legal))
+        self._ne_guardar_reparto('CO_LIQ_EMBARGO', filas)
+        return sum(f['amount'] for f in filas)
+
+    def _ne_liq_libranzas_calcular(self, result_rules, legal):
+        """Libranzas autorizadas contra la liquidacion, despues de embargos.
+
+        Deuda a cubrir: saldo insoluto si la libranza tiene monto total; si
+        no, el saldo pendiente. Orden de toma: salario (con el tope de la Ley
+        1527: 50% del neto de ley menos embargo), vacaciones, prestaciones e
+        indemnizacion (estas sin tope, SL3208-2022). Lo que no alcance queda
+        a cargo del trabajador frente a la entidad.
+        """
+        self.ensure_one()
+        montos = self._ne_liq_montos(result_rules)
+        _filas, disp = self._ne_liq_embargos_distribuir(montos, abs(legal))
+        pct = self._rule_parameter('l10n_co_pct_tope_libranzas', self.date_from)
+        cupo_salario = max(0.0, pct / 100.0 * disp['salario_ley'] - disp['emb_salario'])
+        buckets = [
+            ['salario', min(disp['salario'], cupo_salario)],
+            ['vacaciones', disp['vacaciones']],
+            ['prestacion', disp['prestacion']],
+            ['indemnizacion', disp['indemnizacion']],
+        ]
+        filas = []
+        for att in self._ne_liq_libranzas_autorizadas():
+            if not att.l10n_co_partner_id:
+                raise UserError(_(
+                    'La libranza "%(libranza)s" del empleado %(empleado)s no '
+                    'tiene el contacto de la entidad. Complete "Juzgado / '
+                    'Entidad" en Asignaciones Salariales.',
+                    libranza=att.display_name, empleado=self.employee_id.name))
+            deuda = att.remaining_amount if att.has_total_amount else att.l10n_co_saldo_pendiente
+            tomado = 0.0
+            for b in buckets:
+                t = max(0.0, min(b[1], deuda - tomado))
+                b[1] -= t
+                tomado += t
+            filas.append({
+                'partner_id': att.l10n_co_partner_id.id, 'attachment_id': att.id,
+                'amount': tomado,
+                'arrears_paid': min(tomado, att.l10n_co_saldo_pendiente),
+                'deferred': 0.0})
+        self._ne_guardar_reparto('CO_LIQ_LIBRANZAS', filas)
+        return sum(f['amount'] for f in filas)
+
     def _ne_aplicar_libranzas(self, revertir=False):
         """Refleja (o revierte) lo descontado en pagado y saldo pendiente."""
         signo = -1 if revertir else 1
         for row in self.env['l10n.co.payslip.tercero'].sudo().search([
-                ('slip_id', 'in', self.ids), ('rule_code', '=', 'CO_LIBRANZAS'),
+                ('slip_id', 'in', self.ids),
+                ('rule_code', 'in', ('CO_LIBRANZAS', 'CO_LIQ_LIBRANZAS')),
                 ('applied', '=', revertir)]):
             att = row.attachment_id
             att.write({
@@ -732,9 +874,28 @@ class HrPayslip(models.Model):
                     att.l10n_co_saldo_pendiente + signo * (row.deferred - row.arrears_paid),
             })
             row.applied = not revertir
+            if row.rule_code == 'CO_LIQ_LIBRANZAS':
+                self._ne_cerrar_libranza_liquidada(att, revertir)
+                continue
             if not revertir and att.has_total_amount and not att.remaining_amount \
                     and att.state == 'open' and att.employee_count == 1:
                 att.action_done()
+
+    def _ne_cerrar_libranza_liquidada(self, att, revertir):
+        """Al confirmar la liquidacion la libranza se cierra y deja constancia
+        del saldo que el trabajador sigue debiendo a la entidad."""
+        if revertir:
+            if att.state == 'close':
+                att.action_open()
+            return
+        debe = att.remaining_amount if att.has_total_amount else att.l10n_co_saldo_pendiente
+        if debe > 0:
+            att.message_post(body=_(
+                'Liquidación confirmada: saldo no cubierto de %(saldo).2f. El '
+                'trabajador queda debiendo ese valor directamente a la entidad.',
+                saldo=debe))
+        if att.state == 'open':
+            att.action_done()
 
     def _ne_validar_terceros_attachments(self):
         """Embargos y libranzas exigen el contacto (juzgado / entidad)."""

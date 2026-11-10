@@ -56,6 +56,23 @@ class HrSalaryAttachment(models.Model):
              'las nóminas siguientes, primero lo atrasado y luego la cuota '
              'del período, siempre respetando el tope.',
     )
+    l10n_co_autoriza_liquidacion = fields.Boolean(
+        string='Autoriza Descuento en Liquidación', tracking=True,
+        help='El trabajador autorizó por escrito descontar el saldo de esta '
+             'libranza de la liquidación final (Art. 149 CST; SL3208-2022). '
+             'Exige adjuntar el documento. Sin autorización no se descuenta.',
+    )
+    l10n_co_alcanza_prestaciones = fields.Boolean(
+        string='La Orden Alcanza Prestaciones', tracking=True,
+        help='Embargo de alimentos o cooperativa: la orden judicial se '
+             'extiende a las prestaciones sociales (Art. 344 CST, hasta el '
+             '50%). Sin marcar, la liquidación no embarga prestaciones.',
+    )
+    l10n_co_alcanza_indemnizacion = fields.Boolean(
+        string='La Orden Alcanza Indemnización', tracking=True,
+        help='La orden judicial se extiende a la indemnización por despido. '
+             'Sin marcar, la liquidación no embarga la indemnización.',
+    )
     l10n_co_es_libranza = fields.Boolean(compute='_compute_l10n_co_tipo')
     l10n_co_es_embargo = fields.Boolean(compute='_compute_l10n_co_tipo')
 
@@ -144,3 +161,12 @@ class HrSalaryAttachment(models.Model):
         elif porcentaje > 0:
             return min(salario_neto * (porcentaje / 100), tope)
         return 0.0
+
+    @api.constrains('l10n_co_autoriza_liquidacion', 'attachment')
+    def _check_l10n_co_autorizacion_documento(self):
+        for rec in self:
+            if rec.l10n_co_autoriza_liquidacion and not rec.attachment:
+                raise ValidationError(_(
+                    'La asignación "%s" autoriza el descuento en la '
+                    'liquidación: adjunte el documento de autorización.',
+                    rec.display_name))

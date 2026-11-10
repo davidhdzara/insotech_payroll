@@ -35,3 +35,4 @@ from . import test_terceros_deducciones_contrato
 from . import test_libranzas_tope
 from . import test_asiento_tercero
 from . import test_embargos_refactor
+from . import test_liquidacion_embargo_libranza
