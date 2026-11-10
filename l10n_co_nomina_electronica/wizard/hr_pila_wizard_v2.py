@@ -656,13 +656,17 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     # ──────────────────────────────────────────────────────────────────
     # Builder: Datos de cotizante (Tipo 02)
     # ──────────────────────────────────────────────────────────────────
-    def _aportes_salud_pension(self, ibc_sp, ibc_sln, dias_sp, dias_sln, tarifa_afp, tarifa_eps, _p):
+    def _aportes_salud_pension(self, ibc_sp, ibc_sln, dias_sp, dias_sln, tarifa_afp, tarifa_eps, _p,
+                               exonerado=False):
         """Salud y pensión del cotizante con la regla de SLN.
 
         Sobre los días de suspensión o licencia no remunerada el trabajador no paga su cuota;
         el empleador paga solo su tarifa de salud y, si la compañía lo decide (opcional en el
         sector privado: Concepto Min. Protección Social 134658, CST art. 53), su tarifa de
-        pensión. Sin pensión SLN, IBC y días de pensión excluyen los días SLN."""
+        pensión. Si el cotizante está exonerado del aporte patronal en salud, la tarifa patronal
+        de salud sobre los días SLN es cero (guía del Min. Salud a los operadores, "Cotizante
+        exonerado aporte patronal en salud y reporte de la novedad SLN"). Sin pensión SLN, IBC
+        y días de pensión excluyen los días SLN."""
         cotiza = self.company_id.l10n_co_ne_pension_patronal_sln
         ibc_normal = ibc_sp - ibc_sln
         return {
@@ -672,7 +676,8 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 ibc_normal * tarifa_afp
                 + (ibc_sln * _p('l10n_co_pct_pension_empleador') / 100 if cotiza else 0.0)),
             'cotizacion_salud': round(
-                ibc_normal * tarifa_eps + ibc_sln * _p('l10n_co_pct_salud_empleador') / 100),
+                ibc_normal * tarifa_eps
+                + (0.0 if exonerado else ibc_sln * _p('l10n_co_pct_salud_empleador') / 100)),
         }
 
     def _build_cotizante_data(self, payslip, seq, payslips=None):
@@ -797,7 +802,8 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         # los recibos pueden diferir en meses con varios documentos; la diferencia queda
         # auditable en l10n.co.ibc.mensual (ajuste patronal), no se reescribe el recibo.
         sp = self._aportes_salud_pension(
-            ibc_sp, ibc_sln, dias_sp, dias_sln, tarifa_afp, tarifa_eps, _p)
+            ibc_sp, ibc_sln, dias_sp, dias_sln, tarifa_afp, tarifa_eps, _p,
+            exonerado=exonerado == 'S')
         ibc_pension = sp['ibc_pension']
         dias_pension = sp['dias_pension']
         cotizacion_pension = sp['cotizacion_pension']

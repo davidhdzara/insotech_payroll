@@ -1437,20 +1437,17 @@ result = -payslip._ne_embargos_calcular(_salario_neto, _smmlv, _manual)
 # Criterio centralizado en res.company._is_exonerado_parafiscales --
 # unica fuente de verdad, compartida con CO_SENA_CIA/CO_ICBF_CIA y con
 # el wizard de PILA.
-# SLN: la base de continuidad NO es remuneracion devengada, asi que la exoneracion no la
-# cubre (Art. 114-1 ET): el 8.5% patronal sobre la base SLN se paga siempre.
+# Exoneracion evaluada sin la base SLN (no es remuneracion devengada). Guia del Min. Salud a los
+# operadores de informacion, "Cotizante exonerado aporte patronal en salud y reporte de la novedad
+# SLN": exonerado + SLN => la tarifa de salud a reportar es cero, tanto en dias laborados como SLN.
 ibc_sp = result_rules['CO_IBC_SP']['total']
 ibc_sln = result_rules['CO_IBC_SLN']['total']
-exonerado = employee.company_id._is_exonerado_parafiscales(max(0.0, ibc_sp - ibc_sln), payslip.date_from)
-result = ibc_sln > 0 or not exonerado
+result = not employee.company_id._is_exonerado_parafiscales(max(0.0, ibc_sp - ibc_sln), payslip.date_from)
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
-ibc_sp = result_rules['CO_IBC_SP']['total']
-ibc_sln = result_rules['CO_IBC_SLN']['total']
-exonerado = employee.company_id._is_exonerado_parafiscales(max(0.0, ibc_sp - ibc_sln), payslip.date_from)
-base = ibc_sln + (0.0 if exonerado else max(0.0, ibc_sp - ibc_sln))
-result = base * payslip._rule_parameter('l10n_co_pct_salud_empleador', payslip.date_from) / 100
+ibc = result_rules['CO_IBC_SP']['total']
+result = ibc * payslip._rule_parameter('l10n_co_pct_salud_empleador', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
             <field name="l10n_co_ugpp_payment_type">tp_salarial</field>

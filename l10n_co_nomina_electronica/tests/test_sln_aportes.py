@@ -84,12 +84,11 @@ class TestSlnAportes(TransactionCase):
             (self._linea(slip, 'CO_IBC_SP') - _SLN)
             * self._pct(slip, 'l10n_co_pct_pension_empleador'), delta=1)
 
-    def test_exoneracion_no_cubre_la_base_sln(self):
+    def test_exonerado_con_sln_salud_patronal_cero_en_laborados_y_sln(self):
+        """Guía Min. Salud: exonerado + SLN => tarifa de salud patronal cero (todo el IBC)."""
         self.company.l10n_co_ne_exoneration_1607 = True
         slip = self._recibo('Exon', 3000000.0)  # < 10 SMMLV: exonerado
-        self.assertAlmostEqual(
-            self._linea(slip, 'CO_SALUD_CIA'),
-            _SLN * self._pct(slip, 'l10n_co_pct_salud_empleador'), delta=1)
+        self.assertEqual(self._linea(slip, 'CO_SALUD_CIA'), 0.0)
 
     def test_exonerado_sin_sln_no_paga_salud_patronal_como_antes(self):
         self.company.l10n_co_ne_exoneration_1607 = True
@@ -112,19 +111,18 @@ class TestSlnAportes(TransactionCase):
         salario = tope - _SLN / 2
         slip = self._recibo('Umbral', salario)
         self.assertGreater(self._linea(slip, 'CO_IBC_SP'), 0)
-        # sin la base SLN el IBC < tope: la parte normal queda exonerada; solo paga la base SLN
-        self.assertAlmostEqual(
-            self._linea(slip, 'CO_SALUD_CIA'),
-            _SLN * self._pct(slip, 'l10n_co_pct_salud_empleador'), delta=1)
+        # sin la base SLN el IBC < tope: sigue exonerado, aunque con la base lo superaría
+        self.assertEqual(self._linea(slip, 'CO_SALUD_CIA'), 0.0)
 
     # ── PILA ──
-    def _pila(self, cotiza, ibc_sp=3000000.0):
+    def _pila(self, cotiza, ibc_sp=3000000.0, exonerado=False):
         self.company.l10n_co_ne_pension_patronal_sln = cotiza
         wizard = self.env['l10n.co.hr.pila.wizard.v2'].new({'company_id': self.company.id})
         params = {'l10n_co_pct_pension_empleado': 4.0, 'l10n_co_pct_pension_empleador': 12.0,
                   'l10n_co_pct_salud_empleado': 4.0, 'l10n_co_pct_salud_empleador': 8.5}
         return wizard._aportes_salud_pension(
-            ibc_sp, _SLN, 30, 10, 0.16, 0.125, lambda code: params[code])
+            ibc_sp, _SLN, 30, 10, 0.16, 0.125, lambda code: params[code],
+            exonerado=exonerado)
 
     def test_pila_sln_sin_cuota_del_trabajador(self):
         r = self._pila(True)
@@ -146,3 +144,24 @@ class TestSlnAportes(TransactionCase):
         r = wizard._aportes_salud_pension(3000000.0, 0.0, 30, 0, 0.16, 0.125, lambda c: 0.0)
         self.assertEqual(r['cotizacion_salud'], round(3000000.0 * 0.125))
         self.assertEqual(r['cotizacion_pension'], round(3000000.0 * 0.16))
+
+    def test_pila_exonerado_con_sln_salud_patronal_cero_en_sln(self):
+        r = self._pila(True, exonerado=True)
+        ibc_normal = 3000000.0 - _SLN
+        self.assertEqual(r['cotizacion_salud'], round(ibc_normal * 0.125))
+
+    def test_pila_exonerado_mes_100_por_ciento_sln_salud_cero(self):
+        """Caso del ejemplo oficial: exonerado y todo el mes SLN => cotización de salud 0."""
+        self.company.l10n_co_ne_pension_patronal_sln = True
+        wizard = self.env['l10n.co.hr.pila.wizard.v2'].new({'company_id': self.company.id})
+        params = {'l10n_co_pct_pension_empleador': 12.0, 'l10n_co_pct_salud_empleador': 8.5}
+        r = wizard._aportes_salud_pension(
+            _SLN, _SLN, 30, 30, 0.16, 0.125, lambda code: params[code], exonerado=True)
+        self.assertEqual(r['cotizacion_salud'], 0)
+        # la pensión patronal sigue su regla propia
+        self.assertEqual(r['cotizacion_pension'], round(_SLN * 0.12))
+
+    def test_nomina_exonerado_mes_100_por_ciento_sln_salud_cero(self):
+        self.company.l10n_co_ne_exoneration_1607 = True
+        slip = self._recibo('Exon100', 3000000.0)
+        self.assertEqual(self._linea(slip, 'CO_SALUD_CIA'), 0.0)
