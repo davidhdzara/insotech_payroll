@@ -633,7 +633,7 @@ class HrPayslip(models.Model):
         Persiste el reparto en l10n.co.payslip.tercero y devuelve el total.
         """
         self.ensure_one()
-        pct = self._rule_parameter('l10n_co_pct_tope_libranzas', self.date_from)
+        pct = self._rule_parameter('l10n_co_pct_tope_libranzas', self._ne_fecha_parametros())
         cupo = max(0.0, neto_ley * pct / 100.0 - embargo)
         rows = {}
         for att in self._ne_libranzas_vigentes():
@@ -694,8 +694,8 @@ class HrPayslip(models.Model):
             and a.other_input_type_id.code in self._NE_PRIORIDAD_EMBARGO)
         ordenados = activos.sorted(
             key=lambda a: self._NE_PRIORIDAD_EMBARGO.get(a.other_input_type_id.code, 99))
-        factor = self._rule_parameter('l10n_co_factor_embargo_civil', self.date_from)
-        pct = self._rule_parameter('l10n_co_pct_tope_embargo_alimentos', self.date_from)
+        factor = self._rule_parameter('l10n_co_factor_embargo_civil', self._ne_fecha_parametros())
+        pct = self._rule_parameter('l10n_co_pct_tope_embargo_alimentos', self._ne_fecha_parametros())
         total = 0.0
         filas = []
         for emb in ordenados:
@@ -770,9 +770,9 @@ class HrPayslip(models.Model):
         Devuelve (filas, disponible) con lo que queda por concepto.
         """
         self.ensure_one()
-        smmlv = self._rule_parameter('l10n_co_smmlv', self.date_from)
-        factor = self._rule_parameter('l10n_co_factor_embargo_civil', self.date_from)
-        pct = self._rule_parameter('l10n_co_pct_tope_embargo_alimentos', self.date_from)
+        smmlv = self._rule_parameter('l10n_co_smmlv', self._ne_fecha_parametros())
+        factor = self._rule_parameter('l10n_co_factor_embargo_civil', self._ne_fecha_parametros())
+        pct = self._rule_parameter('l10n_co_pct_tope_embargo_alimentos', self._ne_fecha_parametros())
         sal, vac = montos['salario'], montos['vacaciones']
         pres, ind = montos['prestacion'], montos['indemnizacion']
         # descuentos de ley: primero contra salario, el resto contra vacaciones
@@ -832,7 +832,7 @@ class HrPayslip(models.Model):
         self.ensure_one()
         montos = self._ne_liq_montos(result_rules)
         _filas, disp = self._ne_liq_embargos_distribuir(montos, abs(legal))
-        pct = self._rule_parameter('l10n_co_pct_tope_libranzas', self.date_from)
+        pct = self._rule_parameter('l10n_co_pct_tope_libranzas', self._ne_fecha_parametros())
         cupo_salario = max(0.0, pct / 100.0 * disp['salario_ley'] - disp['emb_salario'])
         buckets = [
             ['salario', min(disp['salario'], cupo_salario)],
@@ -2090,7 +2090,7 @@ class HrPayslip(models.Model):
                 '(pestaña de PILA del contrato). Complétela antes de calcular el aporte a ARL.',
                 employee=self.employee_id.name,
             ))
-        return self._rule_parameter(codigo, self.date_from)
+        return self._rule_parameter(codigo, self._ne_fecha_parametros())
 
     def _ne_corrida_en_seco(self):
         """H-023: arma los datos y el XML con un consecutivo provisional, sin firmar ni
@@ -2417,6 +2417,22 @@ class HrPayslip(models.Model):
             return dias_mes
         return min(d.day, dias_mes)
 
+    def _ne_fecha_parametros(self):
+        """Fecha con la que se resuelven los hr.rule.parameter (SMMLV, auxilio, topes, divisores).
+
+        Liquidacion: la fecha de retiro (date_to). En ella date_from es contract.date_start, que
+        puede ser de anos atras y traeria el SMMLV/auxilio del ingreso (o ningun valor, si es
+        anterior al primer parametro cargado). Es tambien el criterio del nativo
+        (hr.payslip._rule_parameter sin fecha usa date_to). Demas estructuras: date_from, igual
+        que antes -- no se altera la nomina mensual (p. ej. el cambio de jornada del 15-jul-2026
+        cae dentro de un mismo recibo mensual)."""
+        self.ensure_one()
+        if self.struct_id == self.env.ref(
+                'l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion',
+                raise_if_not_found=False):
+            return self.date_to
+        return self.date_from
+
     def _ne_tramo_pagable_periodo(self):
         """(periodo_ini, periodo_fin) -- el tramo del período de la nómina que realmente es
         pagable bajo la convención de mes comercial de 30 días.
@@ -2451,7 +2467,7 @@ class HrPayslip(models.Model):
         Delimita ING/RET: la fecha de ingreso y de retiro recortan el rango."""
         self.ensure_one()
         contract = self.contract_id
-        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
         periodo_ini, periodo_fin = self._ne_tramo_pagable_periodo()
         contrato_ini = contract.date_start
         contrato_fin = contract.date_end or periodo_fin
@@ -2529,7 +2545,7 @@ class HrPayslip(models.Model):
         """
         self.ensure_one()
         contract = self.contract_id
-        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
         periodo_ini, periodo_fin = self._ne_tramo_pagable_periodo()
         contrato_ini = contract.date_start
         contrato_fin = contract.date_end or periodo_fin
@@ -2731,7 +2747,7 @@ class HrPayslip(models.Model):
         integral (que no sale de lineas de devengado sino del contrato). Con ella, dos
         recibos del mismo mes (nomina + liquidacion) suman UN IBC, no dos (H-017b)."""
         self.ensure_one()
-        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
         return min(self._ne_dias_bajo_contrato(), dias_mes) / dias_mes
 
     def _ne_ibc_salarial(self, categories, contract, inputs, worked_days):
@@ -2741,9 +2757,9 @@ class HrPayslip(models.Model):
         self.ensure_one()
         if contract.l10n_co_ne_integral_salary:
             return contract.wage * self._rule_parameter(
-                'l10n_co_factor_integral_salary', self.date_from) * self._ne_factor_dias_integral()
+                'l10n_co_factor_integral_salary', self._ne_fecha_parametros()) * self._ne_factor_dias_integral()
         ibc = categories['DEV_SAL']
-        dias_mes_comercial = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        dias_mes_comercial = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
         ultimo_ibc = None
         for work_entry_code in ('CO_VAC', 'CO_LIC_REM'):
             dias_ausencia, dias_input = self._ne_dias_novedad_ausencia_e_input(
@@ -2787,7 +2803,7 @@ class HrPayslip(models.Model):
         self.ensure_one()
         if contract.l10n_co_ne_integral_salary:
             return contract.wage * self._rule_parameter(
-                'l10n_co_factor_integral_salary', self.date_from) * self._ne_factor_dias_integral()
+                'l10n_co_factor_integral_salary', self._ne_fecha_parametros()) * self._ne_factor_dias_integral()
         return categories['DEV_SAL']
 
     def _ne_ibc_remuneracion(self, contract, salarial):
@@ -2839,7 +2855,7 @@ class HrPayslip(models.Model):
         total menos IGE, IRL, LMA y SLN. Mismas fuentes de dias que
         _ne_dias_pagables() (no se recalcula nada aparte)."""
         self.ensure_one()
-        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
         total = min(self._ne_dias_bajo_contrato(), dias_mes)
         sin_arl = self._ne_dias_sln()
         for codigo in _NOVEDAD_AUSENCIA_CALENDARIO_CODES:
@@ -2855,18 +2871,18 @@ class HrPayslip(models.Model):
         dias = self._ne_dias_sln()
         if dias <= 0:
             return 0.0
-        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
         return self._ne_ultimo_ibc_anterior(contract) / dias_mes * dias
 
     def _ne_ibc_limites(self, salarial, incap, remuneracion, pactados, dias):
         """IBC del recibo con regla del 40%, techo (sin prorratear) y piso (prorrateado
         por dias). Ley 1393/2010 Art. 30; Ley 797/2003; SU 25185/2021."""
         self.ensure_one()
-        smmlv = self._rule_parameter('l10n_co_smmlv', self.date_from)
-        pct = self._rule_parameter('l10n_co_pct_tope_no_salarial', self.date_from)
-        minimo = self._rule_parameter('l10n_co_ibc_min_smmlv', self.date_from)
-        maximo = self._rule_parameter('l10n_co_ibc_max_smmlv', self.date_from)
-        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        smmlv = self._rule_parameter('l10n_co_smmlv', self._ne_fecha_parametros())
+        pct = self._rule_parameter('l10n_co_pct_tope_no_salarial', self._ne_fecha_parametros())
+        minimo = self._rule_parameter('l10n_co_ibc_min_smmlv', self._ne_fecha_parametros())
+        maximo = self._rule_parameter('l10n_co_ibc_max_smmlv', self._ne_fecha_parametros())
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
         excedente = max(0.0, pactados - pct / 100.0 * (remuneracion + pactados))
         ibc = min(salarial + incap + excedente, maximo * smmlv)
         if dias > 0:

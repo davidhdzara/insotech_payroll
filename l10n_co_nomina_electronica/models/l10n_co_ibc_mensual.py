@@ -124,7 +124,7 @@ class L10nCoIbcMensual(models.Model):
             return sum(l.total for s in slips for l in s.line_ids if l.code == codigo)
 
         ref = slips[-1]
-        dias_mes = ref._rule_parameter('l10n_co_dias_mes_comercial', ref.date_from)
+        dias_mes = ref._rule_parameter('l10n_co_dias_mes_comercial', ref._ne_fecha_parametros())
         salarial = suma('CO_IBC_SALARIAL')
         remuneracion = suma('CO_IBC_REMUN')
         pactados = suma('CO_IBC_PACTADOS')

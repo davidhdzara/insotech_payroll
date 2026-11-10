@@ -277,7 +277,7 @@ result = categories['PREST'] + categories['DEDU']
 # abarcan varios meses/anos (contrato desde hace tiempo, retiro reciente).
 _dias = payslip._ne_dias_pagables()
 
-result = contract.wage / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_from) * _dias
+result = contract.wage / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_to) * _dias
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Sueldo</field>
@@ -309,8 +309,8 @@ _salario = contract.wage
 
 # Auxilio de transporte en la base si aplica
 _aux = 0
-if _salario &lt;= payslip._rule_parameter('l10n_co_smmlv', payslip.date_from) * 2:
-    _aux = payslip._rule_parameter('l10n_co_aux_transporte', payslip.date_from)
+if _salario &lt;= payslip._rule_parameter('l10n_co_smmlv', payslip.date_to) * 2:
+    _aux = payslip._rule_parameter('l10n_co_aux_transporte', payslip.date_to)
 
 _base = _salario + _aux
 _fecha_fin = payslip.date_to
@@ -330,7 +330,7 @@ if _dias &lt; 0:
 # Tope maximo: un semestre completo = mitad del anio comercial (AUD-DIAN-34,
 # 2026-10-05: misma derivacion que CO_PRIMA, ver su comentario -- 180 no es
 # un umbral legal propio).
-_dias_anio = payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_from)
+_dias_anio = payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_to)
 _dias = min(_dias, _dias_anio / 2)
 
 # Prima proporcional
@@ -363,8 +363,8 @@ _salario = contract.wage
 
 # Auxilio de transporte en la base si aplica
 _aux = 0
-if _salario &lt;= payslip._rule_parameter('l10n_co_smmlv', payslip.date_from) * 2:
-    _aux = payslip._rule_parameter('l10n_co_aux_transporte', payslip.date_from)
+if _salario &lt;= payslip._rule_parameter('l10n_co_smmlv', payslip.date_to) * 2:
+    _aux = payslip._rule_parameter('l10n_co_aux_transporte', payslip.date_to)
 
 _base = _salario + _aux
 _fecha_fin = payslip.date_to
@@ -377,10 +377,10 @@ _inicio_efectivo = max(contract.date_start, _inicio_periodo)
 _dias = (_fecha_fin - _inicio_efectivo).days + 1
 if _dias &lt; 0:
     _dias = 0
-_dias = min(_dias, payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_from))
+_dias = min(_dias, payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_to))
 
 # Cesantias proporcionales
-result = _base * _dias / payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_from)
+result = _base * _dias / payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_to)
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Cesantias</field>
@@ -416,10 +416,10 @@ _inicio_efectivo = max(contract.date_start, _inicio_periodo)
 _dias = (_fecha_fin - _inicio_efectivo).days + 1
 if _dias &lt; 0:
     _dias = 0
-_dias = min(_dias, payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_from))
+_dias = min(_dias, payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_to))
 
 # Intereses sobre cesantias: pct_intereses_cesantias% anual proporcional
-result = _cesantias * (payslip._rule_parameter('l10n_co_pct_intereses_cesantias', payslip.date_from) / 100) * _dias / payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_from)
+result = _cesantias * (payslip._rule_parameter('l10n_co_pct_intereses_cesantias', payslip.date_to) / 100) * _dias / payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_to)
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">InteresesCesantias</field>
@@ -452,7 +452,7 @@ if _dias_totales &lt; 0:
 # Formula: salario_mensual * dias_trabajados / divisor_vacaciones
 # (divisor_vacaciones = dias_anio_comercial * 2, porque son 15 dias de
 # vacaciones por dias_anio_comercial dias de trabajo)
-result = _salario * _dias_totales / payslip._rule_parameter('l10n_co_divisor_vacaciones', payslip.date_from)
+result = _salario * _dias_totales / payslip._rule_parameter('l10n_co_divisor_vacaciones', payslip.date_to)
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">VacacionesCompensadas</field>
@@ -506,9 +506,9 @@ _fecha_fin = payslip.date_to
 
 # Dias trabajados totales
 _dias_totales = (_fecha_fin - _fecha_inicio).days + 1
-_anos = _dias_totales / payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_from)
+_anos = _dias_totales / payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_to)
 _anos_completos = int(_anos)
-_valor_dia = _salario / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_from)
+_valor_dia = _salario / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_to)
 
 if _tipo_contrato in ('1', '3'):
     # ── Contrato a termino fijo (1) u obra/labor (3) ──
@@ -538,7 +538,7 @@ if _tipo_contrato in ('1', '3'):
         # 'fin_obra', que ya existe y es mutuamente excluyente en
         # l10n_co_ne_liquidacion_cause) -- no hace falta modelar un
         # campo aparte de "obra finalizada".
-        _piso_dias = payslip._rule_parameter('l10n_co_dias_piso_indemniz_obra_labor', payslip.date_from)
+        _piso_dias = payslip._rule_parameter('l10n_co_dias_piso_indemniz_obra_labor', payslip.date_to)
         _indemnizacion_minima = _valor_dia * _piso_dias
         result = max(_indemnizacion_base, _indemnizacion_minima)
     else:
@@ -547,17 +547,17 @@ if _tipo_contrato in ('1', '3'):
 
 else:
     # ── Contrato a termino indefinido (Art. 64 CST, num. 1) ──
-    _tope_smmlv = payslip._rule_parameter('l10n_co_tope_indemniz_smmlv', payslip.date_from)
-    if _salario &lt; payslip._rule_parameter('l10n_co_smmlv', payslip.date_from) * _tope_smmlv:
+    _tope_smmlv = payslip._rule_parameter('l10n_co_tope_indemniz_smmlv', payslip.date_to)
+    if _salario &lt; payslip._rule_parameter('l10n_co_smmlv', payslip.date_to) * _tope_smmlv:
         # Menos de 10 SMMLV: dias_primer_anio + dias_anio_adicional por cada anio
         # adicional o proporcion (lit. a)
-        _dias_primer_anio = payslip._rule_parameter('l10n_co_dias_indemniz_primer_anio_menor10', payslip.date_from)
-        _dias_anio_adicional = payslip._rule_parameter('l10n_co_dias_indemniz_anio_adicional_menor10', payslip.date_from)
+        _dias_primer_anio = payslip._rule_parameter('l10n_co_dias_indemniz_primer_anio_menor10', payslip.date_to)
+        _dias_anio_adicional = payslip._rule_parameter('l10n_co_dias_indemniz_anio_adicional_menor10', payslip.date_to)
     else:
         # 10 SMMLV o mas: dias_primer_anio + dias_anio_adicional por cada anio
         # adicional o proporcion (lit. b)
-        _dias_primer_anio = payslip._rule_parameter('l10n_co_dias_indemniz_primer_anio_mayor10', payslip.date_from)
-        _dias_anio_adicional = payslip._rule_parameter('l10n_co_dias_indemniz_anio_adicional_mayor10', payslip.date_from)
+        _dias_primer_anio = payslip._rule_parameter('l10n_co_dias_indemniz_primer_anio_mayor10', payslip.date_to)
+        _dias_anio_adicional = payslip._rule_parameter('l10n_co_dias_indemniz_anio_adicional_mayor10', payslip.date_to)
     _indem = _valor_dia * _dias_primer_anio
     if _anos &gt; 1:
         _anos_adicionales = _anos - 1
@@ -658,7 +658,7 @@ result = payslip._ne_ibc_limites(
 # Descuento salud sobre IBC (devengados salariales)
 # En la liquidacion, el IBC incluye los salarios pendientes
 _ibc = result_rules['CO_IBC_SP']['total']  # IBC unico de la liquidacion (H-017b)
-result = -abs(_ibc * payslip._rule_parameter('l10n_co_pct_salud_empleado', payslip.date_from) / 100)
+result = -abs(_ibc * payslip._rule_parameter('l10n_co_pct_salud_empleado', payslip.date_to) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Salud</field>
@@ -680,7 +680,7 @@ result = not employee.l10n_co_ne_foreigner_no_pension
             <field name="amount_python_compute">
 # Descuento pension sobre IBC
 _ibc = result_rules['CO_IBC_SP']['total']  # IBC unico de la liquidacion (H-017b)
-result = -abs(_ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', payslip.date_from) / 100)
+result = -abs(_ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', payslip.date_to) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">FondoPension</field>
@@ -697,12 +697,12 @@ result = -abs(_ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', pay
             <field name="condition_python">
 # Busca configuracion de retencion para el ano
 _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-    ('year', '=', str(payslip.date_from.year)),
+    ('year', '=', str(payslip.date_to.year)),
     ('company_id', '=', employee.company_id.id),
 ], limit=1)
 if not _rete_cfg:
     _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-        ('year', '=', str(payslip.date_from.year)),
+        ('year', '=', str(payslip.date_to.year)),
     ], limit=1)
 result = bool(_rete_cfg)
             </field>
@@ -710,19 +710,19 @@ result = bool(_rete_cfg)
             <field name="amount_python_compute">
 # Calculo de retencion en la fuente sobre la liquidacion
 _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-    ('year', '=', str(payslip.date_from.year)),
+    ('year', '=', str(payslip.date_to.year)),
     ('company_id', '=', employee.company_id.id),
 ], limit=1)
 if not _rete_cfg:
     _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-        ('year', '=', str(payslip.date_from.year)),
+        ('year', '=', str(payslip.date_to.year)),
     ], limit=1)
 
 # Bruto total de la liquidacion
 _gross = categories['DEV'] if categories.get('DEV') else 0
 _ibc = categories.get('DEV_SAL', contract.wage)
 if contract.l10n_co_ne_integral_salary:
-    _ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_from)
+    _ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_to)
 
 _rete_result = _rete_cfg.compute_retefuente(
     employee, _gross, _ibc, _ibc, employee.company_id
