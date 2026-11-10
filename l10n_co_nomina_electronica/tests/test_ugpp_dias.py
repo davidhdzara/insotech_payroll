@@ -59,7 +59,7 @@ class TestUgppDias(TransactionCase):
         wb = openpyxl.Workbook()
         ws = wb.active
         report = self.Ugpp.create({
-            'year': 2026, 'month': '09', 'date_from': date(2026, 9, 1),
+            'year': 2026, 'month': '9', 'date_from': date(2026, 9, 1),
             'date_to': date(2026, 9, 30), 'company_id': self.company.id})
         report._generate_sheet_nomina(
             ws, slips, Font(bold=True), PatternFill(), Alignment(), Border())
