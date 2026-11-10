@@ -217,3 +217,18 @@ class TestLiquidacionTramoAusencias(TransactionCase):
                 [('code', '=', code), ('struct_id', '=', self.liquidacion.id)], limit=1)
             self.assertTrue(regla, code)
             self.assertEqual(regla.l10n_co_liq_tratamiento, 'salario')
+
+    def test_el_neto_aumenta_exactamente_el_valor_de_las_vacaciones_del_tramo(self):
+        """CO_LIQ_NETO con la regla de vacaciones disfrutadas es 300.000 mas que el mismo caso con
+        la regla inactiva (las deducciones son iguales: el IBC no depende de la regla)."""
+        slip = self._liquidacion_con_ausencias(
+            'NetoVac', [(self.leave_type_vac, date(2026, 8, 3), date(2026, 8, 7))])
+        neto_con = self._linea(slip, 'CO_LIQ_NETO').total
+        regla = self.env['hr.salary.rule'].search(
+            [('code', '=', 'CO_LIQ_VAC_DISFRUTADAS'), ('struct_id', '=', self.liquidacion.id)],
+            limit=1)
+        regla.active = False
+        slip.compute_sheet()
+        self.assertFalse(self._linea(slip, 'CO_LIQ_VAC_DISFRUTADAS'))
+        neto_sin = self._linea(slip, 'CO_LIQ_NETO').total
+        self.assertAlmostEqual(neto_con - neto_sin, 300000.0, places=2)
