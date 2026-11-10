@@ -44,3 +44,4 @@ from . import test_ne_consecutivo_sin_huecos
 from . import test_habilitacion_permisos
 from . import test_nombres_empleado
 from . import test_ugpp_dias
+from . import test_recibos_solapados

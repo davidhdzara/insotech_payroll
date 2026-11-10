@@ -1031,6 +1031,7 @@ class HrPayslip(models.Model):
         Sobrescribe la confirmación de la nómina para asignar el consecutivo
         temporal PRE-NOM al número del payslip en Odoo.
         """
+        self._ne_validar_sin_solape()
         res = super(HrPayslip, self).action_payslip_done()
         self._ne_aplicar_libranzas()
         self._ne_refrescar_ibc_mensual()
@@ -1042,6 +1043,42 @@ class HrPayslip(models.Model):
                     rec.number = temporal_number
                     rec.l10n_co_ne_consecutive = temporal_number
         return res
+
+    def _ne_validar_sin_solape(self):
+        """Límite conocido "recibos solapados": dos recibos confirmados del mismo empleado y
+        la MISMA estructura con periodos que se cruzan duplicarían días e IBC en el
+        consolidado. Estructuras distintas (liquidación, prima, bonificaciones) pueden
+        cruzarse con la nómina regular por diseño; notas de ajuste y notas crédito se cruzan
+        con su original. Solo valida al confirmar (hacia adelante)."""
+        vigentes = self.filtered(
+            lambda s: not s.l10n_co_ne_is_adjustment and not s.credit_note)
+        for slip in vigentes:
+            otros = self.search([
+                ('id', '!=', slip.id),
+                ('employee_id', '=', slip.employee_id.id),
+                ('company_id', '=', slip.company_id.id),
+                ('struct_id', '=', slip.struct_id.id),
+                ('state', 'in', ('done', 'paid')),
+                ('credit_note', '=', False),
+                ('l10n_co_ne_is_adjustment', '=', False),
+                ('date_from', '<=', slip.date_to),
+                ('date_to', '>=', slip.date_from),
+            ])
+            # Recibos del mismo lote que se confirman a la vez.
+            otros |= (vigentes - slip).filtered(
+                lambda o: o.employee_id == slip.employee_id
+                and o.company_id == slip.company_id and o.struct_id == slip.struct_id
+                and o.date_from <= slip.date_to and o.date_to >= slip.date_from)
+            if otros:
+                otro = otros[0]
+                raise UserError(_(
+                    'No se puede confirmar "%(slip)s" (%(desde)s a %(hasta)s): el periodo se '
+                    'cruza con "%(otro)s" (%(o_desde)s a %(o_hasta)s) del mismo empleado '
+                    '%(employee)s y la misma estructura, y duplicaría días e IBC. Corrija las '
+                    'fechas o cancele uno de los dos recibos.',
+                    slip=slip.number or slip.name, desde=slip.date_from, hasta=slip.date_to,
+                    otro=otro.number or otro.name, o_desde=otro.date_from,
+                    o_hasta=otro.date_to, employee=slip.employee_id.name))
 
     def action_send_ne_dian(self):
 
