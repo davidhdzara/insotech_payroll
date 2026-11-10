@@ -164,6 +164,9 @@ MAPEO = {
     'CO_PENSION_VOL': (A_EMBARGOS, None),
     'CO_COOPERATIVA': (A_EMBARGOS, None),
     'CO_EMBARGO': (A_EMBARGOS, None),
+    # Liquidacion (.124): mismo pasivo; el tercero lo pone hr.salary.rule.l10n_co_tercero_origen.
+    'CO_LIQ_EMBARGO': (A_EMBARGOS, None),
+    'CO_LIQ_LIBRANZAS': (A_EMBARGOS, None),
     'CO_PLAN_COMP': (A_EMBARGOS, None),
     'CO_EDUCACION': (A_EMBARGOS, None),
     'CO_OTRAS_DED': (A_EMBARGOS, None),
