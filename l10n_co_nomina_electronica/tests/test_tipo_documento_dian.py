@@ -44,6 +44,8 @@ class TestTipoDocumentoDian(TransactionCase):
     def _make_payslip(self, name):
         employee = self.env['hr.employee'].create({
             'name': name,
+            'l10n_co_primer_nombre': 'Prueba',
+            'l10n_co_primer_apellido': 'Fixture',
             'identification_id': '90' + str(self.env['hr.employee'].search_count([])),
             'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10',

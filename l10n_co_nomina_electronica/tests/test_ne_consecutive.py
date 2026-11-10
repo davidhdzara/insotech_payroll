@@ -77,6 +77,8 @@ class TestNeConsecutivePrefixGuard(TransactionCase):
     def _make_payslip(self, name, is_adjustment=False):
         employee = self.env['hr.employee'].create({
             'name': name,
+            'l10n_co_primer_nombre': 'Prueba',
+            'l10n_co_primer_apellido': 'Fixture',
             'identification_id': '20' + str(self.env['hr.employee'].search_count([])),
             'company_id': self.company.id,
             # AUD-DIAN-34 (2026-10-05): ver nota en test_dian_matching.py --

@@ -2147,7 +2147,7 @@ class HrPayslip(models.Model):
         """Sección <Trabajador> del XML de nómina electrónica."""
         employee = self.employee_id
         contract = self.contract_id
-        _name_parts = dian_utils.split_name(employee.name or '')
+        _name_parts = employee._l10n_co_nombre_dian()
         lugar_trabajo = self._ne_lugar_trabajo_partner()
         return {
             'TipoTrabajador': employee.l10n_co_ne_worker_type or '01',
@@ -3419,6 +3419,8 @@ class HrPayslip(models.Model):
 
         # H-021: antes de que action_generate_ne_xml() asigne el consecutivo.
         self._ne_validar_cuenta_transferencia()
+        # H-024: nombre y apellido completos, también antes de gastar el consecutivo.
+        employee._l10n_co_nombre_dian()
 
     def _validate_company_ne_config(self, company):
         """Valida la configuración de nómina electrónica de la empresa."""

@@ -684,7 +684,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 empleado=employee.name, mes=payslip.date_to.strftime('%Y-%m')))
 
         # Separar nombre completo en componentes
-        name_parts = dian_utils.split_name(employee.name or '')
+        name_parts = employee._l10n_co_nombre_dian()
 
         # Mapeo tipo de documento al formato PILA
         doc_type_code = dian_utils.get_doc_type_code(

@@ -41,6 +41,8 @@ class TestPagoCuentaBancaria(TransactionCase):
     def _make_payslip(self, name, payment_method='10'):
         employee = self.env['hr.employee'].create({
             'name': name,
+            'l10n_co_primer_nombre': 'Prueba',
+            'l10n_co_primer_apellido': 'Fixture',
             'company_id': self.company.id,
             'l10n_co_ne_payment_method': payment_method,
         })

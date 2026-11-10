@@ -617,7 +617,7 @@ class L10nCoNominaUgpp(models.Model):
             nov_vacaciones = 'X' if dias_vacaciones > 0 else ''
 
             # -- Nombre: APELLIDO1 APELLIDO2 NOMBRE1 NOMBRE2 -----------
-            name_parts = dian_utils.split_name(employee.name)
+            name_parts = employee._l10n_co_nombre_dian()
             nombre_cotizante = ' '.join(filter(None, [
                 name_parts.get('primer_apellido', ''),
                 name_parts.get('segundo_apellido', ''),

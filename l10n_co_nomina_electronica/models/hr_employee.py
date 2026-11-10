@@ -21,7 +21,9 @@ V1.0, secciones 6.2.8 (Trabajador) y 6.2.9 (Pago).
 """
 
 from odoo import api, fields, models, _
-from odoo.exceptions import ValidationError
+from odoo.exceptions import UserError, ValidationError
+
+from ..services import dian_utils
 
 
 class HrEmployee(models.Model):
@@ -76,6 +78,51 @@ class HrEmployee(models.Model):
                 })
 
     # ──────────────────────────────────────────────────────────────────
+    # Nombres y apellidos (H-024). Odoo solo guarda ``name``; Colombia pide
+    # 4 datos separados (XML DIAN, PILA, UGPP) y partir un texto libre es
+    # ambiguo. Se prellenan SOLO los casos sin ambigüedad (ver
+    # dian_utils.split_name) y el resto lo completa una persona.
+    # ──────────────────────────────────────────────────────────────────
+    l10n_co_primer_nombre = fields.Char(string='Primer Nombre')
+    l10n_co_otros_nombres = fields.Char(string='Otros Nombres')
+    l10n_co_primer_apellido = fields.Char(string='Primer Apellido')
+    l10n_co_segundo_apellido = fields.Char(string='Segundo Apellido')
+
+    _L10N_CO_CAMPOS_NOMBRE = {
+        'primer_nombre': 'l10n_co_primer_nombre',
+        'otros_nombres': 'l10n_co_otros_nombres',
+        'primer_apellido': 'l10n_co_primer_apellido',
+        'segundo_apellido': 'l10n_co_segundo_apellido',
+    }
+
+    @api.model
+    def _l10n_co_prellenar_nombre(self, full_name):
+        """Valores de los 4 campos prellenados desde ``full_name`` (vacíos si es ambiguo)."""
+        raw = self.env['ir.config_parameter'].sudo().get_param(
+            'l10n_co_nomina_electronica.particulas_nombre')
+        if raw is None:
+            raise UserError(_(
+                'Falta el parámetro del sistema "l10n_co_nomina_electronica.particulas_nombre" '
+                '(palabras que vuelven ambiguo un nombre, separadas por coma). Créelo en '
+                'Ajustes > Técnico > Parámetros del sistema.'))
+        particulas = {p.strip().lower() for p in raw.split(',') if p.strip()}
+        partes = dian_utils.split_name(full_name or '', particulas)
+        return {campo: partes[clave] for clave, campo in self._L10N_CO_CAMPOS_NOMBRE.items()}
+
+    def _l10n_co_nombre_dian(self):
+        """Los 4 datos de nombre para XML/PILA/UGPP, desde los campos (única fuente).
+
+        Primer nombre y primer apellido son obligatorios; el error nombra al empleado."""
+        self.ensure_one()
+        if not (self.l10n_co_primer_nombre and self.l10n_co_primer_apellido):
+            raise UserError(_(
+                'El empleado "%(employee)s" no tiene completos el Primer Nombre y el Primer '
+                'Apellido. Complételos en la pestaña Nómina, grupo "Identificación DIAN", '
+                'antes de continuar.', employee=self.name))
+        return {clave: self[campo] or ''
+                for clave, campo in self._L10N_CO_CAMPOS_NOMBRE.items()}
+
+    # ──────────────────────────────────────────────────────────────────
     # Sincronización del NÚMERO de identificación con Contactos (UX-02,
     # 2026-10-11, decisión de David: "que el contacto y el empleado queden
     # sincronizados en el número"). La dirección Contactos -> empleado vive
@@ -102,6 +149,10 @@ class HrEmployee(models.Model):
     # ──────────────────────────────────────────────────────────────────
     @api.model_create_multi
     def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('name') and not any(
+                    campo in vals for campo in self._L10N_CO_CAMPOS_NOMBRE.values()):
+                vals.update(self._l10n_co_prellenar_nombre(vals['name']))
         employees = super().create(vals_list)
         for employee in employees:
             if (
@@ -113,7 +164,20 @@ class HrEmployee(models.Model):
         return employees
 
     def write(self, vals):
+        # H-024: al renombrar se vuelve a prellenar solo a quien NO tenía los campos
+        # editados a mano (iguales al prellenado de su nombre anterior, o vacíos).
+        renombrar = {}
+        if vals.get('name') and not any(
+                campo in vals for campo in self._L10N_CO_CAMPOS_NOMBRE.values()):
+            nuevos = self._l10n_co_prellenar_nombre(vals['name'])
+            for employee in self:
+                actuales = {c: employee[c] or '' for c in self._L10N_CO_CAMPOS_NOMBRE.values()}
+                previos = self._l10n_co_prellenar_nombre(employee.name)
+                if actuales == previos or not any(actuales.values()):
+                    renombrar[employee.id] = nuevos
         res = super().write(vals)
+        for employee_id, nuevos in renombrar.items():
+            super(HrEmployee, self.browse(employee_id)).write(nuevos)
         if 'identification_id' in vals:
             for employee in self:
                 if (

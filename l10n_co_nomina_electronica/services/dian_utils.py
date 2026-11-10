@@ -355,29 +355,29 @@ def get_city_code(city_record) -> str:
 # Separación de nombre en formato colombiano
 # =====================================================================
 
-def split_name(full_name: str) -> dict:
-    """Separa un nombre completo en componentes colombianos.
+def split_name(full_name: str, particulas=()) -> dict:
+    """Prellena nombres y apellidos colombianos SOLO cuando no hay ambigüedad.
 
-    La convención colombiana ordena los nombres como:
-        PrimerNombre [SegundoNombre] PrimerApellido [SegundoApellido]
+    La convención es ``PrimerNombre [OtrosNombres] PrimerApellido [SegundoApellido]``,
+    pero a partir de un único texto no se puede saber dónde termina el nombre
+    (``Juan Carlos Pérez`` vs. ``Juan Pérez Gómez``) ni dónde empiezan los apellidos
+    compuestos (``de la Cruz``). Por eso se prellena únicamente:
+
+    - 1 palabra: primer nombre;
+    - 2 palabras: primer nombre + primer apellido;
+    - 4 palabras sin partículas: nombre, otro nombre, primer y segundo apellido.
+
+    Cualquier otro caso (3 palabras, 5 o más, o con alguna de ``particulas``: de, del,
+    la...) devuelve todo vacío: lo completa una persona, nunca se adivina.
 
     Args:
-        full_name: Nombre completo (ej: 'Juan Carlos García López').
+        full_name: Nombre completo.
+        particulas: palabras (minúsculas) que vuelven ambiguo un nombre; salen de un
+            parámetro del sistema, no del código.
 
     Returns:
-        Diccionario con las claves:
-        - ``primer_nombre``
-        - ``otros_nombres``
-        - ``primer_apellido``
-        - ``segundo_apellido``
-
-    Examples:
-        >>> split_name('Juan Carlos García López')
-        {'primer_nombre': 'Juan', 'otros_nombres': 'Carlos', \
-'primer_apellido': 'García', 'segundo_apellido': 'López'}
-        >>> split_name('María Rodríguez')
-        {'primer_nombre': 'María', 'otros_nombres': '', \
-'primer_apellido': 'Rodríguez', 'segundo_apellido': ''}
+        dict con ``primer_nombre``, ``otros_nombres``, ``primer_apellido``,
+        ``segundo_apellido``.
     """
     result = {
         'primer_nombre': '',
@@ -385,27 +385,18 @@ def split_name(full_name: str) -> dict:
         'primer_apellido': '',
         'segundo_apellido': '',
     }
-    if not full_name or not full_name.strip():
+    parts = (full_name or '').split()
+    if not parts:
         return result
-
-    parts = full_name.strip().split()
-    length = len(parts)
-
-    if length == 1:
+    if any(part.lower() in particulas for part in parts):
+        return result
+    if len(parts) == 1:
         result['primer_nombre'] = parts[0]
-    elif length == 2:
-        result['primer_nombre'] = parts[0]
-        result['primer_apellido'] = parts[1]
-    elif length == 3:
-        result['primer_nombre'] = parts[0]
-        result['primer_apellido'] = parts[1]
-        result['segundo_apellido'] = parts[2]
-    else:  # 4 o más palabras
-        result['primer_nombre'] = parts[0]
-        result['otros_nombres'] = ' '.join(parts[1:-2])
-        result['primer_apellido'] = parts[-2]
-        result['segundo_apellido'] = parts[-1]
-
+    elif len(parts) == 2:
+        result['primer_nombre'], result['primer_apellido'] = parts
+    elif len(parts) == 4:
+        (result['primer_nombre'], result['otros_nombres'],
+         result['primer_apellido'], result['segundo_apellido']) = parts
     return result
 
 

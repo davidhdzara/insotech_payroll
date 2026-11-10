@@ -18,6 +18,8 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
 
         self.employee = self.env['hr.employee'].create({
             'name': 'Juan Pérez Gómez',
+            'l10n_co_primer_nombre': 'Prueba',
+            'l10n_co_primer_apellido': 'Fixture',
             'identification_id': '10203040',
             'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00',
