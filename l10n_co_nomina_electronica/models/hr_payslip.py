@@ -2052,6 +2052,33 @@ class HrPayslip(models.Model):
     # Cada estructura propia tiene su regla de neto; solo la general tiene "Total Devengados".
     _NE_NETO_CODES = ('CO_NETO', 'CO_PRIMA_NETO', 'CO_LIQ_NETO', 'CO_BON_NETO')
     _NE_BRUTO_CODES = ('CO_BRUTO',)
+    # Lineas que Odoo agrega por defecto a cada estructura (BASIC/GROSS/NET); no son conceptos
+    # del recibo y su valor es el de las categorias nativas, no el neto real.
+    _NE_NATIVOS_SIN_PDF = ('BASIC', 'GROSS', 'NET')
+
+    def _ne_pdf_lineas(self):
+        """Lineas que se imprimen como conceptos en el PDF del recibo: las que aparecen en el
+        recibo, sin las nativas BASIC/GROSS/NET ni las filas de total (bruto y neto de cada
+        estructura propia), que no son conceptos y sumarlas duplica el neto."""
+        self.ensure_one()
+        excluir = (set(self._NE_NATIVOS_SIN_PDF) | set(self._NE_NETO_CODES)
+                   | set(self._NE_BRUTO_CODES))
+        return self.line_ids.filtered(
+            lambda l: l.appears_on_payslip and l.code not in excluir)
+
+    def _ne_pdf_neto(self):
+        """NETO A PAGAR del PDF: el total de la linea de neto de la estructura del recibo
+        (CO_NETO, CO_PRIMA_NETO, CO_LIQ_NETO o CO_BON_NETO) -- la misma fuente de net_wage
+        (_compute_basic_net). Sin esa linea no hay neto confiable: error, nunca un valor por
+        defecto."""
+        self.ensure_one()
+        neto = self.line_ids.filtered(lambda l: l.code in self._NE_NETO_CODES)
+        if not neto:
+            raise UserError(_(
+                'El recibo "%(recibo)s" no tiene línea de neto: calcule la nómina '
+                '(botón Calcular) antes de imprimirla.', recibo=self.display_name))
+        return sum(neto.mapped('total'))
+
 
     @api.depends('line_ids.total')
     def _compute_basic_net(self):
