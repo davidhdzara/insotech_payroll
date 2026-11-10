@@ -495,6 +495,8 @@ class HrPayslip(models.Model):
             not self.l10n_co_ne_consecutive
             or not self.l10n_co_ne_consecutive.startswith(expected_prefix)
         ):
+            # H-023: todo lo que no depende del número se prueba ANTES de gastarlo.
+            self._ne_corrida_en_seco()
             self.l10n_co_ne_consecutive = self._get_next_ne_consecutive()
 
 
@@ -2052,6 +2054,31 @@ class HrPayslip(models.Model):
                 employee=self.employee_id.name,
             ))
         return self._rule_parameter(codigo, self.date_from)
+
+    def _ne_corrida_en_seco(self):
+        """H-023: arma los datos y el XML con un consecutivo provisional, sin firmar ni
+        persistir nada (savepoint que siempre se revierte), para que un error de datos o
+        del constructor del XML salga ANTES de tomar un número de la secuencia.
+
+        Las secuencias NE son ``no_gap`` (migración .137), así que un fallo posterior
+        (firma, adjunto) también devuelve el número con el rollback; esta corrida evita
+        además tocar la secuencia en los fallos más comunes."""
+        self.ensure_one()
+
+        class _CorridaEnSecoTerminada(Exception):
+            pass
+
+        try:
+            with self.env.cr.savepoint():
+                self.l10n_co_ne_consecutive = '%s1' % self._ne_expected_prefix()
+                payslip_data = self._collect_payslip_data()
+                if self.l10n_co_ne_is_adjustment:
+                    nomina_xml_builder.build_nota_ajuste_v2(payslip_data)
+                else:
+                    nomina_xml_builder.build_nomina_individual_v2(payslip_data)
+                raise _CorridaEnSecoTerminada()
+        except _CorridaEnSecoTerminada:
+            pass
 
     def _ne_validar_cuenta_transferencia(self):
         """H-021 (2026-11-09): única validación de "Transferencia exige cuenta bancaria".
