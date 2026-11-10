@@ -41,3 +41,4 @@ from . import test_dias_cotizados
 from . import test_ibc_mensual
 from . import test_pila_planilla
 from . import test_ne_consecutivo_sin_huecos
+from . import test_habilitacion_permisos
