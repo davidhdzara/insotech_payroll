@@ -145,8 +145,12 @@ class TestCantidadReal(TransactionCase):
         linea = self._linea(slip, 'CO_LIQ_INDEMNIZACION')
         anos = 898 / 360.0
         dias = 30 + 20 * (anos - 1)
-        self.assertAlmostEqual(linea.quantity, dias, places=6)
+        # quantity se guarda con la precision 'Payroll' (2 decimales); el total sale del valor
+        # exacto (hr_payroll lo calcula antes de redondear), no de 59,89 x valor dia.
+        self.assertAlmostEqual(linea.quantity, dias, places=2)
         self.assertAlmostEqual(linea.total, 15000000.0 / 30 * dias, places=2)
+        self.assertNotAlmostEqual(
+            linea.total, 15000000.0 / 30 * round(dias, 2), places=2)
 
     def test_prima_semestral_cantidad_son_los_dias_del_semestre(self):
         slip = self._recibo(self.est_prima, 'PrimaCantidad', 3000000.0, date(2026, 7, 1),
@@ -197,6 +201,11 @@ class TestCantidadReal(TransactionCase):
     def test_migracion_periodo_propio_a_schedule_pay_y_borra_la_columna(self):
         _empleado, contrato = self._contrato('Migracion', 3000000.0)
         cr = self.env.cr
+        # schedule_pay es un compute almacenado: el create deja su valor pendiente de escribir en
+        # el cache del ORM. Se vuelca a la BD ANTES del SQL; si no, el invalidate posterior lo
+        # escribe encima y pisa lo que hizo la migracion (artefacto de la prueba, no de la
+        # migracion real, que corre sin ORM).
+        self.env.flush_all()
         cr.execute("ALTER TABLE hr_contract ADD COLUMN l10n_co_payroll_period varchar")
         cr.execute("UPDATE hr_contract SET schedule_pay='monthly', l10n_co_payroll_period='15' "
                    "WHERE id=%s", (contrato.id,))
@@ -206,7 +215,7 @@ class TestCantidadReal(TransactionCase):
         modulo = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(modulo)
         modulo.migrate(cr, '18.0.3.0.151')
-        contrato.invalidate_recordset(['schedule_pay'])
+        self.env.invalidate_all()
         self.assertEqual(contrato.schedule_pay, 'semi-monthly')
         cr.execute("SELECT 1 FROM information_schema.columns WHERE table_name='hr_contract' "
                    "AND column_name='l10n_co_payroll_period'")
