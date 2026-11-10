@@ -2375,6 +2375,22 @@ class HrPayslip(models.Model):
             return 0
         return self._ne_dia_comercial(fin, dias_mes) - self._ne_dia_comercial(ini, dias_mes) + 1
 
+    def _ne_dias_bajo_contrato(self):
+        """Dias (mes comercial) del tramo pagable en que el contrato estuvo vigente.
+        Delimita ING/RET: la fecha de ingreso y de retiro recortan el rango."""
+        self.ensure_one()
+        contract = self.contract_id
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        periodo_ini, periodo_fin = self._ne_tramo_pagable_periodo()
+        contrato_ini = contract.date_start
+        contrato_fin = contract.date_end or periodo_fin
+        activo_ini = max(periodo_ini, contrato_ini)
+        activo_fin = min(periodo_fin, contrato_fin)
+        if activo_ini > activo_fin:
+            return 0
+        return (self._ne_dia_comercial(activo_fin, dias_mes)
+                - self._ne_dia_comercial(activo_ini, dias_mes) + 1)
+
     def _ne_dias_pagables(self):
         """Días pagables del período -- misma convención de "mes comercial" colombiano que ya
         usa la regla salarial CO_BASICO (hr_salary_rule_co_basico, data/hr_payroll_structure_
@@ -2390,22 +2406,7 @@ class HrPayslip(models.Model):
         recalcular.
         """
         self.ensure_one()
-        contract = self.contract_id
-        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
-        periodo_ini, periodo_fin = self._ne_tramo_pagable_periodo()
-        contrato_ini = contract.date_start
-        contrato_fin = contract.date_end or periodo_fin
-
-        activo_ini = max(periodo_ini, contrato_ini)
-        activo_fin = min(periodo_fin, contrato_fin)
-
-        if activo_ini > activo_fin:
-            dias_bajo_contrato = 0
-        else:
-            dias_bajo_contrato = (
-                self._ne_dia_comercial(activo_fin, dias_mes)
-                - self._ne_dia_comercial(activo_ini, dias_mes) + 1
-            )
+        dias_bajo_contrato = self._ne_dias_bajo_contrato()
 
         unpaid_types = self.env['hr.leave.type'].search([('unpaid', '=', True)])
         unpaid_codes = set(unpaid_types.mapped('work_entry_type_id.code')) - {False}
@@ -2718,13 +2719,45 @@ class HrPayslip(models.Model):
                 total += valor
         return total
 
-    def _ne_dias_cotizados(self):
-        """Dias cotizados por subsistema. Base: dias pagables (mes comercial, misma
-        fuente que CO_BASICO); las novedades se suman en el siguiente commit."""
+    def _ne_dias_sln(self):
+        """Dias de suspension / licencia no remunerada (SLN) desde Ausencias: tipos
+        'unpaid' de hr.leave.type y CO_LIC_NR."""
         self.ensure_one()
-        dias = min(self._ne_dias_pagables(),
-                   self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from))
-        return {'sp': dias, 'arl': dias, 'paraf': dias}
+        unpaid = self.env['hr.leave.type'].search([('unpaid', '=', True)])
+        codigos = set(unpaid.mapped('work_entry_type_id.code')) - {False}
+        codigos.add('CO_LIC_NR')
+        codigos -= {'CO_VAC', 'CO_LIC_REM'}
+        return sum(wd.number_of_days for wd in self.worked_days_line_ids
+                   if wd.work_entry_type_id.code in codigos)
+
+    def _ne_dias_cotizados(self):
+        """Dias cotizados por subsistema (tabla de David, 2026-11-09).
+
+        Total del tramo = dias bajo contrato (mes comercial, tope 30; ING/RET lo
+        delimitan) -> salud y pension: incluye laborados, VAC, licencia remunerada,
+        incapacidades (IGE, IRL), maternidad/paternidad (LMA) y SLN.
+        ARL y parafiscales: solo laborados + VAC + licencia remunerada, es decir el
+        total menos IGE, IRL, LMA y SLN. Mismas fuentes de dias que
+        _ne_dias_pagables() (no se recalcula nada aparte)."""
+        self.ensure_one()
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        total = min(self._ne_dias_bajo_contrato(), dias_mes)
+        sin_arl = self._ne_dias_sln()
+        for codigo in _NOVEDAD_AUSENCIA_CALENDARIO_CODES:
+            sin_arl += self._ne_ausencia_calendario(codigo)[0]
+        con_arl = max(0, total - sin_arl)
+        return {'sp': total, 'arl': con_arl, 'paraf': con_arl}
+
+    def _ne_ibc_sln(self, contract):
+        """Base de los dias SLN: IBC del mes anterior prorrateado por esos dias (solo
+        salud y pension; el empleador asume el 100%, por lo que no se descuenta al
+        empleado)."""
+        self.ensure_one()
+        dias = self._ne_dias_sln()
+        if dias <= 0:
+            return 0.0
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        return self._ne_ultimo_ibc_anterior(contract) / dias_mes * dias
 
     def _ne_ibc_limites(self, salarial, incap, remuneracion, pactados, dias):
         """IBC del recibo con regla del 40%, techo (sin prorratear) y piso (prorrateado

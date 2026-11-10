@@ -821,7 +821,7 @@ result = inputs['CO_INT_CES'].amount
 # ver _ne_ibc_seguridad_social(). Alcance H-017a: solo esta regla y
 # CO_PENSION_EMP/CO_FSP. Las 6 reglas patronales (CIA) y PILA/UGPP quedan
 # para H-017b -- no cambian aqui.
-ibc = result_rules['CO_IBC_SP']['total']  # IBC unico con 40%, piso y techo (H-017b)
+ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); SLN lo asume el empleador
 result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_salud_empleado', payslip.date_from) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -843,7 +843,7 @@ result = not employee.l10n_co_ne_foreigner_no_pension
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
-ibc = result_rules['CO_IBC_SP']['total']  # IBC unico con 40%, piso y techo (H-017b)
+ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); SLN lo asume el empleador
 result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', payslip.date_from) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -863,7 +863,7 @@ result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', pays
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
 SMMLV = payslip._rule_parameter('l10n_co_smmlv', payslip.date_from)
 _umbral_base = payslip._rule_parameter('l10n_co_fsp_umbral_base', payslip.date_from)
-ibc = result_rules['CO_IBC_SP']['total']  # IBC unico con 40%, piso y techo (H-017b)
+ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); SLN lo asume el empleador
 result = ibc &gt;= SMMLV * _umbral_base
             </field>
             <field name="amount_select">code</field>
@@ -873,7 +873,7 @@ result = ibc &gt;= SMMLV * _umbral_base
 # desde fsp_umbral_tier1 SMMLV (tramos de subsistencia).
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
 SMMLV = payslip._rule_parameter('l10n_co_smmlv', payslip.date_from)
-ibc = result_rules['CO_IBC_SP']['total']  # IBC unico con 40%, piso y techo (H-017b)
+ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])  # IBC unico (H-017b); SLN lo asume el empleador
 
 _pct_base = payslip._rule_parameter('l10n_co_fsp_pct_base', payslip.date_from) / 100
 _umbral_t1 = payslip._rule_parameter('l10n_co_fsp_umbral_tier1', payslip.date_from)
@@ -906,6 +906,19 @@ result = -abs(ibc * pct)
         </record>
 
         <!-- ==================== BASE IBC SS (invisible, acumulador H-017a) ==================== -->
+        <record id="hr_salary_rule_co_ibc_sln" model="hr.salary.rule">
+            <field name="name">IBC Suspension / Licencia No Remunerada (interno)</field>
+            <field name="code">CO_IBC_SLN</field>
+            <field name="sequence">86</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_sln(contract)</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Base de los dias SLN (IBC del mes anterior prorrateado). Solo salud y pension; el empleador asume el 100%.</field>
+        </record>
+
         <record id="hr_salary_rule_co_dias_sp" model="hr.salary.rule">
             <field name="name">Dias Cotizados Salud y Pension (interno)</field>
             <field name="code">CO_DIAS_SP</field>
@@ -1008,7 +1021,7 @@ result = -abs(ibc * pct)
             <field name="amount_python_compute">
 _r = result_rules
 result = payslip._ne_ibc_limites(
-    _r['CO_IBC_SALARIAL']['total'], _r['CO_IBC_INCAP']['total'],
+    _r['CO_IBC_SALARIAL']['total'], _r['CO_IBC_INCAP']['total'] + _r['CO_IBC_SLN']['total'],
     _r['CO_IBC_REMUN']['total'], _r['CO_IBC_PACTADOS']['total'], _r['CO_DIAS_SP']['total'])
             </field>
             <field name="appears_on_payslip" eval="False"/>
