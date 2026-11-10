@@ -1099,6 +1099,9 @@ class TestAusenciasNomina(TransactionCase):
         self.assertGreater(ibc_sp, basico)    # la base de la incapacidad SI entra
         salud = self._novedad(payslip, 'CO_SALUD_EMP')
         self.assertEqual(round(abs(salud), 2), round(ibc_sp * 0.04, 2))
+        # La base que lee el mes siguiente para vacaciones/licencia remunerada NO incluye el
+        # auxilio de incapacidad (no es salario, CST Art. 192): solo salario ordinario.
+        self.assertEqual(round(self._novedad(payslip, 'CO_SS_BASE_IBC'), 2), round(basico, 2))
 
     def test_co_ss_base_ibc_no_aparece_ni_afecta_totales(self):
         """Punto (d): el acumulador CO_SS_BASE_IBC es invisible (appears_on_payslip=

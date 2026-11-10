@@ -2676,24 +2676,29 @@ class HrPayslip(models.Model):
                 ibc += (ultimo_ibc / dias_mes_comercial) * dias
         return ibc
 
-    def _ne_ibc_incap(self, contract, result_rules):
+    def _ne_ibc_incap(self, contract, result_rules, codigos=None):
         """Base de las ausencias de pago por tercero (maternidad/paternidad e
         incapacidades): el valor del auxilio que la novedad ya pago (Decreto 780/2016
         Art. 3.2.5.1; decision de David, 2026-11-10). Solo cuenta a salud y pension,
         no a ARL ni parafiscales; el descuento al empleado es el normal (Art.
-        3.2.1.10), a diferencia de SLN. Integral: 0 (como H-017a)."""
+        3.2.1.10), a diferencia de SLN. Integral: 0 (como H-017a).
+        `codigos` permite acotar; por defecto los 4 de ausencia calendario."""
         if contract.l10n_co_ne_integral_salary:
             return 0.0
+        if codigos is None:
+            codigos = _NOVEDAD_AUSENCIA_CALENDARIO_CODES
         return sum(
-            result_rules.get(codigo, {}).get('total', 0.0)
-            for codigo in sorted(_NOVEDAD_AUSENCIA_CALENDARIO_CODES))
+            result_rules.get(codigo, {}).get('total', 0.0) for codigo in sorted(codigos))
 
     def _ne_ibc_seguridad_social(self, categories, contract, inputs, worked_days, result_rules):
-        """IBC de seguridad social de H-017a (parte salarial + maternidad/paternidad),
-        sin 40%, piso ni techo. Lo siguen usando CO_SS_BASE_IBC (base de vacaciones
-        del mes siguiente). Las deducciones leen CO_IBC_SP (con limites)."""
+        """Base que guarda CO_SS_BASE_IBC y que _ne_ultimo_ibc_anterior() lee el mes
+        siguiente para prorratear vacaciones/licencia remunerada/SLN (H-017a): salario
+        ordinario + maternidad/paternidad, SIN el auxilio de incapacidad (IGE/IRL), que no
+        es salario (CST Art. 192; decision de David, 2026-11-10). El IBC de APORTES vive
+        en CO_IBC_SP y si incluye la incapacidad."""
         return (self._ne_ibc_salarial(categories, contract, inputs, worked_days)
-                + self._ne_ibc_incap(contract, result_rules))
+                + self._ne_ibc_incap(
+                    contract, result_rules, codigos=('CO_LIC_MAT', 'CO_LIC_PAT')))
 
     def _ne_ibc_remuneracion(self, contract, salarial):
         """Base del 40%: remuneracion total. Integral: 100% del salario pactado."""
