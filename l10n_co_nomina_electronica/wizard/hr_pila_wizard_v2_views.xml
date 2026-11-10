@@ -42,6 +42,8 @@
                     <group string="Correccion (solo para planilla tipo N)"
                            invisible="tipo_planilla != 'N'">
                         <group>
+                            <field name="planilla_original_id" required="tipo_planilla == 'N'"
+                                   options="{'no_create': True}"/>
                             <field name="numero_planilla_asociada"/>
                             <field name="fecha_pago_asociada"/>
                         </group>

@@ -22,3 +22,5 @@ access_l10n_co_payslip_tercero_manager,l10n.co.payslip.tercero manager,model_l10
 access_l10n_co_payslip_tercero_user,l10n.co.payslip.tercero user,model_l10n_co_payslip_tercero,hr_payroll.group_hr_payroll_user,1,0,0,0
 access_l10n_co_ibc_mensual_manager,l10n.co.ibc.mensual manager,model_l10n_co_ibc_mensual,hr_payroll.group_hr_payroll_manager,1,1,1,1
 access_l10n_co_ibc_mensual_user,l10n.co.ibc.mensual user,model_l10n_co_ibc_mensual,hr_payroll.group_hr_payroll_user,1,0,0,0
+access_l10n_co_pila_planilla_manager,l10n.co.pila.planilla manager,model_l10n_co_pila_planilla,hr_payroll.group_hr_payroll_manager,1,1,1,1
+access_l10n_co_pila_planilla_user,l10n.co.pila.planilla user,model_l10n_co_pila_planilla,hr_payroll.group_hr_payroll_user,1,0,0,0

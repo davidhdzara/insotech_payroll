@@ -96,17 +96,17 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         string='Moneda',
     )
 
-    # Número de planilla asociada (para correcciones)
+    # Planilla corregida (solo tipo N): el numero, la fecha de pago y el operador salen de
+    # la planilla original registrada (l10n.co.pila.planilla), no se digitan.
+    planilla_original_id = fields.Many2one(
+        'l10n.co.pila.planilla', string='Planilla a Corregir',
+        domain="[('company_id', '=', company_id)]",
+        help='Planilla original que corrige esta planilla tipo N. Debe tener su número de '
+             'planilla y fecha de pago, y haberse generado con el mismo operador.')
     numero_planilla_asociada = fields.Char(
-        string='No. Planilla Asociada',
-        help='Numero de planilla asociada. Solo aplica para planillas '
-             'de correccion (tipo N).',
-    )
+        string='No. Planilla Asociada', related='planilla_original_id.numero_planilla')
     fecha_pago_asociada = fields.Date(
-        string='Fecha Pago Asociada',
-        help='Fecha de pago de la planilla asociada. '
-             'Solo para correcciones.',
-    )
+        string='Fecha Pago Asociada', related='planilla_original_id.fecha_pago')
 
     # ──────────────────────────────────────────────────────────────────
     # Estado del wizard (multi-step)
@@ -214,6 +214,33 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     # ──────────────────────────────────────────────────────────────────
     # Paso 1 → 2: Validar datos de empleados
     # ──────────────────────────────────────────────────────────────────
+    def _validar_planilla_correccion(self):
+        """E (y las demas) no llevan planilla original; N la exige, completa y del mismo
+        operador (restriccion del operador: la correccion va con el mismo operador)."""
+        self.ensure_one()
+        original = self.planilla_original_id
+        if self.tipo_planilla != 'N':
+            if original:
+                raise UserError(_(
+                    'Solo la planilla tipo N (corrección) lleva "Planilla a Corregir". '
+                    'Quite la planilla original o cambie el tipo.'))
+            return
+        if not original:
+            raise UserError(_('La planilla tipo N exige elegir la "Planilla a Corregir".'))
+        if not original.numero_planilla or not original.fecha_pago:
+            raise UserError(_(
+                'La planilla "%s" no tiene número de planilla o fecha de pago. Complételos '
+                'en Nómina > Reportes > Planillas PILA antes de corregirla.',
+                original.display_name))
+        operador = self.company_id.l10n_co_pila_operador_code
+        if not operador:
+            raise UserError(_('Defina el Código Operador PILA de la compañía.'))
+        if original.operador_code != operador:
+            raise UserError(_(
+                'La corrección debe presentarse con el MISMO operador de la planilla '
+                'original (%(orig)s), y la compañía tiene configurado %(actual)s.',
+                orig=original.operador_code, actual=operador))
+
     def action_validate(self):
         """Valida que los empleados tengan todos los datos PILA requeridos.
 
@@ -233,6 +260,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             UserError: Si no hay nóminas en el período.
         """
         self.ensure_one()
+        self._validar_planilla_correccion()
         _logger.info(
             'Validando datos PILA para %s/%s - %s',
             self.month, self.year, self.company_id.name,
@@ -435,6 +463,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             self.year,
             self.month,
         )
+        self._validar_planilla_correccion()
         self.write({
             'file_data': base64.b64encode(
                 file_content.encode('utf-8'),
@@ -442,6 +471,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             'file_name': filename,
             'state': 'generated',
         })
+        self._registrar_planilla(payslips)
 
         _logger.info(
             'Archivo PILA generado: %s (%d cotizantes)',
@@ -494,6 +524,26 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     # ──────────────────────────────────────────────────────────────────
     # Búsqueda de nóminas del período
     # ──────────────────────────────────────────────────────────────────
+    def _registrar_planilla(self, payslips):
+        """Deja constancia de la planilla generada y de los IBC consolidados que uso."""
+        self.ensure_one()
+        periodo = date(int(self.year), int(self.month), 1)
+        planilla = self.env['l10n.co.pila.planilla'].create({
+            'company_id': self.company_id.id, 'period': periodo,
+            'tipo_planilla': self.tipo_planilla,
+            'operador_code': self.company_id.l10n_co_pila_operador_code or '',
+            'planilla_original_id': self.planilla_original_id.id,
+            'file_name': self.file_name,
+        })
+        for consolidado in self.env['l10n.co.ibc.mensual'].search([
+                ('company_id', '=', self.company_id.id), ('period', '=', periodo),
+                ('employee_id', 'in', payslips.mapped('employee_id').ids)]):
+            consolidado.write({
+                'planilla_id': planilla.id, 'ibc_sp_planilla': consolidado.ibc_sp,
+                'ibc_arl_planilla': consolidado.ibc_arl,
+                'ibc_paraf_planilla': consolidado.ibc_paraf})
+        return planilla
+
     def _get_period_payslips(self, company, year, month):
         """Busca nóminas confirmadas del período indicado.
 

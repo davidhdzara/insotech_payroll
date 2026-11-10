@@ -46,6 +46,17 @@ class L10nCoIbcMensual(models.Model):
     diferencia_arl = fields.Monetary(compute='_compute_diferencia', store=True)
     diferencia_paraf = fields.Monetary(compute='_compute_diferencia', store=True)
 
+    planilla_id = fields.Many2one(
+        'l10n.co.pila.planilla', string='Última Planilla', ondelete='set null',
+        help='Planilla PILA que usó este consolidado.')
+    ibc_sp_planilla = fields.Monetary(string='IBC S+P en la Planilla')
+    ibc_arl_planilla = fields.Monetary(string='IBC ARL en la Planilla')
+    ibc_paraf_planilla = fields.Monetary(string='IBC Paraf. en la Planilla')
+    requiere_planilla_n = fields.Boolean(
+        string='Requiere Planilla N', compute='_compute_requiere_planilla_n', store=True,
+        help='El IBC consolidado cambió después de generarse la planilla: si ya se '
+             'presentó, hay que corregirla con una planilla tipo N.')
+
     _sql_constraints = [
         ('unico_empleado_mes', 'unique(company_id, employee_id, period)',
          'Ya existe el IBC consolidado de este empleado para ese mes.'),
@@ -58,6 +69,16 @@ class L10nCoIbcMensual(models.Model):
             rec.diferencia_sp = rec.ibc_sp - rec.ibc_recibos_sp
             rec.diferencia_arl = rec.ibc_arl - rec.ibc_recibos_arl
             rec.diferencia_paraf = rec.ibc_paraf - rec.ibc_recibos_paraf
+
+    @api.depends('planilla_id', 'ibc_sp', 'ibc_arl', 'ibc_paraf',
+                 'ibc_sp_planilla', 'ibc_arl_planilla', 'ibc_paraf_planilla')
+    def _compute_requiere_planilla_n(self):
+        for rec in self:
+            rec.requiere_planilla_n = bool(rec.planilla_id) and any(
+                abs(a - b) > 0.5 for a, b in (
+                    (rec.ibc_sp, rec.ibc_sp_planilla),
+                    (rec.ibc_arl, rec.ibc_arl_planilla),
+                    (rec.ibc_paraf, rec.ibc_paraf_planilla)))
 
     @api.model
     def _recibos_del_mes(self, company, employee, period):

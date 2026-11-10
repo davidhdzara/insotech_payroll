@@ -20,4 +20,5 @@ from . import hr_contract_deductions
 from . import hr_contract_retefuente
 from . import l10n_co_pila_ciiu
 from . import l10n_co_payslip_tercero
+from . import l10n_co_pila_planilla
 from . import l10n_co_ibc_mensual

@@ -39,3 +39,4 @@ from . import test_liquidacion_embargo_libranza
 from . import test_ibc_unico
 from . import test_dias_cotizados
 from . import test_ibc_mensual
+from . import test_pila_planilla
