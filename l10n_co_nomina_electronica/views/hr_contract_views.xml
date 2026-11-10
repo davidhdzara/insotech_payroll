@@ -17,8 +17,6 @@
                            string="Tipo Contrato DIAN"/>
                     <field name="l10n_co_ne_integral_salary"
                            string="Salario Integral"/>
-                    <field name="l10n_co_payroll_period"
-                           string="Periodo de Nómina"/>
                 </group>
             </xpath>
             <xpath expr="//notebook" position="inside">

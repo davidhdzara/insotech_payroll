@@ -3011,6 +3011,26 @@ class HrPayslip(models.Model):
                 l.total for l in concept_lines['ViaticoNS']
             )
 
+    # Porcentaje (tabla 5.5.5 del Anexo) de cada hora extra/recargo, derivado del MISMO factor
+    # hr.rule.parameter con el que se calcula el pago: (factor - 1) x 100 en las extras (el
+    # factor incluye la hora ordinaria) y factor x 100 en el recargo nocturno (solo el recargo).
+    # PENDIENTE (decision de David): los 4 conceptos dominicales/festivos (HEDDF, HRDDF, HENDF,
+    # HRNDF) -- la tabla 5.5.5 y la Ley 2466/2025 no coinciden; mientras tanto conservan line.rate.
+    _NE_PORCENTAJE_HORA_FACTOR = {
+        'HED': ('l10n_co_factor_hed', -1.0),
+        'HEN': ('l10n_co_factor_hen', -1.0),
+        'HRN': ('l10n_co_factor_hrn', 0.0),
+    }
+
+    def _ne_porcentaje_hora(self, concepto, line):
+        self.ensure_one()
+        parametro = self._NE_PORCENTAJE_HORA_FACTOR.get(concepto)
+        if not parametro:
+            return line.rate or 0.0
+        codigo, ajuste = parametro
+        factor = self._rule_parameter(codigo, self._ne_fecha_parametros())
+        return round((factor + ajuste) * 100.0, 2)
+
     def _dev_horas_extra(self, concept_lines, devengados):
         """Devengados: horas extras y recargos."""
         for he_concept in HORA_EXTRA_CONCEPTS:
@@ -3021,8 +3041,9 @@ class HrPayslip(models.Model):
                     items.append({
                         'HoraInicio': '',
                         'HoraFin': '',
-                        'Cantidad': str(int(line.quantity)) if line.quantity else '0',
-                        'Porcentaje': '%.2f' % (line.rate if line.rate else 0),
+                        # Anexo/XSD v1.0.6: Cantidad de las horas extra es xsd:decimal.
+                        'Cantidad': '%.2f' % line.quantity,
+                        'Porcentaje': '%.2f' % self._ne_porcentaje_hora(he_concept, line),
                         'Pago': '%.2f' % line.total,
                     })
                 devengados[container_key] = items

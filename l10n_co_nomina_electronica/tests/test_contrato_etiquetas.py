@@ -8,7 +8,7 @@ from lxml import etree
 
 from odoo.tests.common import TransactionCase
 
-_CAMPOS = ('l10n_co_ne_contract_type', 'l10n_co_ne_integral_salary', 'l10n_co_payroll_period')
+_CAMPOS = ('l10n_co_ne_contract_type', 'l10n_co_ne_integral_salary')
 
 
 class TestContratoEtiquetas(TransactionCase):

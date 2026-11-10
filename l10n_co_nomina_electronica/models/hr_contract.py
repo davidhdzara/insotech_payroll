@@ -56,23 +56,6 @@ class HrContract(models.Model):
              '<Trabajador> del XML.',
     )
 
-    # ──────────────────────────────────────────────────────────────────
-    # Periodo de Nómina
-    # ──────────────────────────────────────────────────────────────────
-    l10n_co_payroll_period = fields.Selection(
-        selection=[
-            ('7', 'Semanal (7 días)'),
-            ('10', 'Decenal (10 días)'),
-            ('14', 'Catorcenal (14 días)'),
-            ('15', 'Quincenal (15 días)'),
-            ('30', 'Mensual (30 días)'),
-        ],
-        string='Periodo de Nómina',
-        default='30',
-        help='Periodo de pago de nómina. Afecta el cálculo del básico y '
-             'auxilio de transporte. Las horas extra, incapacidades, '
-             'licencias y vacaciones siempre se calculan sobre base mensual.',
-    )
 
     # ──────────────────────────────────────────────────────────────────
     # PILA — Datos de Cotización
