@@ -157,6 +157,43 @@ class TestCantidadReal(TransactionCase):
         base = self._linea(slip, 'CO_PRIMA_BASE').total
         self.assertAlmostEqual(linea.total, base * 180 / 360, places=2)
 
+    # --- Redondeo: valores no divisibles exactos (SMMLV 2026 y auxilio 2026) ----------------
+    # Odoo calcula total = amount x quantity x rate / 100 con el amount SIN redondear (hr_payroll,
+    # _get_payslip_line_total) y recien despues guarda amount y total redondeados a 2 decimales
+    # (Monetary COP): el total NO se recalcula sobre el amount ya redondeado.
+
+    def test_total_sale_del_valor_exacto_y_no_del_unitario_redondeado(self):
+        """Auxilio 249.095 / 30 = 8.303,1666... (el unitario se guarda como 8.303,17): 15 dias
+        dan 124.547,50 exactos, no 8.303,17 x 15 = 124.547,55."""
+        slip = self._quincena('Redondeo', wage=1750905.0)
+        slip.compute_sheet()
+        aux = self._linea(slip, 'CO_AUX_TRANS')
+        self.assertEqual(aux.quantity, 15.0)
+        self.assertAlmostEqual(aux.amount, 8303.17, places=2)           # unitario redondeado
+        self.assertAlmostEqual(aux.total, 124547.50, places=2)          # total exacto
+        self.assertNotAlmostEqual(aux.amount * aux.quantity, aux.total, places=2)
+        basico = self._linea(slip, 'CO_BASICO')
+        self.assertAlmostEqual(basico.total, 875452.50, places=2)       # 1.750.905 / 30 x 15
+
+    def test_deduccion_de_salud_sobre_ibc_con_decimales(self):
+        """IBC con decimales: el 4% se calcula sobre el IBC exacto del localdict."""
+        slip = self._quincena('SaludDecimales', wage=1750909.0)
+        slip.compute_sheet()
+        salud = self._linea(slip, 'CO_SALUD_EMP')
+        ibc = self._linea(slip, 'CO_IBC_SP').total
+        self.assertAlmostEqual(salud.total, -round(ibc * 0.04, 2), delta=0.011)
+        self.assertAlmostEqual(salud.amount, -ibc, delta=0.011)
+        self.assertAlmostEqual(salud.rate, 4.0, places=4)
+
+    def test_el_neto_cuadra_con_la_suma_de_las_lineas_con_valores_no_divisibles(self):
+        slip = self._quincena('NetoDecimales', wage=1750905.0)
+        slip.compute_sheet()
+        neto = self._linea(slip, 'CO_NETO').total
+        conceptos = slip.line_ids.filtered(
+            lambda l: l.salary_rule_id.appears_on_payslip and l.code not in (
+                'BASIC', 'GROSS', 'NET', 'CO_BRUTO', 'CO_NETO'))
+        self.assertAlmostEqual(sum(conceptos.mapped('total')), neto, delta=0.02)
+
     def test_migracion_periodo_propio_a_schedule_pay_y_borra_la_columna(self):
         _empleado, contrato = self._contrato('Migracion', 3000000.0)
         cr = self.env.cr
