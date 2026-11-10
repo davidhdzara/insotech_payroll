@@ -100,7 +100,7 @@ class HrEmployee(models.Model):
         """Valores de los 4 campos prellenados desde ``full_name`` (vacíos si es ambiguo)."""
         raw = self.env['ir.config_parameter'].sudo().get_param(
             'l10n_co_nomina_electronica.particulas_nombre')
-        if raw is None:
+        if not raw:
             raise UserError(_(
                 'Falta el parámetro del sistema "l10n_co_nomina_electronica.particulas_nombre" '
                 '(palabras que vuelven ambiguo un nombre, separadas por coma). Créelo en '
