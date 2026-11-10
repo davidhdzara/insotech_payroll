@@ -1073,14 +1073,16 @@ class TestAusenciasNomina(TransactionCase):
         ibc_esperado = wage * 0.70
         self.assertEqual(round(abs(salud), 2), round(ibc_esperado * 0.04, 2))
 
-    def test_incapacidad_no_entra_al_ibc_todavia(self):
-        """Punto (c), decisión explícita de Tech Lead (2026-10-11): las incapacidades
-        (CO_INC_COMUN/CO_INC_LABORAL) NO entran a la base de salud/pensión en este
-        ciclo -- quedan para el paso 3 de incapacidad (corte del día 90, piso de
-        salario mínimo). Esta prueba existe para que nadie lo dé por hecho sin querer
-        en un cambio futuro: si alguien agrega CO_INC_COMUN a
-        _ne_ibc_seguridad_social() sin que ese paso lo decida explícitamente, esta
-        prueba debe fallar."""
+    def test_incapacidad_suma_dias_cotizados_a_salud_pension_pero_no_a_arl(self):
+        """H-017b commit 2 (2026-11-10) SUPERA la limitacion temporal de H-017a ("las
+        incapacidades no entran a la base todavia"): por decision de David las incapacidades
+        (IGE) SI cuentan como dias cotizados de salud y pension -- pero NO de ARL ni
+        parafiscales (CO_DIAS_SP = 30, CO_DIAS_ARL = 28). Efecto sobre el IBC: el piso de 1
+        SMMLV se prorratea sobre 30 dias y, como el basico de 28 dias (1.680.000) queda por
+        debajo, el IBC de salud/pension es el piso (1.750.905), no el basico.
+        LIMITE CONOCIDO, pendiente de decision normativa: la BASE de los dias de incapacidad
+        (IBC anterior prorrateado, como en SLN) todavia no se suma al IBC; hoy el piso la
+        enmascara. Cuando se decida, este test debe actualizarse."""
         wage = 1800000.0
         employee, contract = self._make_contract('IbcIncapacidad', wage=wage)
         self._make_validated_leave(
@@ -1088,12 +1090,15 @@ class TestAusenciasNomina(TransactionCase):
         payslip = self._make_payslip(employee, contract, date(2026, 9, 1), date(2026, 9, 30))
         payslip.compute_sheet()
 
-        basico = self._sueldo_basico(payslip)
         inc = self._novedad(payslip, 'CO_INC_COMUN')
-        salud = self._novedad(payslip, 'CO_SALUD_EMP')
         self.assertGreater(inc, 0)
-        self.assertEqual(round(abs(salud), 2), round(basico * 0.04, 2))
-        self.assertNotEqual(round(abs(salud), 2), round((basico + inc) * 0.04, 2))
+        self.assertEqual(round(self._novedad(payslip, 'CO_DIAS_SP'), 2), 30.0)
+        self.assertEqual(round(self._novedad(payslip, 'CO_DIAS_ARL'), 2), 28.0)
+        smmlv = payslip._rule_parameter('l10n_co_smmlv', payslip.date_from)
+        ibc_sp = self._novedad(payslip, 'CO_IBC_SP')
+        self.assertEqual(round(ibc_sp, 2), round(smmlv, 2))   # piso, ver docstring
+        salud = self._novedad(payslip, 'CO_SALUD_EMP')
+        self.assertEqual(round(abs(salud), 2), round(ibc_sp * 0.04, 2))
 
     def test_co_ss_base_ibc_no_aparece_ni_afecta_totales(self):
         """Punto (d): el acumulador CO_SS_BASE_IBC es invisible (appears_on_payslip=
