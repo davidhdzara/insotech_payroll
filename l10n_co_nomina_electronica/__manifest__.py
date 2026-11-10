@@ -1,6 +1,6 @@
 {
     'name': 'Colombia - Nómina',
-    'version': '18.0.3.0.145',
+    'version': '18.0.3.0.146',
     'category': 'Human Resources/Payroll',
     'countries': ['co'],
     'summary': 'Generación y envío de Nómina Electrónica a la DIAN (Resolución 000013 de 2021)',

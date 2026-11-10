@@ -161,7 +161,7 @@ class TestSlnAportes(TransactionCase):
         # la pensión patronal sigue su regla propia
         self.assertEqual(r['cotizacion_pension'], round(_SLN * 0.12))
 
-    def test_nomina_exonerado_mes_100_por_ciento_sln_salud_cero(self):
+    def test_nomina_exonerado_con_sln_salud_cero(self):
         self.company.l10n_co_ne_exoneration_1607 = True
         slip = self._recibo('Exon100', 3000000.0)
         self.assertEqual(self._linea(slip, 'CO_SALUD_CIA'), 0.0)
