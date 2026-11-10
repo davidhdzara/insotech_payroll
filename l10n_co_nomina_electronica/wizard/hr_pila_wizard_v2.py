@@ -100,9 +100,12 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     # la planilla original registrada (l10n.co.pila.planilla), no se digitan.
     planilla_original_id = fields.Many2one(
         'l10n.co.pila.planilla', string='Planilla a Corregir',
-        domain="[('company_id', '=', company_id)]",
-        help='Planilla original que corrige esta planilla tipo N. Debe tener su número de '
+        domain="[('company_id', '=', company_id), ('period', '=', periodo_date)]",
+        help='Planilla original del MISMO mes que corrige esta planilla tipo N. Debe tener su número de '
              'planilla y fecha de pago, y haberse generado con el mismo operador.')
+    periodo_date = fields.Date(
+        string='Período (primer día)', compute='_compute_periodo_date',
+        help='Primer día del mes cotizado; filtra la planilla a corregir.')
     numero_planilla_asociada = fields.Char(
         string='No. Planilla Asociada', related='planilla_original_id.numero_planilla')
     fecha_pago_asociada = fields.Date(
@@ -214,6 +217,14 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     # ──────────────────────────────────────────────────────────────────
     # Paso 1 → 2: Validar datos de empleados
     # ──────────────────────────────────────────────────────────────────
+    @api.depends('year', 'month')
+    def _compute_periodo_date(self):
+        for rec in self:
+            try:
+                rec.periodo_date = date(int(rec.year), int(rec.month), 1)
+            except (TypeError, ValueError):
+                rec.periodo_date = False
+
     def _validar_planilla_correccion(self):
         """E (y las demas) no llevan planilla original; N la exige, completa y del mismo
         operador (restriccion del operador: la correccion va con el mismo operador)."""
@@ -232,6 +243,12 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 'La planilla "%s" no tiene número de planilla o fecha de pago. Complételos '
                 'en Nómina > Reportes > Planillas PILA antes de corregirla.',
                 original.display_name))
+        if original.period != date(int(self.year), int(self.month), 1):
+            raise UserError(_(
+                'La planilla "%(orig)s" es del mes %(mes_orig)s; una planilla N corrige '
+                'la presentación de ESE mes y esta es del %(mes)s-%(anio)s.',
+                orig=original.display_name, mes_orig=original.period.strftime('%Y-%m'),
+                mes=self.month, anio=self.year))
         operador = self.company_id.l10n_co_pila_operador_code
         if not operador:
             raise UserError(_('Defina el Código Operador PILA de la compañía.'))

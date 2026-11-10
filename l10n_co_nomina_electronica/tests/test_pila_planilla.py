@@ -49,6 +49,16 @@ class TestPilaPlanilla(TransactionCase):
             self._wizard('N', original)._validar_planilla_correccion()
         self.assertIn('número de planilla', str(e.exception))
 
+    def test_n_con_planilla_de_otro_mes_es_error(self):
+        original = self._planilla(period=date(2026, 8, 1))
+        with self.assertRaises(UserError) as e:
+            self._wizard('N', original)._validar_planilla_correccion()
+        self.assertIn('ESE mes', str(e.exception))
+
+    def test_dominio_filtra_por_el_periodo_del_wizard(self):
+        wizard = self._wizard('N')
+        self.assertEqual(wizard.periodo_date, date(2026, 9, 1))
+
     def test_n_con_operador_distinto_es_error(self):
         original = self._planilla(operador_code='90')
         with self.assertRaises(UserError) as e:
