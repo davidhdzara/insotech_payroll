@@ -14,7 +14,8 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase
 
 
-class TestIbcUnico(TransactionCase):
+class IbcBase(TransactionCase):
+    """Fixtures comunes (sin tests propios)."""
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -43,6 +44,9 @@ class TestIbcUnico(TransactionCase):
 
     def _smmlv(self, slip):
         return slip._rule_parameter('l10n_co_smmlv', slip.date_from)
+
+
+class TestIbcUnico(IbcBase):
 
     # ── funcion de limites (pura) ──
     def test_40_por_ciento_excedente_suma_al_ibc(self):
@@ -132,7 +136,7 @@ class TestIbcUnico(TransactionCase):
         self.assertAlmostEqual(self._linea(slip, 'CO_IBC_SP').total, 20000000.0 * factor, delta=0.01)
 
 
-class TestIbcUnicoCiaYLiquidacion(TestIbcUnico):
+class TestIbcUnicoCiaYLiquidacion(IbcBase):
     """Commit 3a: los aportes patronales y la liquidacion leen el IBC unico."""
 
     def test_aportes_patronales_usan_el_ibc_unico_no_el_bruto(self):
