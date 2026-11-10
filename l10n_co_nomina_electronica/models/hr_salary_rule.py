@@ -201,6 +201,31 @@ class HrSalaryRule(models.Model):
              'se genera sin tercero.',
     )
 
+    l10n_co_pila_origen_no_salarial = fields.Selection(
+        selection=[
+            ('naturaleza', 'Por naturaleza (nunca entra al IBC ni al 40%)'),
+            ('pacto', 'Por pacto de desalarización (cuenta para el 40%)'),
+        ],
+        string='Origen del Pago No Salarial (IBC)',
+        help='Solo para conceptos no salariales. Por naturaleza: auxilio de '
+             'transporte, viáticos ocasionales, prestaciones, etc. -- nunca '
+             'entran al IBC (Consejo de Estado, SU 25185 de 2021). Por pacto: '
+             'alimentación, vivienda, bonificaciones habituales pactadas como '
+             'no salariales -- cuentan para la regla del 40% (Ley 1393/2010 '
+             'Art. 30) y su excedente suma al IBC. Los pagos por pacto exigen '
+             'prueba del acuerdo (contrato u otrosí). La UGPP mira la realidad '
+             'económica: un pago habitual que retribuye el servicio puede ser '
+             'reincorporado al IBC aunque esté marcado como no salarial.',
+    )
+
+    _L10N_CO_ORIGEN_NO_SALARIAL_POR_CODIGO = {
+        'CO_AUX_TRANS': 'naturaleza', 'CO_VIATICOS_NOSAL': 'naturaleza',
+        'CO_DOTACION': 'naturaleza', 'CO_TELETRABAJO': 'naturaleza',
+        'CO_INDEMNIZ': 'naturaleza', 'CO_LIQ_INDEMNIZACION': 'naturaleza',
+        'CO_BONIF_RET': 'naturaleza',
+        'CO_AUX_ALIM': 'pacto', 'CO_BONIF_NOSAL': 'pacto',
+    }
+
     l10n_co_liq_tratamiento = fields.Selection(
         selection=[
             ('salario', 'Salario'),
@@ -250,6 +275,10 @@ class HrSalaryRule(models.Model):
             self.search([
                 ('code', '=', code), ('l10n_co_tercero_origen', '=', False),
             ]).write({'l10n_co_tercero_origen': origen})
+        for code, origen in self._L10N_CO_ORIGEN_NO_SALARIAL_POR_CODIGO.items():
+            self.search([
+                ('code', '=', code), ('l10n_co_pila_origen_no_salarial', '=', False),
+            ]).write({'l10n_co_pila_origen_no_salarial': origen})
         for code, trat in self._L10N_CO_LIQ_TRATAMIENTO_POR_CODIGO.items():
             self.search([
                 ('code', '=', code), ('l10n_co_liq_tratamiento', '=', False),

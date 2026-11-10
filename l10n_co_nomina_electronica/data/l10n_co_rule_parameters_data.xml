@@ -1245,4 +1245,40 @@ decimal equivalente: escriba <strong>50</strong> para representar 50% (no 0.5). 
         <field name="rule_parameter_id" ref="rule_parameter_pct_tope_libranzas"/>
         <field name="date_from" eval="datetime(2012, 7, 12).date()"/>
     </record>
+
+    <record id="rule_parameter_ibc_min_smmlv" model="hr.rule.parameter">
+        <field name="name">Colombia: Piso del IBC (SMMLV)</field>
+        <field name="code">l10n_co_ibc_min_smmlv</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Piso del Ingreso Base de Cotización en número de SMMLV (se prorratea por días cotizados: SMMLV/30 x días). Valor vigente: <strong>1</strong>.</p><h3 class="mt-5">Cómo ingresar el valor</h3><p>Escriba el número de salarios mínimos (1 = un SMMLV).</p></field>
+    </record>
+    <record id="rule_parameter_ibc_min_smmlv_v" model="hr.rule.parameter.value">
+        <field name="parameter_value">1</field>
+        <field name="rule_parameter_id" ref="rule_parameter_ibc_min_smmlv"/>
+        <field name="date_from" eval="datetime(2002, 1, 1).date()"/>
+    </record>
+
+    <record id="rule_parameter_ibc_max_smmlv" model="hr.rule.parameter">
+        <field name="name">Colombia: Techo del IBC (SMMLV)</field>
+        <field name="code">l10n_co_ibc_max_smmlv</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Techo del Ingreso Base de Cotización en número de SMMLV (nunca se prorratea; Ley 797/2003 Art. 5, Consejo de Estado). Valor vigente: <strong>25</strong>.</p><h3 class="mt-5">Cómo ingresar el valor</h3><p>Escriba el número de salarios mínimos (25 = veinticinco SMMLV).</p></field>
+    </record>
+    <record id="rule_parameter_ibc_max_smmlv_v" model="hr.rule.parameter.value">
+        <field name="parameter_value">25</field>
+        <field name="rule_parameter_id" ref="rule_parameter_ibc_max_smmlv"/>
+        <field name="date_from" eval="datetime(2003, 1, 29).date()"/>
+    </record>
+
+    <record id="rule_parameter_pct_tope_no_salarial" model="hr.rule.parameter">
+        <field name="name">Colombia: % Tope de Pagos No Salariales (Regla del 40%)</field>
+        <field name="code">l10n_co_pct_tope_no_salarial</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Ley 1393 de 2010, Art. 30: los pagos no salariales por pacto que superen este porcentaje de la remuneración total se suman al IBC (Consejo de Estado, SU 25185 de 2021). Valor vigente: <strong>40</strong>.</p><h3 class="mt-5">Cómo ingresar el valor</h3><p>Escriba el número entero del porcentaje, <strong>NO</strong> la fracción: <strong>40</strong> para 40%.</p></field>
+    </record>
+    <record id="rule_parameter_pct_tope_no_salarial_v" model="hr.rule.parameter.value">
+        <field name="parameter_value">40</field>
+        <field name="rule_parameter_id" ref="rule_parameter_pct_tope_no_salarial"/>
+        <field name="date_from" eval="datetime(2011, 1, 1).date()"/>
+    </record>
 </odoo>

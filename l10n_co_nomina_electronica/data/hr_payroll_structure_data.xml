@@ -821,7 +821,7 @@ result = inputs['CO_INT_CES'].amount
 # ver _ne_ibc_seguridad_social(). Alcance H-017a: solo esta regla y
 # CO_PENSION_EMP/CO_FSP. Las 6 reglas patronales (CIA) y PILA/UGPP quedan
 # para H-017b -- no cambian aqui.
-ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days, result_rules)
+ibc = result_rules['CO_IBC_SP']['total']  # IBC unico con 40%, piso y techo (H-017b)
 result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_salud_empleado', payslip.date_from) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -843,7 +843,7 @@ result = not employee.l10n_co_ne_foreigner_no_pension
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
-ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days, result_rules)
+ibc = result_rules['CO_IBC_SP']['total']  # IBC unico con 40%, piso y techo (H-017b)
 result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', payslip.date_from) / 100)
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -863,7 +863,7 @@ result = -abs(ibc * payslip._rule_parameter('l10n_co_pct_pension_empleado', pays
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
 SMMLV = payslip._rule_parameter('l10n_co_smmlv', payslip.date_from)
 _umbral_base = payslip._rule_parameter('l10n_co_fsp_umbral_base', payslip.date_from)
-ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days, result_rules)
+ibc = result_rules['CO_IBC_SP']['total']  # IBC unico con 40%, piso y techo (H-017b)
 result = ibc &gt;= SMMLV * _umbral_base
             </field>
             <field name="amount_select">code</field>
@@ -873,7 +873,7 @@ result = ibc &gt;= SMMLV * _umbral_base
 # desde fsp_umbral_tier1 SMMLV (tramos de subsistencia).
 # H-017a (2026-10-11): misma fuente que CO_SALUD_EMP -- ver _ne_ibc_seguridad_social().
 SMMLV = payslip._rule_parameter('l10n_co_smmlv', payslip.date_from)
-ibc = payslip._ne_ibc_seguridad_social(categories, contract, inputs, worked_days, result_rules)
+ibc = result_rules['CO_IBC_SP']['total']  # IBC unico con 40%, piso y techo (H-017b)
 
 _pct_base = payslip._rule_parameter('l10n_co_fsp_pct_base', payslip.date_from) / 100
 _umbral_t1 = payslip._rule_parameter('l10n_co_fsp_umbral_tier1', payslip.date_from)
@@ -906,6 +906,151 @@ result = -abs(ibc * pct)
         </record>
 
         <!-- ==================== BASE IBC SS (invisible, acumulador H-017a) ==================== -->
+        <record id="hr_salary_rule_co_dias_sp" model="hr.salary.rule">
+            <field name="name">Dias Cotizados Salud y Pension (interno)</field>
+            <field name="code">CO_DIAS_SP</field>
+            <field name="sequence">87</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_dias_cotizados()['sp']</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Dias que cotizan a salud y pension.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_dias_arl" model="hr.salary.rule">
+            <field name="name">Dias Cotizados ARL (interno)</field>
+            <field name="code">CO_DIAS_ARL</field>
+            <field name="sequence">88</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_dias_cotizados()['arl']</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Dias que cotizan a ARL.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_dias_paraf" model="hr.salary.rule">
+            <field name="name">Dias Cotizados Parafiscales (interno)</field>
+            <field name="code">CO_DIAS_PARAF</field>
+            <field name="sequence">89</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_dias_cotizados()['paraf']</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Dias que cotizan a CCF, SENA e ICBF.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_ibc_salarial" model="hr.salary.rule">
+            <field name="name">IBC Salarial (interno)</field>
+            <field name="code">CO_IBC_SALARIAL</field>
+            <field name="sequence">90</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_salarial(categories, contract, inputs, worked_days)</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Componente salarial del IBC del recibo.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_ibc_incap" model="hr.salary.rule">
+            <field name="name">IBC Maternidad/Paternidad (interno)</field>
+            <field name="code">CO_IBC_INCAP</field>
+            <field name="sequence">91</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_incap(contract, result_rules)</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Base de licencias de maternidad/paternidad: solo salud y pension.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_ibc_remuneracion" model="hr.salary.rule">
+            <field name="name">IBC Remuneracion Base 40% (interno)</field>
+            <field name="code">CO_IBC_REMUN</field>
+            <field name="sequence">92</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_remuneracion(contract, result_rules['CO_IBC_SALARIAL']['total'])</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Remuneracion sobre la que se mide la regla del 40%.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_ibc_pactados" model="hr.salary.rule">
+            <field name="name">IBC Pactados No Salariales (interno)</field>
+            <field name="code">CO_IBC_PACTADOS</field>
+            <field name="sequence">93</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_pactados(result_rules)</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Pagos no salariales por pacto de desalarizacion.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_ibc_sp" model="hr.salary.rule">
+            <field name="name">IBC Salud y Pension (interno)</field>
+            <field name="code">CO_IBC_SP</field>
+            <field name="sequence">94</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+_r = result_rules
+result = payslip._ne_ibc_limites(
+    _r['CO_IBC_SALARIAL']['total'], _r['CO_IBC_INCAP']['total'],
+    _r['CO_IBC_REMUN']['total'], _r['CO_IBC_PACTADOS']['total'], _r['CO_DIAS_SP']['total'])
+            </field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">IBC unico de salud y pension del recibo, con 40%, piso y techo. Lo leen deducciones, PILA y UGPP.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_ibc_arl" model="hr.salary.rule">
+            <field name="name">IBC ARL (interno)</field>
+            <field name="code">CO_IBC_ARL</field>
+            <field name="sequence">95</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+_r = result_rules
+result = payslip._ne_ibc_limites(
+    _r['CO_IBC_SALARIAL']['total'], 0.0,
+    _r['CO_IBC_REMUN']['total'], _r['CO_IBC_PACTADOS']['total'], _r['CO_DIAS_ARL']['total'])
+            </field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">IBC de ARL del recibo (sin maternidad/paternidad).</field>
+        </record>
+
+        <record id="hr_salary_rule_co_ibc_paraf" model="hr.salary.rule">
+            <field name="name">IBC Parafiscales (interno)</field>
+            <field name="code">CO_IBC_PARAF</field>
+            <field name="sequence">96</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+_r = result_rules
+result = payslip._ne_ibc_limites(
+    _r['CO_IBC_SALARIAL']['total'], 0.0,
+    _r['CO_IBC_REMUN']['total'], _r['CO_IBC_PACTADOS']['total'], _r['CO_DIAS_PARAF']['total'])
+            </field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">IBC de CCF, SENA e ICBF del recibo (sin maternidad/paternidad).</field>
+        </record>
+
         <record id="hr_salary_rule_co_ss_base_ibc" model="hr.salary.rule">
             <field name="name">Base IBC Seguridad Social (acumulador interno)</field>
             <field name="code">CO_SS_BASE_IBC</field>

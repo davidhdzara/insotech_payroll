@@ -2654,46 +2654,16 @@ class HrPayslip(models.Model):
         linea_ibc = payslip_anterior.line_ids.filtered(lambda l: l.code == 'CO_SS_BASE_IBC')
         return linea_ibc.total if linea_ibc else contract.wage
 
-    def _ne_ibc_seguridad_social(self, categories, contract, inputs, worked_days, result_rules):
-        """IBC de seguridad social del empleado (H-017a, 2026-10-11, decisión de David +
-        Tech Lead): incluye en la base de salud/pensión los días de vacaciones, licencia
-        remunerada ordinaria y licencia de maternidad/paternidad que hoy quedan fuera de
-        categories['DEV_SAL'] (CO_VAC/CO_LIC_REM/CO_LIC_MAT/CO_LIC_PAT tienen categoría
-        VAC/INC, parent DEV, no DEV_SAL).
-
-        Maternidad/paternidad: base = result_rules['CO_LIC_MAT']/['CO_LIC_PAT']['total'] --
-        única fuente (no se recalcula la fórmula aparte). Tech Lead (2026-10-11) verificó
-        contra el código real de Enterprise hr_payroll (hr_payslip.py, _get_localdict()):
-        result_rules se crea UNA sola vez por payslip y el MISMO localdict se pasa tanto a
-        rule._satisfy_condition() como a rule._compute_rule() -- disponible en
-        condition_python y en amount_python_compute por igual. Es además un
-        DefaultDictPayroll: una clave aún no calculada (ej. una regla que no corrió este
-        período) devuelve totales en 0, nunca KeyError/NameError. CO_LIC_MAT/CO_LIC_PAT
-        (secuencia 55/56) corren antes que CO_SALUD_EMP/CO_PENSION_EMP/CO_FSP (100/101/102),
-        así que su resultado ya está disponible aquí.
-
-        Única fuente para CO_SALUD_EMP/CO_PENSION_EMP/CO_FSP (las 3 reglas de empleado).
-        Alcance explícito de H-017a, NO tocar sin decisión de Tech Lead:
-        - Las 6 reglas patronales (CO_SALUD_CIA/CO_PENSION_CIA/CO_ARL_CIA/CO_CCF_CIA/
-          CO_SENA_CIA/CO_ICBF_CIA), el wizard de PILA y el reporte UGPP siguen leyendo su
-          propia base tal cual -- se alinean en H-017b (después del 15, antes del primer
-          pago de PILA), junto con la decisión normativa del piso de 1 SMMLV / techo de 25
-          SMMLV.
-        - Las incapacidades (CO_INC_COMUN, CO_INC_LABORAL) NO entran a esta base todavía --
-          quedan para el paso 3 de incapacidad (corte del día 90, piso de salario mínimo).
-          No agregar CO_INC_COMUN/CO_INC_LABORAL aquí sin que ese paso lo decida
-          explícitamente (decisión de Tech Lead, 2026-10-11).
-        """
+    def _ne_ibc_salarial(self, categories, contract, inputs, worked_days):
+        """Parte SALARIAL del IBC (H-017a): DEV_SAL + vacaciones y licencia remunerada
+        (base = ultimo IBC anterior, prorrateado por dias). Salario integral:
+        factor (70%) x salario. Ver _ne_ibc_seguridad_social para el alcance H-017a."""
         self.ensure_one()
         if contract.l10n_co_ne_integral_salary:
             return contract.wage * self._rule_parameter(
                 'l10n_co_factor_integral_salary', self.date_from)
-
         ibc = categories['DEV_SAL']
         dias_mes_comercial = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
-
-        # Vacaciones y licencia remunerada: base = último IBC anterior a la novedad,
-        # prorrateado por los mismos días que ya paga la novedad (_ne_dias_novedad()).
         ultimo_ibc = None
         for work_entry_code in ('CO_VAC', 'CO_LIC_REM'):
             dias_ausencia, dias_input = self._ne_dias_novedad_ausencia_e_input(
@@ -2703,11 +2673,72 @@ class HrPayslip(models.Model):
                 if ultimo_ibc is None:
                     ultimo_ibc = self._ne_ultimo_ibc_anterior(contract)
                 ibc += (ultimo_ibc / dias_mes_comercial) * dias
+        return ibc
 
-        # Maternidad/paternidad: base = lo que la licencia ya pagó -- result_rules es la
-        # única fuente, ver docstring.
-        ibc += result_rules.get('CO_LIC_MAT', {}).get('total', 0.0)
-        ibc += result_rules.get('CO_LIC_PAT', {}).get('total', 0.0)
+    def _ne_ibc_incap(self, contract, result_rules):
+        """Base de maternidad/paternidad: lo que la licencia ya pago (solo cuenta a
+        salud y pension, no a ARL ni parafiscales). Integral: 0 (como H-017a)."""
+        if contract.l10n_co_ne_integral_salary:
+            return 0.0
+        return (result_rules.get('CO_LIC_MAT', {}).get('total', 0.0)
+                + result_rules.get('CO_LIC_PAT', {}).get('total', 0.0))
+
+    def _ne_ibc_seguridad_social(self, categories, contract, inputs, worked_days, result_rules):
+        """IBC de seguridad social de H-017a (parte salarial + maternidad/paternidad),
+        sin 40%, piso ni techo. Lo siguen usando CO_SS_BASE_IBC (base de vacaciones
+        del mes siguiente). Las deducciones leen CO_IBC_SP (con limites)."""
+        return (self._ne_ibc_salarial(categories, contract, inputs, worked_days)
+                + self._ne_ibc_incap(contract, result_rules))
+
+    def _ne_ibc_remuneracion(self, contract, salarial):
+        """Base del 40%: remuneracion total. Integral: 100% del salario pactado."""
+        if contract.l10n_co_ne_integral_salary:
+            return contract.wage
+        return salarial
+
+    def _ne_ibc_pactados(self, result_rules):
+        """Suma de los pagos no salariales POR PACTO (regla del 40%). Un concepto no
+        salarial con valor y sin clasificar es error (sin default silencioso)."""
+        self.ensure_one()
+        total = 0.0
+        for regla in self.struct_id.rule_ids:
+            if regla.category_id.code != 'DEV_NOSAL':
+                continue
+            valor = abs(result_rules[regla.code]['total'])
+            if not valor:
+                continue
+            if not regla.l10n_co_pila_origen_no_salarial:
+                raise UserError(_(
+                    'La regla "%(regla)s" es un pago no salarial con valor en la '
+                    'nomina "%(nomina)s", pero no tiene "Origen del Pago No '
+                    'Salarial (IBC)". Defina si es por naturaleza o por pacto '
+                    'de desalarizacion en la regla salarial.',
+                    regla=regla.name, nomina=self.display_name))
+            if regla.l10n_co_pila_origen_no_salarial == 'pacto':
+                total += valor
+        return total
+
+    def _ne_dias_cotizados(self):
+        """Dias cotizados por subsistema. Base: dias pagables (mes comercial, misma
+        fuente que CO_BASICO); las novedades se suman en el siguiente commit."""
+        self.ensure_one()
+        dias = min(self._ne_dias_pagables(),
+                   self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from))
+        return {'sp': dias, 'arl': dias, 'paraf': dias}
+
+    def _ne_ibc_limites(self, salarial, incap, remuneracion, pactados, dias):
+        """IBC del recibo con regla del 40%, techo (sin prorratear) y piso (prorrateado
+        por dias). Ley 1393/2010 Art. 30; Ley 797/2003; SU 25185/2021."""
+        self.ensure_one()
+        smmlv = self._rule_parameter('l10n_co_smmlv', self.date_from)
+        pct = self._rule_parameter('l10n_co_pct_tope_no_salarial', self.date_from)
+        minimo = self._rule_parameter('l10n_co_ibc_min_smmlv', self.date_from)
+        maximo = self._rule_parameter('l10n_co_ibc_max_smmlv', self.date_from)
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self.date_from)
+        excedente = max(0.0, pactados - pct / 100.0 * (remuneracion + pactados))
+        ibc = min(salarial + incap + excedente, maximo * smmlv)
+        if dias > 0:
+            ibc = max(ibc, minimo * smmlv / dias_mes * dias)
         return ibc
 
     def _dev_basico_y_transporte(self, concept_lines, devengados):
