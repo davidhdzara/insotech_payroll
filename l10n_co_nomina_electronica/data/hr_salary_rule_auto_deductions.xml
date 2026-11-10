@@ -88,7 +88,7 @@ result = -abs(_from_input if _from_input > 0 else _from_contract)
 
         <!-- ==================== PENSION VOLUNTARIA ==================== -->
         <record id="hr_salary_rule_co_pension_vol" model="hr.salary.rule">
-            <field name="name">Pension Voluntaria</field>
+            <field name="name">Pensión Voluntaria</field>
             <field name="code">CO_PENSION_VOL</field>
             <field name="sequence">123</field>
             <field name="category_id" ref="hr_salary_rule_category_deducciones"/>

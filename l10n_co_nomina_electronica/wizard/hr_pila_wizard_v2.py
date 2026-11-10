@@ -78,7 +78,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     )
     modalidad_planilla = fields.Selection(
         selection=[
-            ('1', '1 - Planilla unica'),
+            ('1', '1 - Planilla única'),
             ('2', '2 - Planilla acumulada'),
         ],
         string='Modalidad Planilla',
@@ -87,7 +87,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     )
     company_id = fields.Many2one(
         comodel_name='res.company',
-        string='Compania',
+        string='Compañía',
         required=True,
         default=lambda self: self.env.company,
     )

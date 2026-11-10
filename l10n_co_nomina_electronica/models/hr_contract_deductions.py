@@ -42,7 +42,7 @@ class HrContractDeductions(models.Model):
              'Art. 126-4 ET. Se deduce automaticamente cada mes.',
     )
     l10n_co_ne_pension_voluntaria = fields.Monetary(
-        string='Pension Voluntaria Mensual',
+        string='Pensión Voluntaria Mensual',
         currency_field='currency_id',
         help='Aporte voluntario a fondo de pensiones. '
              'Art. 126-1 ET. Se deduce automaticamente cada mes.',
