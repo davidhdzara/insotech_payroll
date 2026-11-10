@@ -897,6 +897,12 @@ class HrPayslip(models.Model):
         if att.state == 'open':
             att.action_done()
 
+    def _ne_refrescar_ibc_mensual(self):
+        """Recalcula el IBC consolidado de cada empleado/mes afectado (idempotente)."""
+        Consolidado = self.env['l10n.co.ibc.mensual']
+        for clave in {(s.company_id, s.employee_id, s.date_to.replace(day=1)) for s in self}:
+            Consolidado._refrescar(*clave)
+
     def _ne_validar_terceros_attachments(self):
         """Embargos y libranzas exigen el contacto (juzgado / entidad)."""
         for slip in self:
@@ -1025,6 +1031,7 @@ class HrPayslip(models.Model):
         """
         res = super(HrPayslip, self).action_payslip_done()
         self._ne_aplicar_libranzas()
+        self._ne_refrescar_ibc_mensual()
         for rec in self:
             company = rec.company_id
             if company.l10n_co_ne_pre_sequence_id:
@@ -3501,8 +3508,12 @@ class HrPayslip(models.Model):
 
     def action_payslip_draft(self):
         self._ne_aplicar_libranzas(revertir=True)
-        return super().action_payslip_draft()
+        res = super().action_payslip_draft()
+        self._ne_refrescar_ibc_mensual()
+        return res
 
     def action_payslip_cancel(self):
         self._ne_aplicar_libranzas(revertir=True)
-        return super().action_payslip_cancel()
+        res = super().action_payslip_cancel()
+        self._ne_refrescar_ibc_mensual()
+        return res

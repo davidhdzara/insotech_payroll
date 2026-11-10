@@ -461,29 +461,6 @@ class L10nCoNominaUgpp(models.Model):
     # IBC Calculation
     # ──────────────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _compute_ibc(total_salarial, total_no_salarial, contract, smmlv,
-                      factor_integral_salary=0.70):
-        """Calcula el IBC según normativa colombiana.
-
-        - Art. 132 CST: Salario integral → IBC = factor_integral_salary
-          del salario (Parámetros Anuales, 70% por defecto).
-        - Art. 127/128 CST + Art. 30 Ley 1393/2010: pagos no salariales
-          se excluyen hasta el 40% de la remuneración total.
-        - Decreto 780/2016: piso 1 SMMLV, techo 25 SMMLV.
-        """
-        if contract and contract.l10n_co_ne_integral_salary:
-            ibc = contract.wage * factor_integral_salary
-        else:
-            total_remuneracion = total_salarial + total_no_salarial
-            limite_no_salarial = total_remuneracion * 0.40
-            exceso_no_salarial = max(0, total_no_salarial - limite_no_salarial)
-            ibc = total_salarial + exceso_no_salarial
-
-        ibc = max(ibc, smmlv)       # Piso: 1 SMMLV
-        ibc = min(ibc, smmlv * 25)  # Techo: 25 SMMLV
-        return ibc
-
     # ──────────────────────────────────────────────────────────────────
     # Hoja 3: nomina – UGPP Storm User V-20.1
     # ──────────────────────────────────────────────────────────────────
@@ -556,16 +533,12 @@ class L10nCoNominaUgpp(models.Model):
         # ── Preparar mapeos ──────────────────────────────────────────
         from ..services import dian_utils
 
-        RuleParameter = self.env['hr.rule.parameter']
-        smmlv = RuleParameter._get_parameter_from_code(
-            'l10n_co_smmlv', self.date_from)
-        factor_integral_salary = RuleParameter._get_parameter_from_code(
-            'l10n_co_factor_integral_salary', self.date_from)
         period_start = self.date_from
         period_end = self.date_to
 
         # ── Iterar nóminas ───────────────────────────────────────────
         row_num = 2
+        ibc_reportados = set()
         for payslip in payslips.sorted(
             key=lambda p: (p.employee_id.name, p.number or '')
         ):
@@ -744,11 +717,25 @@ class L10nCoNominaUgpp(models.Model):
             # ═════════════════════════════════════════════════════════
             # Columnas IBC
             # ═════════════════════════════════════════════════════════
-            ibc = self._compute_ibc(
-                total_salarial, total_no_salarial, contract, smmlv,
-                factor_integral_salary=factor_integral_salary,
-            )
-            ibc_data = [ibc, ibc, ibc, ibc]
+            # H-017b: el IBC NO se calcula aqui; se lee del consolidado mensual por
+            # empleado (l10n.co.ibc.mensual), unica fuente compartida con PILA y los
+            # aportes patronales. El consolidado es por empleado y mes: si hay varios
+            # recibos, el IBC va solo en la primera fila de ese empleado y mes.
+            clave_ibc = (employee.id, payslip.date_to.strftime('%Y-%m'))
+            if clave_ibc in ibc_reportados:
+                ibc_data = [0.0, 0.0, 0.0, 0.0]
+            else:
+                consolidado = self.env['l10n.co.ibc.mensual']._refrescar(
+                    payslip.company_id, employee, payslip.date_to)
+                if not consolidado:
+                    raise UserError(_(
+                        'No hay IBC consolidado para %(empleado)s en %(mes)s: ningun '
+                        'recibo confirmado trae las lineas de IBC. Recalcule y confirme '
+                        'la nomina.',
+                        empleado=employee.name, mes=payslip.date_to.strftime('%Y-%m')))
+                ibc_reportados.add(clave_ibc)
+                ibc_data = [consolidado.ibc_sp, consolidado.ibc_sp,
+                            consolidado.ibc_arl, consolidado.ibc_paraf]
 
             # ═════════════════════════════════════════════════════════
             # Escribir fila completa

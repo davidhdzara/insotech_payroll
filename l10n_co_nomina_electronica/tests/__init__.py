@@ -38,3 +38,4 @@ from . import test_embargos_refactor
 from . import test_liquidacion_embargo_libranza
 from . import test_ibc_unico
 from . import test_dias_cotizados
+from . import test_ibc_mensual
