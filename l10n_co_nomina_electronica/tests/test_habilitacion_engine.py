@@ -13,7 +13,9 @@ from unittest.mock import patch
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase
 
-_PAYSLIP = 'odoo.addons.l10n_co_nomina_electronica.models.hr_payslip.HrPayslip'
+# Los metodos del ciclo DIAN viven en el mixin (etapa 1a), no en la clase HrPayslip del modulo.
+_PAYSLIP = (
+    'odoo.addons.l10n_co_nomina_electronica.models.l10n_co_ne_documento_mixin.L10nCoNeDocumentoMixin')
 _ENGINE = 'odoo.addons.l10n_co_nomina_electronica.models.l10n_co_ne_habilitacion.L10nCoNeHabilitacion'
 
 

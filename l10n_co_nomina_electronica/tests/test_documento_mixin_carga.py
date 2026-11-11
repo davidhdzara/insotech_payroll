@@ -3,6 +3,8 @@
 hr.payslip lo hereda sin cambiar de nombre ni de columnas. Prueba de carga: el registro tiene el mixin, el
 modelo sigue siendo hr.payslip y conserva los campos y metodos del ciclo."""
 
+from odoo.addons.l10n_co_nomina_electronica.models.l10n_co_ne_documento_mixin import (
+    L10nCoNeDocumentoMixin)
 from odoo.tests.common import TransactionCase
 
 CAMPOS = (
@@ -25,7 +27,9 @@ class TestDocumentoMixinCarga(TransactionCase):
     def test_el_recibo_sigue_siendo_hr_payslip_y_hereda_el_mixin(self):
         modelo = self.env['hr.payslip']
         self.assertEqual(modelo._name, 'hr.payslip')
-        self.assertIn('l10n.co.ne.documento.mixin', modelo._inherit)
+        # el registro fusiona _inherit: la herencia real se ve en las clases base del modelo
+        self.assertTrue(issubclass(type(modelo), L10nCoNeDocumentoMixin))
+        self.assertIn('l10n_co_ne_state', modelo._fields)
 
     def test_el_recibo_conserva_los_campos_del_ciclo_dian(self):
         for campo in CAMPOS:
