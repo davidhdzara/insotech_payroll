@@ -12,6 +12,7 @@ from unittest import mock
 from odoo.exceptions import ValidationError
 from odoo.fields import Date
 from odoo.tests.common import TransactionCase
+from odoo.tools.misc import format_amount
 
 
 class TestContratoIntegralPiso(TransactionCase):
@@ -47,7 +48,8 @@ class TestContratoIntegralPiso(TransactionCase):
         msg = str(exc.exception)
         self.assertIn('Contrato Piso Integral', msg)
         self.assertIn('Piso Integral', msg)  # empleado
-        self.assertIn('22,761,765.00', msg)  # con la moneda y el idioma del usuario (format_amount)
+        # con la moneda y el idioma del usuario: se compara contra format_amount del mismo entorno
+        self.assertIn(format_amount(self.env, 22761765.0, self.company.currency_id), msg)
         self.assertIn('13', msg)
 
     def test_contrato_de_2025_usa_el_smmlv_de_su_fecha_de_inicio(self):
