@@ -113,6 +113,10 @@ class TestActividadEconomicaArl(TransactionCase):
                    'l10n_co_pila_actividad_economica_legacy varchar')
         exacto = self._contrato()
         inexacto = self._contrato()
+        # .161: la clase de riesgo ya no tiene default '1'; se fija una explícita para probar que
+        # la migración no la pisa.
+        exacto.l10n_co_pila_clase_riesgo = '3'
+        self.env.flush_all()
         cr.execute(
             'UPDATE hr_contract SET l10n_co_pila_actividad_economica_legacy = %s WHERE id = %s',
             (' T0002 ', exacto.id))
@@ -124,8 +128,11 @@ class TestActividadEconomicaArl(TransactionCase):
         inexacto.invalidate_recordset(['l10n_co_pila_actividad_economica'])
         self.assertEqual(exacto.l10n_co_pila_actividad_economica, self.act_alto)
         self.assertFalse(inexacto.l10n_co_pila_actividad_economica)
-        # no pisa la clase de riesgo ya guardada
-        self.assertEqual(exacto.l10n_co_pila_clase_riesgo, '1')
+        # no pisa la clase de riesgo ya guardada; sin coincidencia, sigue vacía (sin default)
+        exacto.invalidate_recordset(['l10n_co_pila_clase_riesgo'])
+        inexacto.invalidate_recordset(['l10n_co_pila_clase_riesgo'])
+        self.assertEqual(exacto.l10n_co_pila_clase_riesgo, '3')
+        self.assertFalse(inexacto.l10n_co_pila_clase_riesgo)
 
 
 class TestCatalogoCiiuDecreto768(TransactionCase):
