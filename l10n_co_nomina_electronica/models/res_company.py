@@ -72,6 +72,49 @@ class ResCompany(models.Model):
         string='Certificados',
     )
 
+    # Plantillas de las secuencias de nomina electronica (datos del modulo, company_id vacio): solo
+    # se copian para crear la de cada compania; ninguna compania las usa directamente. El consecutivo
+    # DIAN se autoriza por NIT, asi que cada compania colombiana lleva el suyo (M1, doc 51).
+    _NE_SECUENCIAS = (
+        ('l10n_co_ne_sequence_id', 'l10n_co_nomina_electronica.seq_l10n_co_nomina_electronica'),
+        ('l10n_co_ne_pre_sequence_id', 'l10n_co_nomina_electronica.seq_l10n_co_nomina_temporal'),
+        (None, 'l10n_co_nomina_electronica.seq_l10n_co_nomina_ajuste'),
+    )
+
+    def _ne_crear_secuencia_propia(self, plantilla, siguiente=1):
+        """Copia propia de la plantilla para esta compania, con el siguiente numero indicado."""
+        self.ensure_one()
+        return self.env['ir.sequence'].sudo().create({
+            'name': '%s (%s)' % (plantilla.name, self.name),
+            'code': plantilla.code, 'implementation': plantilla.implementation,
+            'prefix': plantilla.prefix, 'suffix': plantilla.suffix,
+            'padding': plantilla.padding, 'number_increment': plantilla.number_increment,
+            'number_next': siguiente, 'company_id': self.id})
+
+    def _ne_asegurar_secuencias(self):
+        """A cada compania colombiana sin secuencia de nomina electronica (consecutivo, temporal,
+        ajuste) le crea la suya, empezando en 1. No toca las que ya tienen (ni crea nada para una
+        compania de otro pais)."""
+        for company in self:
+            if not company._ne_es_colombia():
+                continue
+            for campo, xmlid in self._NE_SECUENCIAS:
+                plantilla = self.env.ref(xmlid, raise_if_not_found=False)
+                if not plantilla:
+                    continue
+                if campo:
+                    if not company[campo]:
+                        company.sudo()[campo] = company._ne_crear_secuencia_propia(plantilla)
+                elif not self.env['ir.sequence'].sudo().search_count([
+                        ('code', '=', plantilla.code), ('company_id', '=', company.id)]):
+                    company._ne_crear_secuencia_propia(plantilla)
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        companies = super().create(vals_list)
+        companies._ne_asegurar_secuencias()
+        return companies
+
     def _ne_es_colombia(self):
         """True si la compania es colombiana. Unica comprobacion de pais del modulo: lo propio de la
         nomina colombiana (numeracion, validaciones, sincronizacion de identificacion, IBC, piso
@@ -264,7 +307,6 @@ class ResCompany(models.Model):
     l10n_co_ne_sequence_id = fields.Many2one(
         comodel_name='ir.sequence',
         string='Secuencia Nómina Electrónica',
-        default=lambda self: self.env.ref('l10n_co_nomina_electronica.seq_l10n_co_nomina_electronica', raise_if_not_found=False),
         # AUD-DIAN-34 (2026-10-04): dominio restringido al código EXACTO
         # tras un bug real en producción (Guapante) -- el dominio amplio
         # "like 'l10n_co_nomina.'" permitía elegir por error la secuencia
@@ -277,7 +319,6 @@ class ResCompany(models.Model):
     l10n_co_ne_pre_sequence_id = fields.Many2one(
         comodel_name='ir.sequence',
         string='Secuencia Nómina Temporal',
-        default=lambda self: self.env.ref('l10n_co_nomina_electronica.seq_l10n_co_nomina_temporal', raise_if_not_found=False),
         # AUD-DIAN-34 (2026-10-04): ver nota en l10n_co_ne_sequence_id --
         # mismo incidente real: esta quedó apuntando a la secuencia de
         # Notas de Ajuste (NA) en vez de la Temporal (PRE-NOM) en
@@ -512,7 +553,10 @@ class ResCompany(models.Model):
                         'de la general. Deje a esos empleados con la caja general (o elija como '
                         'general la que corresponde) y vuelva a intentarlo.',
                         company=company.name, n=distintos))
-        return super().write(vals)
+        res = super().write(vals)
+        if 'country_id' in vals:
+            self._ne_asegurar_secuencias()
+        return res
 
     # ──────────────────────────────────────────────────────────────────
     # Computes

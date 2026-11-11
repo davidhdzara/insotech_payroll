@@ -3934,7 +3934,7 @@ class HrPayslip(models.Model):
                 ('|'),
                 ('company_id', '=', company.id),
                 ('company_id', '=', False)
-            ], limit=1)
+            ], order='company_id', limit=1)  # la propia de la compania primero (NULL al final)
             if seq:
                 return seq.next_by_id()
             prefix = company.l10n_co_ne_adjust_prefix or 'NA'
