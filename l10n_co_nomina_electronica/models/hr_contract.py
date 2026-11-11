@@ -13,7 +13,7 @@ V1.0, sección 6.2.8, atributos TipoContrato y SalarioIntegral.
 """
 
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 from .res_company import NE_CLASES_RIESGO
 
@@ -122,6 +122,47 @@ class HrContract(models.Model):
         string='Tarifa Especial AFP',
         help='Tarifa especial de AFP si aplica.',
     )
+
+    # ──────────────────────────────────────────────────────────────────
+    # Piso del salario integral (CST art. 132 num. 2)
+    # ──────────────────────────────────────────────────────────────────
+    def _ne_validar_piso_integral(self, fecha=None):
+        """Un contrato de salario integral no puede pagar menos del piso: l10n_co_piso_salario_
+        integral_smmlv (13 SMMLV, 10 de salario + 30 % de factor prestacional) x SMMLV de la
+        fecha. fecha: la del SMMLV; sin ella, la de inicio del contrato."""
+        Parametro = self.env['hr.rule.parameter']
+        for contrato in self.filtered('l10n_co_ne_integral_salary'):
+            fecha_smmlv = fecha or contrato.date_start
+            if not fecha_smmlv:
+                continue
+            veces = Parametro._get_parameter_from_code(
+                'l10n_co_piso_salario_integral_smmlv', fecha_smmlv)
+            smmlv = Parametro._get_parameter_from_code('l10n_co_smmlv', fecha_smmlv)
+            piso = veces * smmlv
+            if contrato.wage < piso:
+                raise ValidationError(_(
+                    "El contrato '%(contrato)s' de %(empleado)s es de salario integral con un "
+                    "salario de %(salario)s, por debajo del piso de %(piso)s (%(veces)s SMMLV de "
+                    "%(smmlv)s, vigente el %(fecha)s; CST art. 132). Corrija el Salario del "
+                    "contrato o quite la marca \"Salario Integral\".",
+                    contrato=contrato.name, empleado=contrato.employee_id.name,
+                    salario='{:,.2f}'.format(contrato.wage), piso='{:,.2f}'.format(piso),
+                    veces=veces, smmlv='{:,.2f}'.format(smmlv), fecha=fecha_smmlv))
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        contratos = super().create(vals_list)
+        contratos._ne_validar_piso_integral()
+        return contratos
+
+    def write(self, vals):
+        resultado = super().write(vals)
+        if {'wage', 'l10n_co_ne_integral_salary', 'date_start'} & set(vals):
+            # Un cambio solo de salario se valida con el SMMLV de hoy; si se toca el ingreso o
+            # la marca de integral, con el SMMLV de la fecha de inicio del contrato.
+            solo_salario = 'wage' in vals and not {'l10n_co_ne_integral_salary', 'date_start'} & set(vals)
+            self._ne_validar_piso_integral(fields.Date.context_today(self) if solo_salario else None)
+        return resultado
 
     def _ne_clase_riesgo(self):
         """Clase de riesgo ARL efectiva: la del contrato y, si no tiene, la general de la

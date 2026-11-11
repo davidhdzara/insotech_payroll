@@ -359,6 +359,23 @@ escriba <strong>10</strong> para representar "10 SMMLV". Valor vigente: <strong>
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
+    <record id="rule_parameter_piso_salario_integral_smmlv" model="hr.rule.parameter">
+        <field name="name">Colombia: Piso Salario Integral (SMMLV)</field>
+        <field name="code">l10n_co_piso_salario_integral_smmlv</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Múltiplo de SMMLV que como mínimo debe devengar un trabajador de salario
+integral: 10 SMMLV de salario más 30 % de factor prestacional (CST art. 132 num. 2, Ley 50/1990).
+El contrato integral por debajo de este valor no se puede guardar.</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número de veces el SMMLV, <strong>NO</strong> un valor en pesos: escriba <strong>13</strong>
+para "13 SMMLV". Valor vigente: <strong>13</strong>.</p></field>
+    </record>
+    <record id="rule_parameter_piso_salario_integral_smmlv_2024" model="hr.rule.parameter.value">
+        <field name="parameter_value">13</field>
+        <field name="rule_parameter_id" ref="rule_parameter_piso_salario_integral_smmlv"/>
+        <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
+    </record>
+
     <record id="rule_parameter_pct_intereses_cesantias" model="hr.rule.parameter">
         <field name="name">Colombia: % Intereses sobre Cesantías</field>
         <field name="code">l10n_co_pct_intereses_cesantias</field>

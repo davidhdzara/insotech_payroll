@@ -1070,7 +1070,7 @@ class TestAusenciasNomina(TransactionCase):
         del salario, Art. 132 CST) -- una ausencia de vacaciones no debe alterarlo;
         _ne_ibc_seguridad_social() devuelve ese valor directo sin pasar por DEV_SAL ni
         por la base especial de vacaciones/licencias."""
-        wage = 10000000.0
+        wage = 20000000.0  # integral: piso 13 SMMLV (2024: 16.900.000), validado al marcarlo
         employee, contract = self._make_contract('IbcIntegral', wage=wage)
         contract.write({'l10n_co_ne_integral_salary': True})
         self._make_validated_leave(
