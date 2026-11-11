@@ -359,6 +359,26 @@ escriba <strong>10</strong> para representar "10 SMMLV". Valor vigente: <strong>
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
+    <record id="rule_parameter_tabla_retencion_art383" model="hr.rule.parameter">
+        <field name="name">Colombia: Tabla de Retención en la Fuente (Art. 383 ET)</field>
+        <field name="code">l10n_co_tabla_retencion_art383</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Tabla marginal de retención en la fuente por rentas de trabajo, Procedimiento 1 (Art. 383 ET):
+una lista de tramos <code>(límite inferior UVT, límite superior UVT, tarifa, UVT fijas)</code>. La retención de un
+tramo es <code>(base en UVT − límite inferior) × tarifa + UVT fijas</code>.</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba la lista completa de tramos en formato Python, con la tarifa como fracción decimal (0.19 es 19%) y
+<strong>None</strong> como límite superior del último tramo (sin tope). Ejemplo del valor vigente:
+<code>[(0, 95, 0.0, 0), (95, 150, 0.19, 0), (150, 360, 0.28, 10), (360, 640, 0.33, 69), (640, 945, 0.35, 162),
+(945, 2300, 0.37, 268), (2300, None, 0.39, 770)]</code>. Si la ley cambia la tabla, cree un valor nuevo con su
+fecha de vigencia; no edite el anterior.</p></field>
+    </record>
+    <record id="rule_parameter_tabla_retencion_art383_2017" model="hr.rule.parameter.value">
+        <field name="parameter_value">[(0, 95, 0.0, 0), (95, 150, 0.19, 0), (150, 360, 0.28, 10), (360, 640, 0.33, 69), (640, 945, 0.35, 162), (945, 2300, 0.37, 268), (2300, None, 0.39, 770)]</field>
+        <field name="rule_parameter_id" ref="rule_parameter_tabla_retencion_art383"/>
+        <field name="date_from" eval="datetime(2017, 1, 1).date()"/>
+    </record>
+
     <record id="rule_parameter_aviso_anio_siguiente_desde_mes" model="hr.rule.parameter">
         <field name="name">Colombia: Aviso de Parámetros del Año Siguiente (Desde el Mes)</field>
         <field name="code">l10n_co_aviso_anio_siguiente_desde_mes</field>

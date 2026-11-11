@@ -26,21 +26,6 @@ from odoo.exceptions import UserError, ValidationError
 
 _logger = logging.getLogger(__name__)
 
-# ════════════════════════════════════════════════════════════════════════
-# Tabla marginal Art. 383 ET
-# Cada tupla: (límite_inferior_UVT, límite_superior_UVT, tarifa, UVT_fijas)
-# ════════════════════════════════════════════════════════════════════════
-MARGINAL_TABLE_ART383 = [
-    (0, 95, 0.00, 0),
-    (95, 150, 0.19, 0),
-    (150, 360, 0.28, 10),
-    (360, 640, 0.33, 69),
-    (640, 945, 0.35, 162),
-    (945, 2300, 0.37, 268),
-    (2300, float('inf'), 0.39, 770),
-]
-
-
 class L10nCoRetefuenteUvt(models.Model):
     """Tabla de configuración y cálculo de Retención en la Fuente — Colombia.
 
@@ -403,7 +388,7 @@ class L10nCoRetefuenteUvt(models.Model):
             or self.procedure
         )
         if effective_procedure == '1':
-            retencion_uvt = self._apply_marginal_table(base_uvt)
+            retencion_uvt = self._apply_marginal_table(base_uvt, _ref_date)
         else:
             # Procedimiento 2 (Art. 384 ET): % fijo del semestre vigente,
             # calculado por contrato (doc 08) -- ``percentage_procedure2``
@@ -469,36 +454,44 @@ class L10nCoRetefuenteUvt(models.Model):
     # TABLA MARGINAL — Art. 383 ET (Procedimiento 1)
     # ══════════════════════════════════════════════════════════════════
     @api.model
-    def _apply_marginal_table(self, base_uvt):
+    def _apply_marginal_table(self, base_uvt, fecha=None):
         """Aplica la tabla marginal del Art. 383 del Estatuto Tributario.
 
-        :param base_uvt: float — Base gravable expresada en UVT.
-        :returns: float — Retención calculada en UVT.
+        La tabla NO esta en el codigo: es el parametro versionado por fecha
+        ``l10n_co_tabla_retencion_art383`` (hr.rule.parameter), una lista de tuplas
+        ``(limite_inferior_UVT, limite_superior_UVT o None, tarifa, UVT_fijas)``; el tope superior
+        vacio (None) es el ultimo tramo, sin limite. Si la ley cambia, se carga un valor nuevo con su
+        fecha, sin tocar codigo.
 
-        **Tabla de rangos:**
+        :param base_uvt: float -- Base gravable expresada en UVT.
+        :param fecha: fecha con la que se resuelve el parametro (por defecto, hoy).
+        :returns: float -- Retencion calculada en UVT.
+
+        **Tabla vigente (Art. 383 ET):**
 
         +-----------------------+--------+-----------------------------------------+
-        | Rango (UVT)           | Tarifa | Instrucción                             |
+        | Rango (UVT)           | Tarifa | Instruccion                             |
         +=======================+========+=========================================+
         | > 0 hasta 95          |   0%   | 0                                       |
-        | > 95 hasta 150        |  19%   | (Ingreso − 95) × 19%                   |
-        | > 150 hasta 360       |  28%   | (Ingreso − 150) × 28% + 10 UVT         |
-        | > 360 hasta 640       |  33%   | (Ingreso − 360) × 33% + 69 UVT         |
-        | > 640 hasta 945       |  35%   | (Ingreso − 640) × 35% + 162 UVT        |
-        | > 945 hasta 2300      |  37%   | (Ingreso − 945) × 37% + 268 UVT        |
-        | > 2300                |  39%   | (Ingreso − 2300) × 39% + 770 UVT       |
+        | > 95 hasta 150        |  19%   | (Ingreso - 95) x 19%                    |
+        | > 150 hasta 360       |  28%   | (Ingreso - 150) x 28% + 10 UVT          |
+        | > 360 hasta 640       |  33%   | (Ingreso - 360) x 33% + 69 UVT          |
+        | > 640 hasta 945       |  35%   | (Ingreso - 640) x 35% + 162 UVT         |
+        | > 945 hasta 2300      |  37%   | (Ingreso - 945) x 37% + 268 UVT         |
+        | > 2300                |  39%   | (Ingreso - 2300) x 39% + 770 UVT        |
         +-----------------------+--------+-----------------------------------------+
         """
         if base_uvt <= 0:
             return 0.0
 
-        for lower, upper, rate, fixed_uvt in MARGINAL_TABLE_ART383:
-            if base_uvt <= upper:
+        tabla = self.env['hr.rule.parameter']._get_parameter_from_code(
+            'l10n_co_tabla_retencion_art383', fecha)
+        for lower, upper, rate, fixed_uvt in tabla:
+            if upper is None or base_uvt <= upper:
                 return (base_uvt - lower) * rate + fixed_uvt
-
-        # Fallback (no debería alcanzarse por el inf en la tabla)
-        last = MARGINAL_TABLE_ART383[-1]
-        return (base_uvt - last[0]) * last[2] + last[3]
+        # Tabla sin tramo abierto: usa el ultimo
+        lower, _upper, rate, fixed_uvt = tabla[-1]
+        return (base_uvt - lower) * rate + fixed_uvt
 
     # ══════════════════════════════════════════════════════════════════
     # Helpers

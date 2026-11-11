@@ -109,8 +109,8 @@ class HrSalaryAttachment(models.Model):
                 self.monthly_amount = wage * self.l10n_co_embargo_porcentaje / 100
 
     def _l10n_co_compute_embargo_amount(self, salario_neto, smmlv, fecha_nomina,
-                                         factor_embargo_civil=0.20,
-                                         pct_tope_embargo_alimentos=50.0):
+                                         factor_embargo_civil,
+                                         pct_tope_embargo_alimentos):
         """Calcula el valor del embargo respetando topes legales.
 
         Reemplaza l10n.co.hr.embargo.compute_embargo_amount -- misma firma
