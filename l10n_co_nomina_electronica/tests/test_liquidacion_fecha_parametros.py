@@ -59,8 +59,9 @@ class TestLiquidacionFechaParametros(TransactionCase):
     def _verificar_prestaciones_con_auxilio_2026(self, slip):
         slip.compute_sheet()
         base = 3000000.0 + AUX_2026
-        dias_ces = 227  # 1-ene-2026 a 15-ago-2026, inclusivo
-        dias_prima = 46  # 1-jul-2026 a 15-ago-2026, inclusivo
+        # Días comerciales (meses de 30): 7 meses (ene-jul) x 30 + 15 = 225; jul 30 + 15 = 45.
+        dias_ces = 225  # 1-ene-2026 a 15-ago-2026
+        dias_prima = 45  # 1-jul-2026 a 15-ago-2026
         cesantias = base * dias_ces / ANIO
         self.assertAlmostEqual(self._total(slip, 'CO_LIQ_CESANTIAS'), cesantias, places=2)
         self.assertAlmostEqual(
@@ -92,7 +93,8 @@ class TestLiquidacionFechaParametros(TransactionCase):
         slip = self._liquidacion(
             'Indemnizacion2024', 15000000.0, date(2024, 3, 1), cause='sin_justa_causa')
         slip.compute_sheet()
-        anos = ((RETIRO - date(2024, 3, 1)).days + 1) / ANIO  # 898 dias
+        # Días comerciales 1-mar-2024 a 15-ago-2026: 29 meses x 30 + 15 = 885.
+        anos = 885 / ANIO
         valor_dia = 15000000.0 / 30
         esperado = valor_dia * 30 + valor_dia * 20 * (anos - 1)
         self.assertAlmostEqual(self._total(slip, 'CO_LIQ_INDEMNIZACION'), esperado, places=2)

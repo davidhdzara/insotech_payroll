@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """CO_LIQ_VACACIONES descuenta las vacaciones ya disfrutadas o compensadas.
 
-Dias causados = dias de servicio x 30 / 720 (15 por cada 360). Los valores esperados se
-calculan a mano: con ingreso 2025-01-01 y retiro 2025-12-26 son 360 dias de servicio = 15 dias
-causados; salario $3.000.000 => valor dia $100.000. Las ausencias (hr.leave -> work entries)
+Dias causados = dias COMERCIALES de servicio x 30 / 720 (15 por cada 360; meses de 30, el 31
+no suma). Los valores esperados se calculan a mano: con ingreso 2025-01-01 y retiro 2025-12-31
+son 360 dias comerciales (365 reales) = 15 dias causados; salario $3.000.000 => valor dia $100.000. Las ausencias (hr.leave -> work entries)
 se simulan con mock sobre _ne_ausencia_habil: aqui se prueba el descuento, no la conversion
 nativa de ausencias (ya cubierta en test_ausencias_nomina).
 """
@@ -14,7 +14,7 @@ from unittest import mock
 from odoo.tests.common import TransactionCase
 
 INGRESO = date(2025, 1, 1)
-RETIRO = date(2025, 12, 26)  # 360 dias de servicio, inclusivo
+RETIRO = date(2025, 12, 31)  # 360 dias comerciales de servicio (365 reales), inclusivo
 VALOR_DIA = 100000.0
 
 

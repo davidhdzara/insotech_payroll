@@ -121,29 +121,29 @@ class TestCantidadReal(TransactionCase):
         self.assertAlmostEqual(linea.total, 3000000.0 / 30 * 0.6667 * 10, places=2)
 
     def test_liquidacion_cantidad_en_dias_de_cada_concepto(self):
-        """Retiro 2026-08-15, ingreso 2024-03-01, $3.000.000: cesantias 227 dias del anio,
-        prima 46 dias del semestre; salarios = dias pagables; el total no cambia."""
+        """Retiro 2026-08-15, ingreso 2024-03-01, $3.000.000: cesantias 225 dias comerciales del anio,
+        prima 45 dias comerciales del semestre; salarios = dias pagables; el total no cambia."""
         slip = self._recibo(self.est_liquidacion, 'LiqCantidad', 3000000.0, date(2024, 3, 1),
                             date(2026, 8, 15))
         slip.compute_sheet()
         base = 3000000.0 + 249095.0
         ces = self._linea(slip, 'CO_LIQ_CESANTIAS')
-        self.assertEqual(ces.quantity, 227.0)
-        self.assertAlmostEqual(ces.total, base * 227 / 360, places=2)
-        self.assertEqual(self._linea(slip, 'CO_LIQ_INT_CES').quantity, 227.0)
+        self.assertEqual(ces.quantity, 225.0)
+        self.assertAlmostEqual(ces.total, base * 225 / 360, places=2)
+        self.assertEqual(self._linea(slip, 'CO_LIQ_INT_CES').quantity, 225.0)
         prima = self._linea(slip, 'CO_LIQ_PRIMA')
-        self.assertEqual(prima.quantity, 46.0)
-        self.assertAlmostEqual(prima.total, base * 46 / 360, places=2)
+        self.assertEqual(prima.quantity, 45.0)
+        self.assertAlmostEqual(prima.total, base * 45 / 360, places=2)
         self.assertEqual(self._linea(slip, 'CO_LIQ_SALARIOS').quantity, slip._ne_dias_pagables())
 
     def test_liquidacion_indemnizacion_cantidad_son_los_dias_de_indemnizacion(self):
-        """$15.000.000, ingreso 2024-03-01, retiro 2026-08-15 (898 dias = 2,494 anios): 30 dias
+        """$15.000.000, ingreso 2024-03-01, retiro 2026-08-15 (885 dias comerciales = 2,458 anios): 30 dias
         el primer anio + 20 por cada anio adicional."""
         slip = self._recibo(self.est_liquidacion, 'LiqIndemn', 15000000.0, date(2024, 3, 1),
                             date(2026, 8, 15), cause='sin_justa_causa')
         slip.compute_sheet()
         linea = self._linea(slip, 'CO_LIQ_INDEMNIZACION')
-        anos = 898 / 360.0
+        anos = 885 / 360.0
         dias = 30 + 20 * (anos - 1)
         # quantity se guarda con la precision 'Payroll' (2 decimales); el total sale del valor
         # exacto (hr_payroll lo calcula antes de redondear), no de 59,89 x valor dia.
