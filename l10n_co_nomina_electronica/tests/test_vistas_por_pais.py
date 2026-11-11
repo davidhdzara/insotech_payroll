@@ -26,10 +26,13 @@ class TestVistasPorPais(TransactionCase):
 
     def test_empleado_oculta_lo_colombiano_fuera_de_colombia(self):
         arch = self._arch('hr.employee')
-        for grupo in ('dian_identification', 'work_location', 'payment_data',
-                      'pila_administradoras'):
+        # por nombre y titulo: "work_location" podria coincidir con un grupo nativo
+        for nombre, titulo in (('dian_identification', 'Identificación DIAN'),
+                               ('work_location', 'Condiciones Especiales'),
+                               ('payment_data', 'Datos de Pago'),
+                               ('pila_administradoras', 'PILA - Administradoras')):
             self.assertIn("company_country_code != 'CO'", self._invisible(
-                arch, "//group[@name='%s']" % grupo), grupo)
+                arch, "//group[@name='%s'][@string='%s']" % (nombre, titulo)), nombre)
 
     def test_recibo_oculta_pagina_botones_y_estado_dian_fuera_de_colombia(self):
         arch = self._arch('hr.payslip')
