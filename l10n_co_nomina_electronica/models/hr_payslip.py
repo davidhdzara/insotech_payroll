@@ -2526,6 +2526,33 @@ class HrPayslip(models.Model):
             return self.date_to
         return self.date_from
 
+    def _ne_validar_inicio_liquidacion(self):
+        """En la estructura de liquidacion el recibo va de inicio de contrato a retiro.
+
+        Las reglas que dependen del tramo contractual (vacaciones causadas y tomadas, tramo
+        pagable) asumen date_from = contract.date_start. Con otra fecha las vacaciones de meses
+        anteriores no se descuentan y el valor sale inflado SIN aviso (QA, recibo 12954).
+        No se corrige en silencio: se detiene con un error que dice que corregir."""
+        self.ensure_one()
+        if self.struct_id != self.env.ref(
+                'l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion',
+                raise_if_not_found=False):
+            return
+        inicio = self.contract_id.date_start
+        desde = self.date_from
+        if hasattr(desde, 'date'):
+            desde = desde.date()
+        if inicio and desde != inicio:
+            raise UserError(_(
+                "El recibo de liquidación '%(recibo)s' (empleado %(empleado)s) debe iniciar en "
+                "la fecha de inicio del contrato (%(esperada)s) y tiene %(actual)s. Con otra "
+                "fecha las vacaciones y demás conceptos de los meses anteriores no se descuentan "
+                "y el valor sale errado. Corrija el campo \"Desde\" del recibo a %(esperada)s "
+                "(o genere la liquidación con el asistente de liquidación del contrato); si "
+                "cambia la fecha, revise que la fecha \"Hasta\" siga siendo la de retiro.",
+                recibo=self.name or self.display_name, empleado=self.employee_id.display_name,
+                esperada=inicio, actual=desde))
+
     def _ne_liq_vacaciones_dias(self):
         """Dias de vacaciones causadas, ya tomadas y pendientes del contrato al retiro.
 
@@ -2541,6 +2568,7 @@ class HrPayslip(models.Model):
         Pendientes = max(0, causadas - disfrutadas - compensadas): quien tomo mas de lo causado
         no genera valor negativo. Solo ve lo registrado en el sistema."""
         self.ensure_one()
+        self._ne_validar_inicio_liquidacion()
         contract = self.contract_id
         fecha = self._ne_fecha_parametros()
         dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', fecha)
@@ -2584,6 +2612,7 @@ class HrPayslip(models.Model):
         tal cual. Compartido por _ne_dias_pagables() y _ne_ausencia_calendario() (H-014) --
         ambos deben recortar al mismo tramo para no descontar/pagar fuera de él.
         """
+        self._ne_validar_inicio_liquidacion()
         periodo_ini = self.date_from
         periodo_fin = self.date_to
         if (periodo_fin.year, periodo_fin.month) != (periodo_ini.year, periodo_ini.month):

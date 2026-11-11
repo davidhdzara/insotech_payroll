@@ -66,7 +66,7 @@ class TestLiquidacionIndemnizacion(TransactionCase):
             'contract_id': contract.id,
             'company_id': self.company.id,
             'struct_id': self.liquidacion_struct.id,
-            'date_from': date_to.replace(day=1),
+            'date_from': contract.date_start,
             'date_to': date_to,
             'l10n_co_ne_liquidacion_cause': 'sin_justa_causa',
         })
