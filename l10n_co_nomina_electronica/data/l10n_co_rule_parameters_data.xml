@@ -527,6 +527,25 @@ propio, no debe confundirse con ningún otro parámetro de días.</p>
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
+    <record id="rule_parameter_dias_interrupcion_prorroga" model="hr.rule.parameter">
+        <field name="name">Colombia: Incapacidad Común, Interrupción Máxima para Prórroga (Días)</field>
+        <field name="code">l10n_co_dias_interrupcion_prorroga</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Días libres máximos entre dos incapacidades por enfermedad general
+del mismo trabajador para contarlas como UNA sola (prórroga): el tramo de pago (2 días del empleador,
+3 a 90 EPS, 91 en adelante) se cuenta desde el inicio de la primera, no desde cada incapacidad ni
+cada recibo (H-170). Con 0 solo se encadenan las incapacidades contiguas (la siguiente empieza el día
+posterior al fin de la anterior). La norma de prórroga puede admitir más días: valor a confirmar por el
+área normativa.</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de días. Valor vigente: <strong>0</strong>.</p></field>
+    </record>
+    <record id="rule_parameter_dias_interrupcion_prorroga_2024" model="hr.rule.parameter.value">
+        <field name="parameter_value">0</field>
+        <field name="rule_parameter_id" ref="rule_parameter_dias_interrupcion_prorroga"/>
+        <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
+    </record>
+
     <record id="rule_parameter_pct_tope_embargo_alimentos" model="hr.rule.parameter">
         <field name="name">Colombia: % Tope Embargo Alimentos/Cooperativa</field>
         <field name="code">l10n_co_pct_tope_embargo_alimentos</field>

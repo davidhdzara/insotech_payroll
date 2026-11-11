@@ -2655,7 +2655,7 @@ class HrPayslip(models.Model):
             dias_excluidos += self._ne_ausencia_calendario(codigo)[0]
         return dias_bajo_contrato - dias_excluidos
 
-    def _ne_pago_ausencia_calendario(self, codigo, dias):
+    def _ne_pago_ausencia_calendario(self, codigo, dias, previos=None):
         """Valor a pagar por `dias` calendario corridos de una ausencia de pago por el empleador
         o por terceros: CO_INC_COMUN, CO_INC_LABORAL, CO_LIC_MAT, CO_LIC_PAT. Unico lugar del
         calculo, compartido por las reglas de la nomina general y de la liquidacion.
@@ -2666,7 +2666,9 @@ class HrPayslip(models.Model):
         - CO_INC_LABORAL: ARL al 100 % desde el primer dia. CO_LIC_MAT y CO_LIC_PAT: 100 % del
           salario, a cargo de la EPS (H-014, CST Art. 236 mod. Ley 2114/2021).
         Parametros normativos desde hr.rule.parameter a la fecha de _ne_fecha_parametros().
-        CO_INC_COMUN tiene piso de 1 SMMLV por dia (H-163, CST Art. 227): ver abajo."""
+        CO_INC_COMUN tiene piso de 1 SMMLV por dia (H-163, CST Art. 227): ver abajo. Su tramo se
+        cuenta desde el INICIO de la incapacidad y sus prorrogas (H-170): `previos` = dias de la
+        misma incapacidad anteriores al periodo; sin darlo, se deduce de Ausencias."""
         self.ensure_one()
         if codigo not in _NOVEDAD_AUSENCIA_CALENDARIO_CODES:
             raise UserError(_(
@@ -2687,18 +2689,76 @@ class HrPayslip(models.Model):
         # H-163 (CST art. 227; T-468/2010): los porcentajes aplican "siempre y cuando el valor
         # liquido a pagar no sea inferior al SMMLV": valor por dia = max(valor_dia x pct del
         # tramo, SMMLV / dias_mes), en todos los tramos. Con salario de 1 SMMLV se paga el 100 %.
+        # LIMITE CONOCIDO: con salario MENOR a 1 SMMLV (jornada parcial) el piso diario pagaria mas
+        # del 100 % de su sueldo; no ocurre en Guapante y no se modela (decision pendiente).
         smmlv_dia = self._rule_parameter('l10n_co_smmlv', fecha) / dias_mes
 
         def _por_dia(pct):
             return max(valor_dia * pct, smmlv_dia)
 
-        if dias <= dias_emp:
-            return _por_dia(pct_emp) * dias
-        if dias <= limite_3_90:
-            return _por_dia(pct_emp) * dias_emp + _por_dia(pct_3_90) * (dias - dias_emp)
-        return (_por_dia(pct_emp) * dias_emp
-                + _por_dia(pct_3_90) * (limite_3_90 - dias_emp)
-                + _por_dia(pct_91_mas) * (dias - limite_3_90))
+        def _pago_posiciones(previos, cantidad):
+            """Pago de los dias que ocupan las posiciones previos+1 .. previos+cantidad DENTRO de
+            la incapacidad (H-170): el tramo se cuenta desde su inicio, no desde el recibo."""
+            ini, fin = previos, previos + cantidad
+
+            def _solape(a, b):
+                return max(0, min(fin, b) - max(ini, a))
+            return (_solape(0, dias_emp) * _por_dia(pct_emp)
+                    + _solape(dias_emp, limite_3_90) * _por_dia(pct_3_90)
+                    + max(0, fin - max(ini, limite_3_90)) * _por_dia(pct_91_mas))
+
+        if previos is not None:
+            return _pago_posiciones(previos, dias)
+        cadenas = self._ne_incapacidad_cadenas()
+        if not cadenas or sum(en_periodo for _previos, en_periodo in cadenas) != dias:
+            # Sin ausencias que lo respalden (p. ej. input manual): la incapacidad empieza aqui.
+            cadenas = [(0, dias)]
+        return sum(_pago_posiciones(prev, en_periodo) for prev, en_periodo in cadenas)
+
+    def _ne_incapacidad_cadenas(self):
+        """[(dias_previos, dias_en_periodo)] de cada incapacidad comun -- con sus prorrogas -- que
+        cae en el periodo del recibo (H-170). Las incapacidades validadas del empleado se encadenan
+        cuando la siguiente empieza a mas tardar l10n_co_dias_interrupcion_prorroga + 1 dias despues
+        del fin de la anterior (con 0, solo contiguas). dias_previos = dias CALENDARIO reales de
+        la cadena anteriores al inicio del tramo del recibo: ocupan las posiciones 1..previos, y los
+        del recibo las siguientes (el dia 93 de una incapacidad es el 1-jun si empezo el 1-mar)."""
+        self.ensure_one()
+        _dias, detalle = self._ne_ausencia_calendario('CO_INC_COMUN')
+        if not detalle:
+            return []
+        interrupcion = int(self._rule_parameter(
+            'l10n_co_dias_interrupcion_prorroga', self._ne_fecha_parametros()))
+        periodo_ini = self._ne_tramo_pagable_periodo()[0]
+        tramo_ini = max(periodo_ini, self.contract_id.date_start)
+        todas = self.env['hr.leave'].search([
+            ('employee_id', '=', self.employee_id.id),
+            ('state', '=', 'validate'),
+            ('holiday_status_id.work_entry_type_id.code', '=', 'CO_INC_COMUN'),
+        ], order='request_date_from, id')
+        cadenas, actual = [], []
+        for leave in todas:
+            if actual and leave.request_date_from <= actual[-1].request_date_to + timedelta(
+                    days=1 + interrupcion):
+                actual.append(leave)
+            else:
+                if actual:
+                    cadenas.append(actual)
+                actual = [leave]
+        if actual:
+            cadenas.append(actual)
+        en_periodo = {leave.id: dias for leave, dias, _ini, _fin in detalle}
+        resultado = []
+        for cadena in cadenas:
+            dias_periodo = sum(en_periodo.get(leave.id, 0) for leave in cadena)
+            if not dias_periodo:
+                continue
+            previos = 0
+            for leave in cadena:
+                fin = min(leave.request_date_to, tramo_ini - timedelta(days=1))
+                if fin >= leave.request_date_from:
+                    previos += (fin - leave.request_date_from).days + 1
+            resultado.append((previos, dias_periodo))
+        return resultado
 
     def _ne_ausencia_calendario(self, work_entry_code):
         """Única fuente de días CALENDARIO corridos (lunes a domingo, festivos incluidos)

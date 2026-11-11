@@ -105,3 +105,17 @@ class TestIncapacidadTramoProrroga(TransactionCase):
         self._incapacidad(employee, date(2026, 3, 1), date(2026, 6, 15))
         pago = self._pago(employee, contract, date(2026, 6, 1), date(2026, 6, 15))
         self.assertLess(pago, 15 * VALOR_DIA * PCT)
+
+    def test_la_interrupcion_maxima_de_la_prorroga_es_un_parametro(self):
+        """Con l10n_co_dias_interrupcion_prorroga = 4, las incapacidades del 1-mar al 31-may y del
+        5 al 15 de junio (4 dias libres entre ellas) son UNA: la quincena 1-15 de junio ocupa las
+        posiciones 93-103 (92 previos + 11 dias), todas al 50 %: 11 x 200.000 x 0,5 = 1.100.000."""
+        self.env.ref(
+            'l10n_co_nomina_electronica.rule_parameter_dias_interrupcion_prorroga_2024'
+        ).parameter_value = '4'
+        employee, contract = self._empleado('ParamProrroga')
+        self._incapacidad(employee, date(2026, 3, 1), date(2026, 5, 31))
+        self._incapacidad(employee, date(2026, 6, 5), date(2026, 6, 15))
+        self.assertAlmostEqual(
+            self._pago(employee, contract, date(2026, 6, 1), date(2026, 6, 15)),
+            11 * VALOR_DIA * 0.5, places=2)
