@@ -197,6 +197,7 @@ class L10nCoRetefuenteProcedure2(models.Model):
     """
 
     _name = 'l10n.co.retefuente.procedure2'
+    _check_company_auto = True
     _description = 'Retención en la Fuente - Procedimiento 2 - Histórico Semestral'
     _order = 'semester_start desc'
 

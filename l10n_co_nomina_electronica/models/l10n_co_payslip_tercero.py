@@ -13,11 +13,12 @@ from odoo import fields, models
 
 class L10nCoPayslipTercero(models.Model):
     _name = 'l10n.co.payslip.tercero'
+    _check_company_auto = True
     _description = 'Distribución por tercero de una línea de nómina'
     _order = 'slip_id, rule_code, id'
 
     slip_id = fields.Many2one(
-        'hr.payslip', required=True, ondelete='cascade', index=True)
+        'hr.payslip', required=True, ondelete='cascade', index=True, check_company=True)
     company_id = fields.Many2one(related='slip_id.company_id', store=True)
     currency_id = fields.Many2one(related='slip_id.company_id.currency_id')
     rule_code = fields.Char(required=True)

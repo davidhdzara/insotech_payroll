@@ -18,17 +18,18 @@ from odoo import api, fields, models
 
 class L10nCoIbcMensual(models.Model):
     _name = 'l10n.co.ibc.mensual'
+    _check_company_auto = True
     _description = 'IBC consolidado por empleado y mes'
     _order = 'period desc, employee_id'
 
     company_id = fields.Many2one('res.company', required=True, index=True)
     currency_id = fields.Many2one(related='company_id.currency_id')
-    employee_id = fields.Many2one('hr.employee', required=True, index=True)
+    employee_id = fields.Many2one('hr.employee', required=True, index=True, check_company=True)
     period = fields.Date(string='Mes', required=True, index=True,
                          help='Primer dia del mes consolidado.')
     payslip_ids = fields.Many2many(
         'hr.payslip', relation='l10n_co_ibc_mensual_payslip_rel',
-        string='Recibos del mes')
+        string='Recibos del mes', check_company=True)
     ibc_sp = fields.Monetary(string='IBC Salud y Pensión')
     ibc_arl = fields.Monetary(string='IBC ARL')
     ibc_paraf = fields.Monetary(string='IBC Parafiscales')
@@ -54,7 +55,7 @@ class L10nCoIbcMensual(models.Model):
     diferencia_paraf = fields.Monetary(compute='_compute_diferencia', store=True)
 
     planilla_id = fields.Many2one(
-        'l10n.co.pila.planilla', string='Última Planilla', ondelete='set null',
+        'l10n.co.pila.planilla', string='Última Planilla', ondelete='set null', check_company=True,
         help='Planilla PILA que usó este consolidado.')
     ibc_sp_planilla = fields.Monetary(string='IBC S+P en la Planilla')
     ibc_arl_planilla = fields.Monetary(string='IBC ARL en la Planilla')

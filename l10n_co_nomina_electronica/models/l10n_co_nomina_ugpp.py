@@ -64,6 +64,7 @@ class L10nCoNominaUgpp(models.Model):
     """Generador de reportes UGPP para Storm User."""
 
     _name = 'l10n_co_nomina.ugpp'
+    _check_company_auto = True
     _description = 'Reporte UGPP – Storm User'
     _order = 'year desc, month desc'
 

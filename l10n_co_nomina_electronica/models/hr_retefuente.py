@@ -51,6 +51,7 @@ class L10nCoRetefuenteUvt(models.Model):
     """
 
     _name = 'l10n.co.retefuente.uvt'
+    _check_company_auto = True
     _description = 'Tabla de Retención en la Fuente - Colombia'
     _order = 'year desc'
 

@@ -11,6 +11,7 @@ from odoo import api, fields, models
 
 class L10nCoPilaPlanilla(models.Model):
     _name = 'l10n.co.pila.planilla'
+    _check_company_auto = True
     _description = 'Planilla PILA generada'
     _order = 'period desc, id desc'
 
@@ -28,7 +29,8 @@ class L10nCoPilaPlanilla(models.Model):
              'de corrección (tipo N) que la tome como original.')
     fecha_pago = fields.Date(string='Fecha de Pago')
     planilla_original_id = fields.Many2one(
-        'l10n.co.pila.planilla', string='Planilla Corregida', ondelete='restrict')
+        'l10n.co.pila.planilla', string='Planilla Corregida', ondelete='restrict',
+        check_company=True)
     file_name = fields.Char(string='Archivo')
     user_id = fields.Many2one('res.users', default=lambda self: self.env.user, readonly=True)
     ibc_mensual_ids = fields.One2many('l10n.co.ibc.mensual', 'planilla_id', string='Cotizantes')
