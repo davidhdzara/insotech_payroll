@@ -47,7 +47,7 @@ class TestContratoIntegralPiso(TransactionCase):
         msg = str(exc.exception)
         self.assertIn('Contrato Piso Integral', msg)
         self.assertIn('Piso Integral', msg)  # empleado
-        self.assertIn('22,761,765.00', msg)
+        self.assertIn('22,761,765.00', msg)  # con la moneda y el idioma del usuario (format_amount)
         self.assertIn('13', msg)
 
     def test_contrato_de_2025_usa_el_smmlv_de_su_fecha_de_inicio(self):

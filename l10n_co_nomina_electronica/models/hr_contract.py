@@ -14,6 +14,7 @@ V1.0, sección 6.2.8, atributos TipoContrato y SalarioIntegral.
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
+from odoo.tools.misc import format_amount
 
 from .res_company import NE_CLASES_RIESGO
 
@@ -137,6 +138,7 @@ class HrContract(models.Model):
                 'l10n_co_piso_salario_integral_smmlv', fecha_smmlv)
             smmlv = Parametro._get_parameter_from_code('l10n_co_smmlv', fecha_smmlv)
             piso = veces * smmlv
+            moneda = contrato.company_id.currency_id
             if contrato.wage < piso:
                 raise ValidationError(_(
                     "El contrato '%(contrato)s' de %(empleado)s es de salario integral con un "
@@ -144,8 +146,9 @@ class HrContract(models.Model):
                     "%(smmlv)s, vigente el %(fecha)s; CST art. 132). Corrija el Salario del "
                     "contrato o quite la marca \"Salario Integral\".",
                     contrato=contrato.name, empleado=contrato.employee_id.name,
-                    salario='{:,.2f}'.format(contrato.wage), piso='{:,.2f}'.format(piso),
-                    veces=veces, smmlv='{:,.2f}'.format(smmlv), fecha=fecha_smmlv))
+                    salario=format_amount(self.env, contrato.wage, moneda),
+                    piso=format_amount(self.env, piso, moneda), veces=veces,
+                    smmlv=format_amount(self.env, smmlv, moneda), fecha=fecha_smmlv))
 
     @api.model_create_multi
     def create(self, vals_list):

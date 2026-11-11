@@ -13,6 +13,9 @@ CODES = ('l10n_co_smmlv', 'l10n_co_uvt', 'l10n_co_aux_transporte')
 
 class TestAvisoAnioSiguiente(TransactionCase):
     def _cuenta(self, xmlid, hoy, companias=None):
+        return self._evaluar(xmlid, hoy, companias).get('warning_count', 0)
+
+    def _evaluar(self, xmlid, hoy, companias=None):
         class FechaFija:
             """Como `date` en el codigo del aviso: today() fijo y date(a, m, d) real."""
             @staticmethod
@@ -29,7 +32,7 @@ class TestAvisoAnioSiguiente(TransactionCase):
         locales = {}
         safe_eval(codigo, {'self': entorno['hr.payslip'], 'date': FechaFija()}, locales,
                   mode='exec', nocopy=True)
-        return locales.get('warning_count', 0)
+        return locales
 
     def setUp(self):
         """Independiente de la BD: deja SMMLV, UVT y auxilio con UN valor del 1-ene-2026 y ninguno
@@ -89,3 +92,38 @@ class TestAvisoAnioSiguiente(TransactionCase):
         self.assertEqual(self._cuenta(
             'hr_payroll_dashboard_warning_co_retefuente_config', datetime.date(2026, 10, 2),
             a | b), 0)
+
+    def test_el_aviso_de_parametros_nombra_el_anio_que_falta(self):
+        accion = self._evaluar('hr_payroll_dashboard_warning_co_params_ano_actual',
+                               datetime.date(2026, 11, 2))['warning_action']
+        self.assertIn('2027', accion['name'])
+        self.assertNotIn('2026', accion['name'])
+
+    def _companias_ab(self):
+        datos = {'country_id': self.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1',
+                 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN'}
+        a = self.env['res.company'].create({'name': 'Empresa A Aviso2', **datos})
+        b = self.env['res.company'].create({'name': 'Empresa B Aviso2', **datos})
+        return a, b
+
+    def test_aviso_de_retencion_con_un_solo_faltante_abre_la_creacion_precargada(self):
+        a, b = self._companias_ab()
+        Config = self.env['l10n.co.retefuente.uvt']
+        for anio, compania in (('2026', a), ('2027', a), ('2026', b)):
+            Config.create({'year': anio, 'company_id': compania.id, 'procedure': '1'})
+        accion = self._evaluar('hr_payroll_dashboard_warning_co_retefuente_config',
+                               datetime.date(2026, 11, 2), a | b)['warning_action']
+        self.assertEqual(accion['view_mode'], 'form')
+        self.assertEqual(accion['context'], {'default_year': '2027', 'default_company_id': b.id})
+        self.assertIn('2027', accion['name'])
+        self.assertIn('Empresa B Aviso2', accion['name'])
+
+    def test_aviso_de_retencion_con_varios_faltantes_abre_la_lista(self):
+        a, b = self._companias_ab()
+        Config = self.env['l10n.co.retefuente.uvt']
+        for compania in (a, b):
+            Config.create({'year': '2026', 'company_id': compania.id, 'procedure': '1'})
+        accion = self._evaluar('hr_payroll_dashboard_warning_co_retefuente_config',
+                               datetime.date(2026, 11, 2), a | b)['warning_action']
+        self.assertEqual(accion['view_mode'], 'list,form')
+        self.assertEqual(accion['context']['default_year'], '2027')
