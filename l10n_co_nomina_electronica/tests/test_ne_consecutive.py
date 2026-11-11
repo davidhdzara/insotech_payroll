@@ -30,7 +30,7 @@ class TestNeConsecutivePrefixGuard(TransactionCase):
         # compañía real (aunque TransactionCase lo revierta) es justo el
         # patrón que causó el UniqueViolation real en test_dian_matching.py.
         # Compañía dedicada y descartable, igual que ahí.
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
             'name': 'Compañía de Prueba Consecutivo NE',
         })
         co_country = cls.env['res.country'].search([('code', '=', 'CO')], limit=1)

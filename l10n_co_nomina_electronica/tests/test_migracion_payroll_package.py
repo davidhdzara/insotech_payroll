@@ -36,7 +36,7 @@ class TestMigracionPayrollPackage(TransactionCase):
         cls.migracion = _cargar_migracion()
 
     def test_compania_colombiana_sin_paquete_recibe_colombia(self):
-        company = self.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 
+        company = self.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
             'name': 'Compañía de Prueba Migración Paquete Sin Paquete',
         })
         company.partner_id.country_id = self.env.ref('base.co').id
@@ -51,7 +51,7 @@ class TestMigracionPayrollPackage(TransactionCase):
         """Idempotente: una compañía que YA tiene un paquete elegido (a
         mano, o por una corrida anterior de esta misma migración) nunca
         se sobreescribe."""
-        company = self.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 
+        company = self.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
             'name': 'Compañía de Prueba Migración Paquete Ya Tiene',
         })
         company.partner_id.country_id = self.env.ref('base.co').id
@@ -63,7 +63,7 @@ class TestMigracionPayrollPackage(TransactionCase):
         self.assertEqual(company.l10n_co_ne_payroll_package, 'l10n_co_nomina_electronica')
 
     def test_compania_no_colombiana_no_se_toca(self):
-        company = self.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 
+        company = self.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
             'name': 'Compañía de Prueba Migración Paquete No Colombiana',
         })
         company.partner_id.country_id = self.env.ref('base.us').id

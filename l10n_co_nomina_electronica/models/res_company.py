@@ -474,6 +474,18 @@ class ResCompany(models.Model):
              'febrero incluido, cuenta 30. No afecta el sueldo mensual ni los días de PILA.',
     )
 
+    l10n_co_ne_redondeo_dias = fields.Selection(
+        selection=[
+            ('HALF-UP', 'HALF-UP (al entero más cercano; 0,5 sube)'),
+            ('UP', 'UP (hacia arriba)'),
+            ('DOWN', 'DOWN (hacia abajo)'),
+        ],
+        string='Redondeo de días del XML',
+        help='Cómo se redondea un número de días fraccionario en los campos de días del XML de '
+             'nómina electrónica, que la DIAN exige enteros (vacaciones pendientes, primas, '
+             'incapacidades, licencias). Mismo vocabulario del método de redondeo nativo de Odoo.',
+    )
+
     def write(self, vals):
         if 'l10n_co_pila_ccf_por_empleado' in vals and not vals['l10n_co_pila_ccf_por_empleado']:
             for company in self.filtered('l10n_co_pila_ccf_por_empleado'):

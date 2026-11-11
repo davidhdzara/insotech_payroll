@@ -33,6 +33,7 @@ from lxml import etree as _etree
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
+from odoo.tools import float_is_zero, float_round
 
 from ..services import (
     cune as cune_service,
@@ -3127,6 +3128,25 @@ class HrPayslip(models.Model):
             ibc = max(ibc, minimo * smmlv / dias_mes * dias)
         return ibc
 
+    def _ne_dias_xml(self, valor):
+        """Entero para los campos de DIAS del XML (DiasTrabajados, Cantidad de vacaciones, primas,
+        incapacidades, licencias y huelga: el XSD v1.0.6 los exige enteros). Un valor que ya es
+        entero pasa tal cual. Uno fraccionario se redondea con el modo que la compania configura
+        (l10n_co_ne_redondeo_dias, vocabulario nativo de float_round / account.cash.rounding:
+        HALF-UP, UP, DOWN); sin configurar es un error claro: antes se truncaba en silencio."""
+        self.ensure_one()
+        if float_is_zero(valor - round(valor), precision_digits=6):
+            return int(round(valor))
+        modo = self.company_id.l10n_co_ne_redondeo_dias
+        if not modo:
+            raise UserError(_(
+                'La empresa %(company)s no tiene configurado el redondeo de días del XML '
+                '(Nómina > Configuración > Ajustes, bloque Parámetros Nómina Colombia, '
+                '"Redondeo de días del XML"). Se necesita para el valor %(valor)s de la nómina '
+                '"%(nomina)s": la DIAN exige días enteros.',
+                company=self.company_id.name, valor=valor, nomina=self.display_name))
+        return int(float_round(valor, precision_rounding=1.0, rounding_method=modo))
+
     def _dev_basico_y_transporte(self, concept_lines, devengados):
         """Devengados: sueldo básico, transporte y viáticos."""
         # Sueldo básico
@@ -3142,7 +3162,7 @@ class HrPayslip(models.Model):
                     employee=self.employee_id.name, ini=self.date_from, fin=self.date_to,
                 ))
             devengados['Basico'] = {
-                'DiasTrabajados': str(int(dias_pagables)),
+                'DiasTrabajados': str(self._ne_dias_xml(dias_pagables)),
                 'SueldoTrabajado': '%.2f' % sum(l.total for l in sueldo_lines),
             }
 
@@ -3293,7 +3313,7 @@ class HrPayslip(models.Model):
                         items.append({
                             'FechaInicio': str(ini),
                             'FechaFin': str(fin),
-                            'Cantidad': str(int(dias)),
+                            'Cantidad': str(self._ne_dias_xml(dias)),
                             'Pago': '%.2f' % pago,
                         })
                     vacaciones['VacacionesComunes'] = items
@@ -3315,7 +3335,7 @@ class HrPayslip(models.Model):
                     ))
             if vac_compensadas:
                 vacaciones['VacacionesCompensadas'] = [{
-                    'Cantidad': str(int(sum(l.quantity for l in vac_compensadas))),
+                    'Cantidad': str(self._ne_dias_xml(sum(l.quantity for l in vac_compensadas))),
                     'Pago': '%.2f' % sum(l.total for l in vac_compensadas),
                 }]
             devengados['Vacaciones'] = vacaciones
@@ -3323,7 +3343,7 @@ class HrPayslip(models.Model):
         # Primas
         if 'Primas' in concept_lines:
             devengados['Primas'] = {
-                'Cantidad': str(int(sum(
+                'Cantidad': str(self._ne_dias_xml(sum(
                     l.quantity for l in concept_lines['Primas']
                 ))),
                 'Pago': '%.2f' % sum(l.total for l in concept_lines['Primas']),
@@ -3388,7 +3408,7 @@ class HrPayslip(models.Model):
                     items.append({
                         'FechaInicio': str(ini),
                         'FechaFin': str(fin),
-                        'Cantidad': str(int(dias)),
+                        'Cantidad': str(self._ne_dias_xml(dias)),
                         'Tipo': tipo,
                         'Pago': '%.2f' % pago,
                     })
@@ -3428,7 +3448,7 @@ class HrPayslip(models.Model):
                     items.append({
                         'FechaInicio': str(ini),
                         'FechaFin': str(fin),
-                        'Cantidad': str(int(dias)),
+                        'Cantidad': str(self._ne_dias_xml(dias)),
                         'Pago': '%.2f' % pago,
                     })
                 licencias['LicenciaMP'] = items
@@ -3469,7 +3489,7 @@ class HrPayslip(models.Model):
                     lic_data = {
                         'FechaInicio': str(ini),
                         'FechaFin': str(fin),
-                        'Cantidad': str(int(dias)),
+                        'Cantidad': str(self._ne_dias_xml(dias)),
                     }
                     if concept_key != 'LicenciaNR':
                         lic_data['Pago'] = '%.2f' % pago
@@ -3493,7 +3513,7 @@ class HrPayslip(models.Model):
                     'que lo respalde con fechas reales -- la DIAN exige las fechas reales '
                     'de la licencia, no las del período completo. Registre la ausencia en '
                     'Ausencias antes de generar el XML.',
-                    cantidad=str(int(sum(
+                    cantidad=str(self._ne_dias_xml(sum(
                         l.quantity for l in concept_lines[concept_key]
                     ))),
                     employee=self.employee_id.name,
@@ -3526,7 +3546,7 @@ class HrPayslip(models.Model):
             devengados['HuelgasLegales'] = [{
                 'FechaInicio': str(self.date_from),
                 'FechaFin': str(self.date_to),
-                'Cantidad': str(int(sum(
+                'Cantidad': str(self._ne_dias_xml(sum(
                     l.quantity for l in concept_lines['HuelgaLegal']
                 ))),
             }]

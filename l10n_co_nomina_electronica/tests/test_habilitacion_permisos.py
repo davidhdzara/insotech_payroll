@@ -13,8 +13,8 @@ class TestHabilitacionPermisos(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'name': 'Compañía Prueba Permisos Habilitación'})
-        cls.otra = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'name': 'Compañía Ajena Permisos Habilitación'})
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía Prueba Permisos Habilitación'})
+        cls.otra = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía Ajena Permisos Habilitación'})
         cls.company.l10n_co_ne_hab_state = 'idle'
 
     def _usuario(self, login, grupos, companies=None):

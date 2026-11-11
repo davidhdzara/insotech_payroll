@@ -21,7 +21,7 @@ class TestTercerosEntidades(TransactionCase):
             'name': 'ARL Prueba', 'l10n_co_entity_type': 'arl',
             'l10n_co_pila_entity_code': '14-99'})
         cls.empleado = cls.env['hr.employee'].create({'name': 'Empleado Terceros'})
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'name': 'Compañía Terceros'})
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía Terceros'})
 
     def test_empleado_deriva_codigo_del_contacto(self):
         self.empleado.l10n_co_pila_eps_id = self.eps
