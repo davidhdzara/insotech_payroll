@@ -73,6 +73,7 @@ from . import test_vistas_por_pais
 from . import test_aviso_anio_siguiente
 from . import test_defaults_sin_asumir
 from . import test_tabla_marginal_parametros
+from . import test_incapacidad_misma_enfermedad
 from . import test_liquidacion_sln_ibc
 from . import test_redondeo_dias_xml
 from . import test_incapacidad_tramo_prorroga

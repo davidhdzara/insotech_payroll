@@ -24,3 +24,4 @@ from . import l10n_co_pila_planilla
 from . import l10n_co_ibc_mensual
 from . import ir_sequence
 from . import report_payslip_ne
+from . import hr_leave_prorroga
