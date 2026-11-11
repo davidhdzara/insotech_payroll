@@ -23,7 +23,7 @@ class TestRetefuenteConfigAnio(TransactionCase):
             'name': 'Prueba Estructura Retención', 'country_id': cls.env.ref('base.co').id})
         cls.est_prima = cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_prima')
 
-    def _prima(self, wage, date_from, date_to):
+    def _prima(self, wage, date_from, date_to, struct=None):
         employee = self.env['hr.employee'].create({
             'name': 'Prima Config %s' % date_from, 'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10'})
@@ -33,7 +33,7 @@ class TestRetefuenteConfigAnio(TransactionCase):
             'wage': wage, 'date_start': date(2024, 3, 1), 'state': 'open'})
         return self.env['hr.payslip'].create({
             'name': 'Prima Config', 'employee_id': employee.id, 'contract_id': contract.id,
-            'company_id': self.company.id, 'struct_id': self.est_prima.id,
+            'company_id': self.company.id, 'struct_id': (struct or self.est_prima).id,
             'date_from': date_from, 'date_to': date_to})
 
     def test_la_configuracion_2026_se_carga_con_los_datos(self):
@@ -69,8 +69,7 @@ class TestRetefuenteConfigAnio(TransactionCase):
         """date_from de la liquidacion es el inicio del contrato (2024): el anio de la
         configuracion sale de la fecha de retiro (2026)."""
         liq = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion')
-        slip = self._prima(3000000.0, date(2024, 3, 1), date(2026, 8, 15))
-        slip.struct_id = liq
+        slip = self._prima(3000000.0, date(2024, 3, 1), date(2026, 8, 15), struct=liq)
         self.assertEqual(
             slip._ne_retefuente_config(),
             self.env.ref('l10n_co_nomina_electronica.l10n_co_retefuente_uvt_2026'))
