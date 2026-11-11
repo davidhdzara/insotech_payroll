@@ -9,6 +9,7 @@ from . import l10n_latam_identification_type
 from . import res_partner
 from . import hr_contract
 from . import hr_salary_rule
+from . import l10n_co_ne_documento_mixin
 from . import hr_payslip
 from . import l10n_co_ne_habilitacion
 from . import l10n_co_ne_exchange

@@ -51,7 +51,8 @@ class TestConsultaEstadoPorCune(TransactionCase):
         self._envio(payslip, 'CUNE-CONOCIDO', zip_key='ZIP-AAA')
         wizard = self.env['l10n.co.ne.status.cune.wizard'].create({'cune': ' CUNE-CONOCIDO '})
         with patch(
-            'odoo.addons.l10n_co_nomina_electronica.models.hr_payslip.HrPayslip.'
+            'odoo.addons.l10n_co_nomina_electronica.models.l10n_co_ne_documento_mixin.'
+            'L10nCoNeDocumentoMixin.'
             'action_check_dian_status', autospec=True, return_value=True,
         ) as consulta:
             wizard.action_check_status()
@@ -97,7 +98,8 @@ class TestConsultaEstadoPorCune(TransactionCase):
         wizard = self.env['l10n.co.ne.status.cune.wizard'].with_user(usuario).with_context(
             allowed_company_ids=[otra.id, self.company.id]).create({'cune': 'CUNE-CIA-A2'})
         with patch(
-            'odoo.addons.l10n_co_nomina_electronica.models.hr_payslip.HrPayslip.'
+            'odoo.addons.l10n_co_nomina_electronica.models.l10n_co_ne_documento_mixin.'
+            'L10nCoNeDocumentoMixin.'
             'action_check_dian_status', autospec=True, return_value=True,
         ) as consulta:
             wizard.action_check_status()

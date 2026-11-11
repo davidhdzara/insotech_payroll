@@ -76,15 +76,15 @@ class TestDianStatusRecheckCron(TransactionCase):
         # Odoo prohíbe cr.commit() en un test; se aísla también rollback() para poder
         # ejercer esa rama de _cron_recheck_sent_status() sin tocar la transacción de la prueba.
         self.commit_patcher = patch(
-            'odoo.addons.l10n_co_nomina_electronica.models.hr_payslip.'
-            'HrPayslip._cron_recheck_commit',
+            'odoo.addons.l10n_co_nomina_electronica.models.l10n_co_ne_documento_mixin.'
+            'L10nCoNeDocumentoMixin._cron_recheck_commit',
         )
         self.commit_patcher.start()
         self.addCleanup(self.commit_patcher.stop)
 
         self.rollback_patcher = patch(
-            'odoo.addons.l10n_co_nomina_electronica.models.hr_payslip.'
-            'HrPayslip._cron_recheck_rollback',
+            'odoo.addons.l10n_co_nomina_electronica.models.l10n_co_ne_documento_mixin.'
+            'L10nCoNeDocumentoMixin._cron_recheck_rollback',
         )
         self.rollback_patcher.start()
         self.addCleanup(self.rollback_patcher.stop)
