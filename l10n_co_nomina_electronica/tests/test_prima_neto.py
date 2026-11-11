@@ -81,7 +81,7 @@ class TestPrimaNeto(TransactionCase):
         self.assertEqual(devengados['Primas']['Pago'], '1624547.50')
 
     # ── Retención en la fuente de la prima (.164): base SIN descontar salud/pensión ──────────
-    # UVT 2026 = 52.374; tabla Art. 383 ET; renta exenta 25 % (tope 240 UVT = 12.569.760).
+    # UVT 2026 = 52.374; tabla Art. 383 ET; renta exenta 25 % (tope 790 UVT anuales / 12 = 3.447.955).
     # Sin aportes: subtotal = valor de la prima; base = valor − 25 % del valor.
     def _prima_con_retencion(self, wage):
         self.env['l10n.co.retefuente.uvt'].create({
@@ -124,11 +124,11 @@ class TestPrimaNeto(TransactionCase):
         self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor - 479649.0, delta=0.01)
 
     def test_prima_de_20_millones_retencion_en_el_tramo_del_28_por_ciento(self):
-        """Prima 20.000.000: renta exenta 5.000.000 (tope 12.569.760 no aplica); base
-        15.000.000 / 52.374 = 286,4016 UVT -> tramo >150 hasta 360 (28 %): (286,4016 − 150) ×
-        0,28 + 10 = 48,1925 UVT x 52.374 = 2.524.032."""
+        """Prima 20.000.000: el 25 % (5.000.000) supera el tope 790/12 UVT = 3.447.955 -> exenta
+        3.447.955; base 16.552.045 / 52.374 = 316,0355 UVT -> tramo >150 hasta 360 (28 %):
+        (316,0355 − 150) × 0,28 + 10 = 56,4899 UVT x 52.374 = 2.958.605."""
         slip = self._prima_con_retencion(40000000.0)
         valor = self._total(slip, 'CO_PRIMA_VALOR')
         self.assertAlmostEqual(valor, 20000000.0, delta=0.01)
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_RETE'), -2524032.0, delta=0.01)
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor - 2524032.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_RETE'), -2958605.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor - 2958605.0, delta=0.01)

@@ -597,20 +597,22 @@ Valor vigente: <strong>25.0</strong>.</p></field>
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
-    <record id="rule_parameter_max_renta_exenta_uvt" model="hr.rule.parameter">
-        <field name="name">Colombia: Tope Renta Exenta (UVT/mes)</field>
-        <field name="code">l10n_co_max_renta_exenta_uvt</field>
+    <record id="rule_parameter_max_renta_exenta_uvt_anual" model="hr.rule.parameter">
+        <field name="name">Colombia: Tope Renta Exenta 25% (UVT/año)</field>
+        <field name="code">l10n_co_max_renta_exenta_uvt_anual</field>
         <field name="country_id" ref="base.co"/>
-        <field name="description" type="html"><p>Tope mensual de renta exenta expresado en UVT (Art. 206 num. 10 ET).</p>
+        <field name="description" type="html"><p>Tope ANUAL de la renta exenta del 25% de los pagos laborales, en UVT
+(Art. 206 num. 10 ET, modificado por el Art. 2 de la Ley 2277 de 2022; Concepto DIAN 15007 de 2023).
+En la retención en la fuente el tope mensual es este valor dividido en 12.</p>
 <h3 class="mt-5">Cómo ingresar el valor</h3>
-<p>Escriba el número de UVT, <strong>NO</strong> un valor en pesos -- Odoo lo convierte a
-pesos automáticamente usando la UVT vigente del período: escriba <strong>240</strong>
-para "240 UVT". Valor vigente: <strong>240.0</strong>.</p></field>
+<p>Escriba el número de UVT <strong>por año</strong>, <strong>NO</strong> un valor en pesos ni mensual:
+escriba <strong>790</strong> para "790 UVT anuales". Valor vigente desde 2023: <strong>790.0</strong>.
+(Hasta 2022 el tope era de 240 UVT mensuales; el módulo no calcula años anteriores a 2023.)</p></field>
     </record>
-    <record id="rule_parameter_max_renta_exenta_uvt_2024" model="hr.rule.parameter.value">
-        <field name="parameter_value">240.0</field>
-        <field name="rule_parameter_id" ref="rule_parameter_max_renta_exenta_uvt"/>
-        <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
+    <record id="rule_parameter_max_renta_exenta_uvt_anual_2023" model="hr.rule.parameter.value">
+        <field name="parameter_value">790.0</field>
+        <field name="rule_parameter_id" ref="rule_parameter_max_renta_exenta_uvt_anual"/>
+        <field name="date_from" eval="datetime(2023, 1, 1).date()"/>
     </record>
 
     <record id="rule_parameter_pct_deduccion_dependientes" model="hr.rule.parameter">

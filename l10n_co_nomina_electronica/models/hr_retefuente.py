@@ -376,10 +376,11 @@ class L10nCoRetefuenteUvt(models.Model):
         )
         subtotal = max(subtotal, 0.0)
 
-        # ── 7. Renta exenta (máximo max_renta_exenta_uvt UVT/mes) ────
+        # ── 7. Renta exenta 25 % (Art. 206 num. 10 ET, Ley 2277/2022) ──
+        #     Tope ANUAL en UVT (790); en la retencion mensual, anual / 12.
         renta_exenta_25 = min(
             subtotal * _p('l10n_co_pct_renta_exenta') / 100,
-            _p('l10n_co_max_renta_exenta_uvt') * uvt)
+            _p('l10n_co_max_renta_exenta_uvt_anual') / 12.0 * uvt)
 
         # ── 8. Base gravable ─────────────────────────────────────────
         base_gravable = max(subtotal - renta_exenta_25, 0.0)
