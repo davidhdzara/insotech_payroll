@@ -18,6 +18,7 @@ from . import test_pdf_recibo_neto
 from . import test_cantidad_real
 from . import test_prima_neto
 from . import test_liquidacion_tramo_ausencias
+from . import test_liquidacion_inicio_tramo
 from . import test_liquidacion_incapacidades
 from . import test_estructuras_sin_dias_trabajados
 from . import test_dian_pais_moneda
