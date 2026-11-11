@@ -2446,6 +2446,21 @@ class HrPayslip(models.Model):
             return dias_mes
         return min(d.day, dias_mes)
 
+    def _ne_dias_comerciales(self, fecha_ini, fecha_fin):
+        """Días COMERCIALES (calendario de 360 días: meses de 30) de [fecha_ini, fecha_fin],
+        ambos extremos incluidos. Convención laboral colombiana (decisión de David: "el 31
+        prácticamente se regala"): el último día real de cada mes cuenta como día 30
+        (_ne_dia_comercial), así febrero completo = 30 y un día 31 no suma. Única fuente para
+        prima, cesantías, intereses, indemnización y vacaciones causadas de la liquidación.
+        0 si el rango está invertido. Días por mes: hr.rule.parameter l10n_co_dias_mes_comercial."""
+        self.ensure_one()
+        if fecha_fin < fecha_ini:
+            return 0
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
+        meses = (fecha_fin.year - fecha_ini.year) * 12 + (fecha_fin.month - fecha_ini.month)
+        return (meses * dias_mes + self._ne_dia_comercial(fecha_fin, dias_mes)
+                - self._ne_dia_comercial(fecha_ini, dias_mes) + 1)
+
     def _ne_fecha_parametros(self):
         """Fecha con la que se resuelven los hr.rule.parameter (SMMLV, auxilio, topes, divisores).
 
@@ -2465,7 +2480,7 @@ class HrPayslip(models.Model):
     def _ne_liq_vacaciones_dias(self):
         """Dias de vacaciones causadas, ya tomadas y pendientes del contrato al retiro.
 
-        Causadas: (date_to - inicio de contrato + 1) x dias_mes / divisor_vacaciones (15 dias
+        Causadas: dias comerciales (_ne_dias_comerciales) de inicio de contrato a date_to x dias_mes / divisor_vacaciones (15 dias
         habiles por 360 de servicio, Art. 186 CST; con los parametros 30 y 720 = dias / 24).
         Ya tomadas, de las mismas fuentes que paga la nomina mensual (una sola fuente):
         - disfrutadas: hr.leave validadas CO_VAC en dias HABILES del calendario del contrato
@@ -2481,7 +2496,7 @@ class HrPayslip(models.Model):
         fecha = self._ne_fecha_parametros()
         dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', fecha)
         divisor = self._rule_parameter('l10n_co_divisor_vacaciones', fecha)
-        dias_servicio = max(0, (self.date_to - contract.date_start).days + 1)
+        dias_servicio = self._ne_dias_comerciales(contract.date_start, self.date_to)
         causados = dias_servicio * dias_mes / divisor
 
         disfrutados, _detalle = self._ne_ausencia_habil('CO_VAC')
