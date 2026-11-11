@@ -12,7 +12,7 @@
                  INTERIOR, así que inyectados directo quedaban sin etiqueta. Se envuelven en su propio
                  <group>, igual que hr_payroll_account en este mismo lugar. -->
             <xpath expr="//group[@name='contract_details']" position="inside">
-                <group name="l10n_co_ne_contract_fields">
+                <group name="l10n_co_ne_contract_fields" invisible="country_code != 'CO'">
                     <field name="l10n_co_ne_contract_type"
                            string="Tipo Contrato DIAN"/>
                     <field name="l10n_co_ne_integral_salary"
@@ -20,7 +20,7 @@
                 </group>
             </xpath>
             <xpath expr="//notebook" position="inside">
-                <page string="PILA" name="pila">
+                <page string="PILA" name="pila" invisible="country_code != 'CO'">
                     <group string="PILA - Cotización" name="pila_cotizacion">
                         <group>
                             <field name="l10n_co_pila_tipo_cotizante"/>
