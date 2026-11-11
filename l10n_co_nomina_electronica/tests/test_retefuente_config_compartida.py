@@ -8,7 +8,7 @@ import os
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
 def _migracion():
@@ -20,6 +20,7 @@ def _migracion():
     return modulo
 
 
+@tagged('post_install', '-at_install')
 class TestRetefuenteConfigCompartida(TransactionCase):
     @classmethod
     def setUpClass(cls):

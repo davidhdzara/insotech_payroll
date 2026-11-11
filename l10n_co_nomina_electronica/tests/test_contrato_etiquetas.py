@@ -6,11 +6,12 @@ y la vista combinada real: cada campo está dentro de un <group> interior."""
 
 from lxml import etree
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 _CAMPOS = ('l10n_co_ne_contract_type', 'l10n_co_ne_integral_salary')
 
 
+@tagged('post_install', '-at_install')
 class TestContratoEtiquetas(TransactionCase):
     def test_campos_dentro_de_un_grupo_interior_en_el_arch_guardado(self):
         arch = etree.fromstring(

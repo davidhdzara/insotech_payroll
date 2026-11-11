@@ -6,9 +6,10 @@ UVT 2026 = 52.374 -> tope mensual = 41.375.460 / 12 = 3.447.955 (el 25 % lo alca
 base de 13.791.820). Sin aportes ni dependientes: subtotal = ingreso bruto.
 """
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestRentaExentaTope(TransactionCase):
     @classmethod
     def setUpClass(cls):

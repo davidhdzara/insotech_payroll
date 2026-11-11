@@ -9,9 +9,10 @@ completo y el reporte UGPP en Excel se prueban en servidor."""
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestIbcMensual(TransactionCase):
     @classmethod
     def setUpClass(cls):

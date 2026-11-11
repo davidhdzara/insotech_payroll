@@ -15,11 +15,12 @@ No cambian la incapacidad laboral ni las licencias."""
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 SMMLV_2026 = 1750905.0
 
 
+@tagged('post_install', '-at_install')
 class TestIncapacidadPisoSmmlv(TransactionCase):
     @classmethod
     def setUpClass(cls):

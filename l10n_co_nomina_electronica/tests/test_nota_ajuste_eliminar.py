@@ -17,7 +17,7 @@ from unittest.mock import patch
 from lxml import etree
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import nomina_xml_builder
 
@@ -36,6 +36,7 @@ def _ruta_xsd():
         'NominaIndividualDeAjusteElectronicaXSDV1.0.6.xsd')
 
 
+@tagged('post_install', '-at_install')
 class TestNotaAjusteEliminar(TransactionCase):
     @classmethod
     def setUpClass(cls):

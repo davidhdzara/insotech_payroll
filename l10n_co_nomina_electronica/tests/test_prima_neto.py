@@ -10,9 +10,10 @@ valor 3.249.095 x 180 / 360 = 1.624.547,50. Desde .164 sin salud ni pension (CST
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestPrimaNeto(TransactionCase):
     @classmethod
     def setUpClass(cls):

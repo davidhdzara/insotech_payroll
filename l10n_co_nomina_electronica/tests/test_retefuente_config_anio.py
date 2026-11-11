@@ -9,9 +9,10 @@ prima 10.000.000 -> base 7.500.000 = 143,2008 UVT, tramo 19 % -> 9,1582 UVT x 52
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestRetefuenteConfigAnio(TransactionCase):
     @classmethod
     def setUpClass(cls):

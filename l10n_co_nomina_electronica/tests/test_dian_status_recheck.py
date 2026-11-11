@@ -15,7 +15,7 @@ import hashlib
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
 class _FakeCertificate:
@@ -26,6 +26,7 @@ class _FakeCertificate:
         return True
 
 
+@tagged('post_install', '-at_install')
 class TestDianStatusRecheckCron(TransactionCase):
     @classmethod
     def setUpClass(cls):
@@ -395,6 +396,7 @@ class TestDianStatusRecheckCron(TransactionCase):
         self.assertEqual(payslip.l10n_co_ne_state, 'accepted')
 
 
+@tagged('post_install', '-at_install')
 class TestSetLevelStatusResponse(TestDianStatusRecheckCron):
     """H-012 (2026-10-06): evidencia real (NA0000000049, payslip 944, ZipKey 98e2fdc3) --
     GetStatusZip respondió StatusCode=2, IsValid=false, StatusDescription hablando del "set

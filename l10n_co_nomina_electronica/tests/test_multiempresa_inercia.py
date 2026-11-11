@@ -10,9 +10,10 @@ falta instalar l10n_mx_hr_payroll.
 from datetime import date
 from unittest import mock
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestMultiempresaInercia(TransactionCase):
     @classmethod
     def setUpClass(cls):

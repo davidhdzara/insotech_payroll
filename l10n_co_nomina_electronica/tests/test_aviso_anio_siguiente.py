@@ -5,12 +5,13 @@ hoy fija. Valor de cada caso a mano (3 parametros por anio; 1 aviso por compania
 
 import datetime
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 from odoo.tools.safe_eval import safe_eval
 
 CODES = ('l10n_co_smmlv', 'l10n_co_uvt', 'l10n_co_aux_transporte')
 
 
+@tagged('post_install', '-at_install')
 class TestAvisoAnioSiguiente(TransactionCase):
     def _cuenta(self, xmlid, hoy, companias=None):
         return self._evaluar(xmlid, hoy, companias).get('warning_count', 0)

@@ -17,9 +17,10 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 
 from odoo import fields
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestCertificationWizardPeriod(TransactionCase):
     @classmethod
     def setUpClass(cls):

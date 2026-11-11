@@ -3,12 +3,13 @@
 (.187): los diarios de las estructuras colombianas solo se leen/escriben para companias colombianas.
 Usuario NO superusuario (la regla nativa por pais oculta las estructuras colombianas)."""
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 CAMPOS_DIARIO = ('l10n_co_ne_journal_nomina_id', 'l10n_co_ne_journal_prima_id',
                  'l10n_co_ne_journal_liquidacion_id', 'l10n_co_ne_journal_bonificacion_id')
 
 
+@tagged('post_install', '-at_install')
 class TestAjustesCompaniaMexicana(TransactionCase):
     @classmethod
     def setUpClass(cls):

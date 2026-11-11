@@ -11,7 +11,7 @@ from datetime import date
 from unittest.mock import patch
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 # Los metodos del ciclo DIAN viven en el mixin (etapa 1a), no en la clase HrPayslip del modulo.
 _PAYSLIP = (
@@ -19,6 +19,7 @@ _PAYSLIP = (
 _ENGINE = 'odoo.addons.l10n_co_nomina_electronica.models.l10n_co_ne_habilitacion.L10nCoNeHabilitacion'
 
 
+@tagged('post_install', '-at_install')
 class TestHabilitacionEngine(TransactionCase):
     @classmethod
     def setUpClass(cls):

@@ -5,7 +5,7 @@ modelo sigue siendo hr.payslip y conserva los campos y metodos del ciclo."""
 
 from odoo.addons.l10n_co_nomina_electronica.models.l10n_co_ne_documento_mixin import (
     L10nCoNeDocumentoMixin)
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 CAMPOS = (
     'l10n_co_ne_state', 'l10n_co_ne_cune', 'l10n_co_ne_xml_attachment_id', 'l10n_co_ne_dian_request',
@@ -19,6 +19,7 @@ METODOS = (
     '_ne_corrida_en_seco', '_validate_company_ne_config', '_ne_expected_prefix')
 
 
+@tagged('post_install', '-at_install')
 class TestDocumentoMixinCarga(TransactionCase):
     def test_el_mixin_esta_en_el_registro_y_es_abstracto(self):
         self.assertIn('l10n.co.ne.documento.mixin', self.env.registry)

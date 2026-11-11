@@ -12,9 +12,10 @@ prueba con compute_sheet real en los tests de nomina real.
 """
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestAsientoTercero(TransactionCase):
     @classmethod
     def setUpClass(cls):

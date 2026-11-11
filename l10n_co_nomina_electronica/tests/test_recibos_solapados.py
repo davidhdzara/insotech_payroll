@@ -6,9 +6,10 @@ con estados fijados directo, para no depender de la contabilidad."""
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestRecibosSolapados(TransactionCase):
     @classmethod
     def setUpClass(cls):

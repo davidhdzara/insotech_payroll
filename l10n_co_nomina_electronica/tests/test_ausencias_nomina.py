@@ -45,9 +45,10 @@ ningún dato.
 from datetime import date, datetime
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestAusenciasNomina(TransactionCase):
     @classmethod
     def setUpClass(cls):

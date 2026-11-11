@@ -20,9 +20,10 @@ inventar 30 cuando el dato no se puede determinar.
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestDiasTrabajadosCommon(TransactionCase):
     @classmethod
     def setUpClass(cls):
@@ -79,6 +80,7 @@ class TestDiasTrabajadosCommon(TransactionCase):
         })
 
 
+@tagged('post_install', '-at_install')
 class TestNeDiasPagables(TestDiasTrabajadosCommon):
     """(a)(b)(c) del criterio de aceptación: _ne_dias_pagables() es la única fuente de días."""
 
@@ -161,6 +163,7 @@ class TestNeDiasPagables(TestDiasTrabajadosCommon):
         self.assertEqual(payslip._ne_dias_pagables(), 25)
 
 
+@tagged('post_install', '-at_install')
 class TestNeDiasPagablesLiquidacion(TestDiasTrabajadosCommon):
     """H-009 (2026-10-06, QA Bloque 2): hallazgo real en staging (NE0000000077, contrato desde
     2024-10-05, retiro 2026-11-15) -- el XML mostraba <Basico DiasTrabajados="11"
@@ -247,6 +250,7 @@ class TestNeDiasPagablesLiquidacion(TestDiasTrabajadosCommon):
         self.assertEqual(payslip._ne_dias_pagables(), 13)
 
 
+@tagged('post_install', '-at_install')
 class TestDevBasicoYTransporteGuard(TestDiasTrabajadosCommon):
     """(d) del criterio de aceptación: sin dato válido, UserError -- nunca un 30 inventado."""
 

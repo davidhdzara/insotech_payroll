@@ -14,7 +14,7 @@ función migrate() real del repo, no una copia reescrita para la prueba.
 import importlib.util
 import os
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
 def _cargar_migracion():
@@ -29,6 +29,7 @@ def _cargar_migracion():
     return modulo
 
 
+@tagged('post_install', '-at_install')
 class TestMigracionIdentificacion(TransactionCase):
     @classmethod
     def setUpClass(cls):

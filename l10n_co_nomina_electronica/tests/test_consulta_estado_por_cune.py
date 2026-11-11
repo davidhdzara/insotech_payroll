@@ -10,9 +10,10 @@ from datetime import date
 from unittest.mock import patch
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestConsultaEstadoPorCune(TransactionCase):
     @classmethod
     def setUpClass(cls):

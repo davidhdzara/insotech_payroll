@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 from odoo import fields
 from datetime import datetime, date
 
 
+@tagged('post_install', '-at_install')
 class TestHrPayslipLeaveIntegration(TransactionCase):
     """Test unitario para la integración de ausencias y novedades de nómina electrónica."""
 

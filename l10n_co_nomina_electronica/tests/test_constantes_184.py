@@ -4,9 +4,10 @@ vacaciones derivada de los parametros (salario x 30 / 720 = salario / 24)."""
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestConstantes184(TransactionCase):
     @classmethod
     def setUpClass(cls):

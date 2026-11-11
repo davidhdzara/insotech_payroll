@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """H-024 (split_name): nombres y apellidos del empleado, prellenados solo sin ambigüedad."""
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import dian_utils
 
 _PARTICULAS = {'de', 'del', 'la', 'las', 'los', 'y', 'san', 'santa', 'da', 'di', 'van', 'von'}
 
 
+@tagged('post_install', '-at_install')
 class TestSplitName(TransactionCase):
 
     def test_una_palabra(self):
@@ -37,6 +38,7 @@ class TestSplitName(TransactionCase):
         self.assertFalse(any(dian_utils.split_name('  ', _PARTICULAS).values()))
 
 
+@tagged('post_install', '-at_install')
 class TestNombresEmpleado(TransactionCase):
 
     def _empleado(self, name, **vals):

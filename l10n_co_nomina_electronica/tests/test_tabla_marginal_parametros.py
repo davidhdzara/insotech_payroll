@@ -3,7 +3,7 @@
 (no en el codigo). Equivalencia con la tabla legal vigente (que antes era una constante de codigo) y
 versionado por fecha. Valores en UVT a mano."""
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 # Tabla legal (Art. 383 ET), copiada aqui como valor esperado.
 TABLA_LEGAL = [
@@ -11,6 +11,7 @@ TABLA_LEGAL = [
     (640, 945, 0.35, 162), (945, 2300, 0.37, 268), (2300, None, 0.39, 770)]
 
 
+@tagged('post_install', '-at_install')
 class TestTablaMarginalParametros(TransactionCase):
     @classmethod
     def setUpClass(cls):

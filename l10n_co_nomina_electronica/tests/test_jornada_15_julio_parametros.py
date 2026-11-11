@@ -24,11 +24,12 @@ de David: "como parametros").
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 WAGE = 2310000.0
 
 
+@tagged('post_install', '-at_install')
 class TestJornada15Julio(TransactionCase):
     @classmethod
     def setUpClass(cls):

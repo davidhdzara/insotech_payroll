@@ -5,7 +5,7 @@ conserva el nuevo (790 UVT/anio). Idempotente."""
 import importlib.util
 import os
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
 def _cargar_migracion():
@@ -18,6 +18,7 @@ def _cargar_migracion():
     return modulo
 
 
+@tagged('post_install', '-at_install')
 class TestMigracionMaxRentaExenta(TransactionCase):
     def _viejo(self):
         param = self.env['hr.rule.parameter'].create({

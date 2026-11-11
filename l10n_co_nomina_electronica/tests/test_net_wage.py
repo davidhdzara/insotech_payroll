@@ -10,9 +10,10 @@ leen el campo.
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestNetWage(TransactionCase):
     @classmethod
     def setUpClass(cls):

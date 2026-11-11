@@ -16,12 +16,13 @@ rechaza el documento.
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import nomina_xml_builder as builder
 from lxml import etree
 
 
+@tagged('post_install', '-at_install')
 class TestPagoCuentaBancaria(TransactionCase):
     @classmethod
     def setUpClass(cls):

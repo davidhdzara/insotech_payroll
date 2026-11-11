@@ -12,11 +12,12 @@ sobre la estructura real; NO cubre el archivo PILA generado (ver docstring de la
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 TARIFAS = {'1': 0.522, '2': 1.044, '3': 2.436, '4': 4.350, '5': 6.960}
 
 
+@tagged('post_install', '-at_install')
 class TestArlClaseRiesgo(TransactionCase):
     @classmethod
     def setUpClass(cls):

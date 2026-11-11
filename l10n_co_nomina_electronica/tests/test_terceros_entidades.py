@@ -6,9 +6,10 @@ verificacion: modelo/campos; el asiento contable por tercero se prueba en el
 commit siguiente.
 """
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestTercerosEntidades(TransactionCase):
     @classmethod
     def setUpClass(cls):

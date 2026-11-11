@@ -10,9 +10,10 @@ reales (hr.leave) ya estan cubiertas por test_ausencias_nomina."""
 from datetime import date
 from unittest import mock
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestDiasCotizados(TransactionCase):
     @classmethod
     def setUpClass(cls):

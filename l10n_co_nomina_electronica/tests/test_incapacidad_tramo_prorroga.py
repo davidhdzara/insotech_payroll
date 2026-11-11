@@ -13,12 +13,13 @@ Piso diario 2026 = 1.750.905 / 30 = 58.363,5 (no domina: 66,67 % y 50 % de 200.0
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 PCT = 0.6667
 VALOR_DIA = 200000.0
 
 
+@tagged('post_install', '-at_install')
 class TestIncapacidadTramoProrroga(TransactionCase):
     @classmethod
     def setUpClass(cls):

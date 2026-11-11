@@ -15,11 +15,12 @@ da 10 dias (15 - 5).
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 RETIRO = date(2026, 8, 15)
 
 
+@tagged('post_install', '-at_install')
 class TestLiquidacionTramoAusencias(TransactionCase):
     @classmethod
     def setUpClass(cls):

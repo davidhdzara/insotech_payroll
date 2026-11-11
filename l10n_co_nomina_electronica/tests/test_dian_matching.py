@@ -16,7 +16,7 @@ import hashlib
 from datetime import date
 from unittest.mock import patch
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
 def _application_response_xml(document_id=None, cune=None):
@@ -44,6 +44,7 @@ class _FakeCertificate:
         return True
 
 
+@tagged('post_install', '-at_install')
 class TestDianMatchingCommon(TransactionCase):
     @classmethod
     def setUpClass(cls):
@@ -133,6 +134,7 @@ class TestDianMatchingCommon(TransactionCase):
         })
 
 
+@tagged('post_install', '-at_install')
 class TestDianResultMatching(TestDianMatchingCommon):
     """Regla (a)(b)(c) de _ne_match_dian_results."""
 
@@ -263,6 +265,7 @@ class TestDianResultMatching(TestDianMatchingCommon):
         self.assertEqual(matches, {})
 
 
+@tagged('post_install', '-at_install')
 class TestDianStateTransitions(TestDianMatchingCommon):
     """Reenvío de 'uncertain' y la regla de rechazo restringida."""
 

@@ -12,9 +12,10 @@ en la prueba -- es la única forma de probar la fórmula real sin reinventarla a
 
 from datetime import date, timedelta
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestLiquidacionIndemnizacion(TransactionCase):
     @classmethod
     def setUpClass(cls):

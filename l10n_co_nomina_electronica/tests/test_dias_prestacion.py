@@ -10,9 +10,10 @@ Valores a mano, extremos incluidos. No afecta _ne_dias_bajo_contrato (sueldo y P
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestDiasPrestacion(TransactionCase):
     @classmethod
     def setUpClass(cls):

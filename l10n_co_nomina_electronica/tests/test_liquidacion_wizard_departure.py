@@ -22,9 +22,10 @@ patrón estándar de Odoo para probar un @api.onchange sin pasar por una vista/F
 from datetime import date
 
 from odoo import fields
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestLiquidacionWizardDeparture(TransactionCase):
     @classmethod
     def setUpClass(cls):

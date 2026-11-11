@@ -16,9 +16,10 @@ Dos niveles de prueba:
 import unittest
 
 from odoo.addons.l10n_co_nomina_electronica.services import dian_utils
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestDianUtilsUrlsPure(unittest.TestCase):
     """(a)/(b) del criterio de aceptación, a nivel de la función pura."""
 
@@ -60,6 +61,7 @@ class TestDianUtilsUrlsPure(unittest.TestCase):
         self.assertEqual(dian_utils.parse_positive_int('-5', 45, 'x'), 45)
 
 
+@tagged('post_install', '-at_install')
 class TestResCompanyDianConfig(TransactionCase):
     """(b)/(c) del criterio de aceptación: ResCompany lee de verdad ir.config_parameter."""
 

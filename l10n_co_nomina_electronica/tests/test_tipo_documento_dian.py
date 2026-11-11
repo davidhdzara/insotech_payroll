@@ -18,9 +18,10 @@ l10n_latam_base.it_vat ("VAT" genérico) quedan sin código DIAN a propósito.
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestTipoDocumentoDian(TransactionCase):
     @classmethod
     def setUpClass(cls):

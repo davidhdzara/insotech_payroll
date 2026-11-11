@@ -16,7 +16,7 @@ from datetime import date
 from psycopg2 import IntegrityError
 
 from odoo.exceptions import ValidationError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 from odoo.tools import mute_logger
 
 
@@ -30,6 +30,7 @@ def _cargar_migracion(nombre):
     return modulo
 
 
+@tagged('post_install', '-at_install')
 class TestActividadEconomicaArl(TransactionCase):
     @classmethod
     def setUpClass(cls):
@@ -135,6 +136,7 @@ class TestActividadEconomicaArl(TransactionCase):
         self.assertFalse(inexacto.l10n_co_pila_clase_riesgo)
 
 
+@tagged('post_install', '-at_install')
 class TestCatalogoCiiuDecreto768(TransactionCase):
     """Contenido cargado desde data/l10n_co_pila_ciiu.xml (Anexo técnico del Decreto 768 de 2022,
     fuente oficial depurada por David: 1.108 filas con 4 duplicados exactos = 1.104 actividades)."""

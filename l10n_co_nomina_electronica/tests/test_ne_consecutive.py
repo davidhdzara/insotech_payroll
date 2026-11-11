@@ -16,9 +16,10 @@ from datetime import date
 
 from lxml import etree
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestNeConsecutivePrefixGuard(TransactionCase):
     @classmethod
     def setUpClass(cls):

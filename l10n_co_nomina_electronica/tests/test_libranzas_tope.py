@@ -8,9 +8,10 @@ reales; la regla salarial completa se prueba al correr -u + suite en servidor.
 """
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestLibranzasTope(TransactionCase):
     @classmethod
     def setUpClass(cls):
@@ -99,6 +100,7 @@ class TestLibranzasTope(TransactionCase):
             self.assertLess(lib.sequence, r.sequence)
 
 
+@tagged('post_install', '-at_install')
 class TestLibranzasNominaReal(TransactionCase):
     """compute_sheet() sobre una nomina real: ejercita el amount_python_compute
     de CO_LIBRANZAS (caso mas frecuente: libranza SIN embargo) y el orden

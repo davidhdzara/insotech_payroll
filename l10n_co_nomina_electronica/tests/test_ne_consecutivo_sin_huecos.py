@@ -11,11 +11,12 @@ from datetime import date
 from unittest.mock import patch
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.models import hr_payslip as hr_payslip_mod
 
 
+@tagged('post_install', '-at_install')
 class TestNeConsecutivoSinHuecos(TransactionCase):
 
     @classmethod

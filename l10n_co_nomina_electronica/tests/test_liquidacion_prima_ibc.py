@@ -7,11 +7,12 @@ neto sube exactamente el valor de la prima."""
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 RETIRO = date(2026, 8, 15)
 
 
+@tagged('post_install', '-at_install')
 class TestLiquidacionPrimaIbc(TransactionCase):
     @classmethod
     def setUpClass(cls):

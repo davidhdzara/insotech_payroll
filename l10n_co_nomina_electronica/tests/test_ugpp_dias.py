@@ -7,7 +7,7 @@ from datetime import date
 from unittest.mock import patch
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 try:
     import openpyxl
@@ -21,6 +21,7 @@ _COL = {'trabajados': 18, 'incapacidad': 19, 'lic_mat': 20, 'lic_rem': 21,
         'suspension': 22, 'vacaciones': 23, 'huelga': 24, 'total': 25}
 
 
+@tagged('post_install', '-at_install')
 class TestUgppDias(TransactionCase):
     @classmethod
     def setUpClass(cls):

@@ -11,9 +11,10 @@ from collections import defaultdict
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class IbcBase(TransactionCase):
     """Fixtures comunes (sin tests propios)."""
     @classmethod
@@ -46,6 +47,7 @@ class IbcBase(TransactionCase):
         return slip._rule_parameter('l10n_co_smmlv', slip.date_from)
 
 
+@tagged('post_install', '-at_install')
 class TestIbcUnico(IbcBase):
 
     # ── funcion de limites (pura) ──
@@ -136,6 +138,7 @@ class TestIbcUnico(IbcBase):
         self.assertAlmostEqual(self._linea(slip, 'CO_IBC_SP').total, 20000000.0 * factor, delta=0.01)
 
 
+@tagged('post_install', '-at_install')
 class TestIbcUnicoCiaYLiquidacion(IbcBase):
     """Commit 3a: los aportes patronales y la liquidacion leen el IBC unico."""
 

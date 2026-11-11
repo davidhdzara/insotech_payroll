@@ -6,9 +6,10 @@ asiento por tercero se prueba en el commit de asientos.
 """
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestTercerosDeduccionesContrato(TransactionCase):
     @classmethod
     def setUpClass(cls):

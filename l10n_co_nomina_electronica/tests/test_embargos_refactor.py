@@ -5,9 +5,10 @@ dar el MISMO monto que el calculo inline anterior de la regla CO_EMBARGO
 transcripcion fiel del bloque anterior de la regla, conservada solo aqui."""
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestEmbargosRefactor(TransactionCase):
     @classmethod
     def setUpClass(cls):

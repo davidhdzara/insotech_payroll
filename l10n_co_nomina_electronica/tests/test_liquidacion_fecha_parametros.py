@@ -12,7 +12,7 @@ SMMLV 2024 = 1.300.000, 2025 = 1.423.500, 2026 = 1.750.905; auxilio 2024 = 162.0
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 RETIRO = date(2026, 8, 15)
 SMMLV_2026 = 1750905.0
@@ -20,6 +20,7 @@ AUX_2026 = 249095.0
 ANIO = 360.0
 
 
+@tagged('post_install', '-at_install')
 class TestLiquidacionFechaParametros(TransactionCase):
     @classmethod
     def setUpClass(cls):

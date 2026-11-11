@@ -11,11 +11,12 @@ consistencia usan compute_sheet() real.
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 REPORTE = 'l10n_co_nomina_electronica.action_report_payslip_ne'
 
 
+@tagged('post_install', '-at_install')
 class TestPdfReciboNeto(TransactionCase):
     @classmethod
     def setUpClass(cls):

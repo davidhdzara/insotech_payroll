@@ -6,12 +6,13 @@ compute_sheet y las fuentes de SLN simuladas (mock); PILA vía su función de ap
 from datetime import date
 from unittest import mock
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 _PAYSLIP = 'odoo.addons.l10n_co_nomina_electronica.models.hr_payslip.HrPayslip'
 _SLN = 400000.0
 
 
+@tagged('post_install', '-at_install')
 class TestSlnAportes(TransactionCase):
     @classmethod
     def setUpClass(cls):

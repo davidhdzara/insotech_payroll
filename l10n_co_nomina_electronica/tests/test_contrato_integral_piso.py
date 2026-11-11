@@ -11,10 +11,11 @@ from unittest import mock
 
 from odoo.exceptions import ValidationError
 from odoo.fields import Date
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 from odoo.tools.misc import format_amount
 
 
+@tagged('post_install', '-at_install')
 class TestContratoIntegralPiso(TransactionCase):
     @classmethod
     def setUpClass(cls):

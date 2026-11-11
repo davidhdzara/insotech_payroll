@@ -7,9 +7,10 @@ usa. Ninguna regla de estas estructuras lee worked_days: el neto no depende de e
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestEstructurasSinDiasTrabajados(TransactionCase):
     @classmethod
     def setUpClass(cls):

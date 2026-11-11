@@ -14,7 +14,7 @@ from datetime import date
 from unittest.mock import patch
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import dian_utils
 
@@ -28,6 +28,7 @@ class _FakeCertificate:
         return True
 
 
+@tagged('post_install', '-at_install')
 class TestDianPaisMoneda(TransactionCase):
     @classmethod
     def setUpClass(cls):

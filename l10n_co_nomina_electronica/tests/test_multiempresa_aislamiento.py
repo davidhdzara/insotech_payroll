@@ -9,7 +9,7 @@ configuracion de retencion COMPARTIDA (company_id vacio) la ven todos.
 from datetime import date
 
 from odoo.exceptions import AccessError, UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 MODELOS_CON_REGLA = (
     'l10n.co.retefuente.uvt', 'l10n.co.retefuente.procedure2', 'l10n.co.ibc.mensual',
@@ -17,6 +17,7 @@ MODELOS_CON_REGLA = (
     'l10n.co.ne.operation_mode')
 
 
+@tagged('post_install', '-at_install')
 class TestMultiempresaAislamiento(TransactionCase):
     @classmethod
     def setUpClass(cls):

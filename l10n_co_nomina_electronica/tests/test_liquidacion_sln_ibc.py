@@ -16,11 +16,12 @@ retiro 2026-08-15, licencia no remunerada lun 3 a vie 7 de agosto (5 dias habile
 
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 RETIRO = date(2026, 8, 15)
 
 
+@tagged('post_install', '-at_install')
 class TestLiquidacionSlnIbc(TransactionCase):
     @classmethod
     def setUpClass(cls):

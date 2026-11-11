@@ -5,9 +5,10 @@ condicion `invisible` por pais (el mismo patron de l10n_mx_hr_payroll: country_c
 
 from lxml import etree
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestVistasPorPais(TransactionCase):
     def _arch(self, modelo):
         return etree.fromstring(

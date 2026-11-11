@@ -3,11 +3,12 @@
 from unittest.mock import patch
 
 from odoo.exceptions import AccessError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 _ENGINE = 'odoo.addons.l10n_co_nomina_electronica.models.l10n_co_ne_habilitacion.L10nCoNeHabilitacion'
 
 
+@tagged('post_install', '-at_install')
 class TestHabilitacionPermisos(TransactionCase):
 
     @classmethod

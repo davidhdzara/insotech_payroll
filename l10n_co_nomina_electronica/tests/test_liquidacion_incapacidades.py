@@ -11,11 +11,12 @@ unico HrPayslip._ne_pago_ausencia_calendario(). Contrato $1.800.000 desde 2026-0
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 RETIRO = date(2026, 8, 15)
 
 
+@tagged('post_install', '-at_install')
 class TestLiquidacionIncapacidades(TransactionCase):
     @classmethod
     def setUpClass(cls):

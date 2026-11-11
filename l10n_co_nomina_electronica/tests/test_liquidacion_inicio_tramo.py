@@ -10,12 +10,13 @@ con un UserError claro (recibo, fecha esperada, donde corregir); no se corrige e
 from datetime import date
 
 from odoo.exceptions import UserError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 INGRESO = date(2025, 1, 1)
 RETIRO = date(2026, 1, 2)
 
 
+@tagged('post_install', '-at_install')
 class TestLiquidacionInicioTramo(TransactionCase):
     @classmethod
     def setUpClass(cls):

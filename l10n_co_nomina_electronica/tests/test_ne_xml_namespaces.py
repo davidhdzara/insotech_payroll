@@ -5,9 +5,11 @@ import unittest
 
 from lxml import etree
 
+from odoo.tests.common import tagged
 from odoo.addons.l10n_co_nomina_electronica.services import nomina_xml_builder as builder
 
 
+@tagged('post_install', '-at_install')
 class TestNeXmlNamespaces(unittest.TestCase):
     """`xs` y `xsi` comparten URI. lxml escribe {URI}schemaLocation con el primer prefijo del
     mapa (`xs:`) pero la DIAN (.NET SignedXml) canoniza con el ULTIMO prefijo declarado

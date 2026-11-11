@@ -6,12 +6,13 @@ no pasa a 'En proceso' sin ellos (ValidationError); el XML y la PILA fallan con 
 from datetime import date
 
 from odoo.exceptions import UserError, ValidationError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 CAMPOS_CONTRATO = ('l10n_co_ne_contract_type', 'l10n_co_pila_tipo_cotizante',
                    'l10n_co_pila_subtipo_cotizante')
 
 
+@tagged('post_install', '-at_install')
 class TestDefaultsSinAsumir(TransactionCase):
     @classmethod
     def setUpClass(cls):

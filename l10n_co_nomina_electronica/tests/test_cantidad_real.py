@@ -12,12 +12,13 @@ import importlib.util
 import os
 from datetime import date
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 HORAS_MENSUALES = 210.0
 FACTOR_HED = 1.25
 
 
+@tagged('post_install', '-at_install')
 class TestCantidadReal(TransactionCase):
     @classmethod
     def setUpClass(cls):

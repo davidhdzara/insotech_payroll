@@ -11,13 +11,14 @@ nativa de ausencias (ya cubierta en test_ausencias_nomina).
 from datetime import date
 from unittest import mock
 
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 INGRESO = date(2025, 1, 1)
 RETIRO = date(2026, 1, 2)  # 360 dias de servicio (367 reales - 7 treintaiunos), inclusivo
 VALOR_DIA = 100000.0
 
 
+@tagged('post_install', '-at_install')
 class TestLiquidacionVacaciones(TransactionCase):
     @classmethod
     def setUpClass(cls):

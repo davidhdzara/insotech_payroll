@@ -19,16 +19,18 @@ from datetime import date
 from lxml import etree
 
 from odoo.addons.base.models.ir_model import MODULE_UNINSTALL_FLAG
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 from odoo.tools.safe_eval import safe_eval
 
 
+@tagged('post_install', '-at_install')
 class TestSeleccionPaquete(TransactionCase):
     def test_seleccion_incluye_colombia(self):
         opciones = dict(self.env['res.company']._selection_l10n_co_ne_payroll_package())
         self.assertIn('l10n_co_nomina_electronica', opciones)
 
 
+@tagged('post_install', '-at_install')
 class TestHasPayrollEntries(TransactionCase):
     @classmethod
     def setUpClass(cls):
@@ -79,6 +81,7 @@ class TestHasPayrollEntries(TransactionCase):
         self.assertTrue(settings.l10n_co_ne_has_payroll_entries)
 
 
+@tagged('post_install', '-at_install')
 class TestReloadPayrollPackage(TransactionCase):
     @classmethod
     def setUpClass(cls):
@@ -136,6 +139,7 @@ class TestReloadPayrollPackage(TransactionCase):
         self.assertEqual(result.get('tag'), 'reload')
 
 
+@tagged('post_install', '-at_install')
 class TestOpenPayrollModulesDomain(TransactionCase):
     def test_colombia_incluida_en_choose_payroll_localization(self):
         action = self.env.ref('hr_payroll.open_payroll_modules')
@@ -144,6 +148,7 @@ class TestOpenPayrollModulesDomain(TransactionCase):
         self.assertIn('l10n_co_nomina_electronica', modulos.mapped('name'))
 
 
+@tagged('post_install', '-at_install')
 class TestArchVistaLocalizacion(TransactionCase):
     def _arch(self, xmlid):
         return etree.fromstring(self.env.ref(xmlid).arch_db.encode('utf-8'))

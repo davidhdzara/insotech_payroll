@@ -7,9 +7,10 @@ from datetime import date
 from lxml import etree
 
 from odoo.exceptions import ValidationError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestIncapacidadMismaEnfermedad(TransactionCase):
     @classmethod
     def setUpClass(cls):

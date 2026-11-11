@@ -9,9 +9,10 @@ reales; el compute_sheet completo de una liquidacion se prueba en servidor.
 from collections import defaultdict
 
 from odoo.exceptions import ValidationError
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, tagged
 
 
+@tagged('post_install', '-at_install')
 class TestLiquidacionEmbargoLibranza(TransactionCase):
     @classmethod
     def setUpClass(cls):
