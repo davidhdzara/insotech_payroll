@@ -649,8 +649,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             'numero_planilla_asociada': self.numero_planilla_asociada or '',
             'fecha_pago_asociada': str(self.fecha_pago_asociada)
             if self.fecha_pago_asociada else '',
-            'forma_presentacion': company.l10n_co_pila_forma_presentacion
-            or 'U',
+            'forma_presentacion': company._ne_valor_obligatorio('l10n_co_pila_forma_presentacion'),
             'codigo_sucursal': company.l10n_co_pila_codigo_sucursal or '',
             'nombre_sucursal': company.l10n_co_pila_nombre_sucursal or '',
             'codigo_arl': company.l10n_co_pila_arl_code or '',
@@ -658,7 +657,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             'periodo_cotizacion_pension': periodo_str,
             'numero_total_cotizantes': len(payslips),
             'valor_total_nomina': total_nomina,
-            'tipo_aportante': company.l10n_co_pila_tipo_aportante or '1',
+            'tipo_aportante': company._ne_valor_obligatorio('l10n_co_pila_tipo_aportante'),
             'codigo_operador': company.l10n_co_pila_operador_code or '',
             'fecha_pago': '',
             'numero_planilla': '',
@@ -832,10 +831,8 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             'secuencia': str(seq).zfill(5),
             'tipo_documento': tipo_doc_pila,
             'numero_documento': employee.identification_id or '',
-            'tipo_cotizante': getattr(
-                contract, 'l10n_co_pila_tipo_cotizante', '01') or '01',
-            'subtipo_cotizante': getattr(
-                contract, 'l10n_co_pila_subtipo_cotizante', '00') or '00',
+            'tipo_cotizante': contract._ne_valor_obligatorio('l10n_co_pila_tipo_cotizante'),
+            'subtipo_cotizante': contract._ne_valor_obligatorio('l10n_co_pila_subtipo_cotizante'),
             'extranjero_no_pension': 'X' if getattr(
                 employee, 'l10n_co_ne_foreigner_no_pension', False
             ) else '',

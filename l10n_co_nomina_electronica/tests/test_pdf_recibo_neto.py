@@ -20,7 +20,7 @@ class TestPdfReciboNeto(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía de Prueba PDF Neto'})
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía de Prueba PDF Neto'})
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura PDF', 'country_id': cls.env.ref('base.co').id})
         ref = cls.env.ref
@@ -32,9 +32,9 @@ class TestPdfReciboNeto(TransactionCase):
 
     def _recibo(self, estructura, name='Recibo', date_from=date(2026, 9, 1),
                 date_to=date(2026, 9, 30)):
-        employee = self.env['hr.employee'].create({
+        employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({
+        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open'})

@@ -26,7 +26,7 @@ class TestPagoCuentaBancaria(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
             'name': 'Compañía de Prueba Pago Cuenta Bancaria',
         })
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
@@ -39,14 +39,14 @@ class TestPagoCuentaBancaria(TransactionCase):
         })
 
     def _make_payslip(self, name, payment_method='10'):
-        employee = self.env['hr.employee'].create({
+        employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name,
             'l10n_co_primer_nombre': 'Prueba',
             'l10n_co_primer_apellido': 'Fixture',
             'company_id': self.company.id,
             'l10n_co_ne_payment_method': payment_method,
         })
-        contract = self.env['hr.contract'].create({
+        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name,
             'employee_id': employee.id,
             'company_id': self.company.id,
@@ -142,7 +142,7 @@ class TestPagoCuentaBancaria(TransactionCase):
     def test_empleado_nuevo_transferencia_sin_cuenta_se_guarda(self):
         """H-021: crear un empleado con los valores por defecto (Transferencia, sin cuenta
         bancaria) NO debe fallar -- antes lo impedía el constraint de hr.employee."""
-        employee = self.env['hr.employee'].create({
+        employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Empleado Nuevo Sin Cuenta', 'company_id': self.company.id,
         })
         # .161: sin valor por defecto silencioso; el medio efectivo sale de la empresa.

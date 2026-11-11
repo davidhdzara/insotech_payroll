@@ -64,9 +64,9 @@ class TestWizardsCompaniaDelRegistro(TransactionCase):
 
     def test_compute_sheet_corre_en_el_contexto_de_la_compania_de_cada_recibo(self):
         def recibo(company):
-            empleado = self.env['hr.employee'].create({
+            empleado = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
                 'name': 'Emp %s' % company.name, 'company_id': company.id})
-            contrato = self.env['hr.contract'].create({
+            contrato = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
                 'name': 'C', 'employee_id': empleado.id, 'company_id': company.id,
                 'structure_type_id': self.tipo.id, 'wage': 1000000.0,
                 'date_start': date(2026, 1, 1), 'state': 'open'})

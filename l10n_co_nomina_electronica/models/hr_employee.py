@@ -135,6 +135,17 @@ class HrEmployee(models.Model):
                 company=company.name, employee=self.name))
         return company.l10n_co_pila_ccf_id
 
+    def _ne_valor_obligatorio(self, campo):
+        """Valor de un campo que el empleado debe tener para el XML: sin el, error claro."""
+        self.ensure_one()
+        valor = self[campo]
+        if not valor:
+            raise UserError(_(
+                'El empleado %(empleado)s no tiene "%(campo)s" (pestaña Nómina). Elíjalo: nunca '
+                'se asume un valor por defecto.',
+                empleado=self.name, campo=self._fields[campo].string))
+        return valor
+
     def _ne_medio_pago(self):
         """Medio de pago efectivo (código DIAN '1'/'2'/'10'): el del empleado y, si no tiene, el
         general de la empresa. Sin ninguno: UserError (nunca se asume Transferencia)."""
@@ -293,7 +304,6 @@ class HrEmployee(models.Model):
             ('51', '51 - Trabajador de Tiempo Parcial'),
         ],
         string='Tipo Trabajador',
-        default='01',
         help='Tipo de trabajador según el anexo técnico de nómina '
              'electrónica de la DIAN. Determina las reglas de cotización '
              'a seguridad social.',
@@ -305,7 +315,6 @@ class HrEmployee(models.Model):
             ('02', '02 - Dependiente Pensionado por Vejez – Alto Riesgo'),
         ],
         string='Subtipo Trabajador',
-        default='00',
         help='Subtipo del trabajador. Aplica para pensionados activos '
              'y pensionados de alto riesgo.',
     )

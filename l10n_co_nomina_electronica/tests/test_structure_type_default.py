@@ -38,15 +38,15 @@ class TestStructureTypeDefault(TransactionCase):
         generico = self.env['hr.payroll.structure.type'].create({
             'name': 'Genérico de Prueba (.102)', 'country_id': False,
         })
-        compania = self.env['res.company'].create({'country_id': self.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía Prueba Reasignación (.102)'})
+        compania = self.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': self.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía Prueba Reasignación (.102)'})
         compania.partner_id.country_id = self.env.ref('base.co').id
-        empleado = self.env['hr.employee'].create({
+        empleado = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Empleado Reasignación (.102)', 'company_id': compania.id,
             # Método '10' (efectivo): el default '1' (Transferencia) exige cuenta bancaria
             # (constraint _check_bank_account_for_transfer, H-021) y esta prueba no la necesita.
             'l10n_co_ne_payment_method': '10',
         })
-        contrato = self.env['hr.contract'].create({
+        contrato = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Reasignación (.102)',
             'employee_id': empleado.id,
             'company_id': compania.id,

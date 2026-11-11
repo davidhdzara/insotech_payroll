@@ -2229,8 +2229,8 @@ class HrPayslip(models.Model):
         _name_parts = employee._l10n_co_nombre_dian()
         lugar_trabajo = self._ne_lugar_trabajo_partner()
         return {
-            'TipoTrabajador': employee.l10n_co_ne_worker_type or '01',
-            'SubTipoTrabajador': employee.l10n_co_ne_worker_subtype or '00',
+            'TipoTrabajador': employee._ne_valor_obligatorio('l10n_co_ne_worker_type'),
+            'SubTipoTrabajador': employee._ne_valor_obligatorio('l10n_co_ne_worker_subtype'),
             'AltoRiesgoPension': (
                 'true' if employee.l10n_co_ne_high_risk_pension else 'false'
             ),
@@ -2254,7 +2254,7 @@ class HrPayslip(models.Model):
             'SalarioIntegral': (
                 'true' if contract.l10n_co_ne_integral_salary else 'false'
             ),
-            'TipoContrato': contract.l10n_co_ne_contract_type or '2',
+            'TipoContrato': contract._ne_valor_obligatorio('l10n_co_ne_contract_type'),
             'Sueldo': '%.2f' % contract.wage,
             'CodigoTrabajador': str(employee.id),
         }

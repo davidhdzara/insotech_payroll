@@ -46,7 +46,7 @@ class TestMultiempresaAislamiento(TransactionCase):
                                  cls.env['l10n.co.retefuente.uvt'])
         cls.ibc, cls.planilla, cls.config = {}, {}, {}
         for clave, company in (('a', cls.a), ('b', cls.b)):
-            empleado = cls.env['hr.employee'].create({
+            empleado = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
                 'name': 'Emp %s' % clave, 'company_id': company.id})
             cls.ibc[clave] = Ibc.create({
                 'company_id': company.id, 'employee_id': empleado.id,

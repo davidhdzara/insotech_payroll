@@ -42,7 +42,7 @@ class TestNombresEmpleado(TransactionCase):
     def _empleado(self, name, **vals):
         # La compania activa debe ser colombiana: el prellenado solo corre para Colombia.
         self.env.company.partner_id.country_id = self.env.ref('base.co')
-        return self.env['hr.employee'].create({'name': name, **vals})
+        return self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'name': name, **vals})
 
     def test_create_prellena_no_ambiguo(self):
         e = self._empleado('Juan Carlos García López')

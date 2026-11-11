@@ -35,7 +35,6 @@ class HrContract(models.Model):
             ('5', 'Prácticas o Pasantía'),
         ],
         string='Tipo de Contrato DIAN',
-        default='2',
         help='Tipo de contrato laboral según la codificación del anexo '
              'técnico de nómina electrónica de la DIAN.\n'
              '• 1 - Término Fijo: con fecha de terminación definida.\n'
@@ -78,7 +77,6 @@ class HrContract(models.Model):
             ('51', '51 - Trabajador de tiempo parcial'),
         ],
         string='Tipo Cotizante',
-        default='01',
         help='Tipo de cotizante según tabla PILA.',
     )
     l10n_co_pila_subtipo_cotizante = fields.Selection(
@@ -88,7 +86,6 @@ class HrContract(models.Model):
             ('02', '02 - Independiente pensionado por vejez activo'),
         ],
         string='Subtipo Cotizante',
-        default='00',
     )
     l10n_co_pila_salario_variable = fields.Boolean(
         string='Salario Variable',
@@ -164,6 +161,38 @@ class HrContract(models.Model):
             solo_salario = 'wage' in vals and not {'l10n_co_ne_integral_salary', 'date_start'} & set(vals)
             self._ne_validar_piso_integral(fields.Date.context_today(self) if solo_salario else None)
         return resultado
+
+    def _ne_valor_obligatorio(self, campo):
+        """Valor de un campo que el contrato debe tener: sin el, error claro (nunca se asume un
+        tipo de contrato o de cotizante por defecto)."""
+        self.ensure_one()
+        valor = self[campo]
+        if not valor:
+            raise UserError(_(
+                'El contrato "%(contrato)s" de %(empleado)s no tiene "%(campo)s". Elíjalo en el '
+                'contrato (nunca se asume un valor por defecto).',
+                contrato=self.name, empleado=self.employee_id.name,
+                campo=self._fields[campo].string))
+        return valor
+
+    _NE_CAMPOS_OBLIGATORIOS_EN_PROCESO = (
+        'l10n_co_ne_contract_type', 'l10n_co_pila_tipo_cotizante', 'l10n_co_pila_subtipo_cotizante')
+
+    @api.constrains('state', *_NE_CAMPOS_OBLIGATORIOS_EN_PROCESO)
+    def _check_tipos_obligatorios_en_proceso(self):
+        """Un contrato colombiano 'En proceso' exige tipo de contrato DIAN, tipo y subtipo de
+        cotizante: no tienen valor por defecto (antes salian 'indefinido', 'dependiente')."""
+        for contrato in self:
+            if contrato.state != 'open' or not contrato.company_id._ne_es_colombia():
+                continue
+            faltan = [contrato._fields[c].string for c in self._NE_CAMPOS_OBLIGATORIOS_EN_PROCESO
+                      if not contrato[c]]
+            if faltan:
+                raise ValidationError(_(
+                    'El contrato "%(contrato)s" de %(empleado)s no puede pasar a "En proceso" sin: '
+                    '%(faltan)s. Complételos en el contrato (Detalles del contrato y pestaña PILA).',
+                    contrato=contrato.name, empleado=contrato.employee_id.name,
+                    faltan=', '.join(faltan)))
 
     def _ne_clase_riesgo(self):
         """Clase de riesgo ARL efectiva: la del contrato y, si no tiene, la general de la

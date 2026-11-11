@@ -15,8 +15,8 @@ class TestTercerosDeduccionesContrato(TransactionCase):
         super().setUpClass()
         # La compania activa debe ser colombiana: la logica del modulo solo corre para Colombia.
         cls.env.company.partner_id.country_id = cls.env.ref('base.co')
-        cls.employee = cls.env['hr.employee'].create({'name': 'Empleado Deducciones'})
-        cls.contract = cls.env['hr.contract'].create({
+        cls.employee = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'name': 'Empleado Deducciones'})
+        cls.contract = cls.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Deducciones', 'employee_id': cls.employee.id,
             'wage': 3000000, 'date_start': '2026-01-01', 'state': 'draft',
         })

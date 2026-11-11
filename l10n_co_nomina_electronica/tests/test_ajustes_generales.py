@@ -14,13 +14,13 @@ class TestAjustesGenerales(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 'name': 'Compañía Ajustes Generales'})
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 'name': 'Compañía Ajustes Generales'})
         Partner = cls.env['res.partner']
         cls.comfama = Partner.create({'name': 'Comfama', 'l10n_co_entity_type': 'ccf'})
         cls.comfenalco = Partner.create({'name': 'Comfenalco', 'l10n_co_entity_type': 'ccf'})
-        cls.empleado = cls.env['hr.employee'].create({
+        cls.empleado = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Empleado Ajustes', 'company_id': cls.company.id})
-        cls.contrato = cls.env['hr.contract'].create({
+        cls.contrato = cls.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Ajustes', 'employee_id': cls.empleado.id,
             'company_id': cls.company.id, 'wage': 2000000.0,
             'date_start': '2026-01-01', 'state': 'open'})

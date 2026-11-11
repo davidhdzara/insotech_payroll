@@ -16,7 +16,7 @@ class TestRetefuenteConfigAnio(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 
             'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real',
             'name': 'Compañía de Prueba Config Retención'})
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
@@ -24,10 +24,10 @@ class TestRetefuenteConfigAnio(TransactionCase):
         cls.est_prima = cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_prima')
 
     def _prima(self, wage, date_from, date_to, struct=None):
-        employee = self.env['hr.employee'].create({
+        employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Prima Config %s' % date_from, 'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({
+        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Config', 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': wage, 'date_start': date(2024, 3, 1), 'state': 'open'})

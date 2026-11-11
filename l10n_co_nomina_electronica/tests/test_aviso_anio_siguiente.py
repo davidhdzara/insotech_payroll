@@ -67,8 +67,8 @@ class TestAvisoAnioSiguiente(TransactionCase):
         Config = self.env['l10n.co.retefuente.uvt']
         datos = {'country_id': self.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1',
                  'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN'}
-        a = self.env['res.company'].create({'name': 'Empresa A Aviso', **datos})
-        b = self.env['res.company'].create({'name': 'Empresa B Aviso', **datos})
+        a = self.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'name': 'Empresa A Aviso', **datos})
+        b = self.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'name': 'Empresa B Aviso', **datos})
         for anio, compania in (('2026', a), ('2027', a), ('2026', b)):
             Config.create({'year': anio, 'company_id': compania.id, 'procedure': '1'})
         # A completa para 2026 y 2027; B solo 2026 -> falta B-2027 = 1 aviso

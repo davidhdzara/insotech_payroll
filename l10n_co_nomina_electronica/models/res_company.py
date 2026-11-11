@@ -115,6 +115,18 @@ class ResCompany(models.Model):
         companies._ne_asegurar_secuencias()
         return companies
 
+    def _ne_valor_obligatorio(self, campo):
+        """Valor de configuracion de la compania que se necesita para generar un archivo (PILA):
+        sin el, error claro nombrando compania y campo (nunca un valor por defecto)."""
+        self.ensure_one()
+        valor = self[campo]
+        if not valor:
+            raise UserError(_(
+                'La compañía "%(company)s" no tiene "%(campo)s" configurado (Nómina > '
+                'Configuración > Ajustes, bloque PILA). Elíjalo antes de generar la planilla.',
+                company=self.name, campo=self._fields[campo].string))
+        return valor
+
     def _ne_exigir_colombia(self):
         """Error claro si la compania no es colombiana: los asistentes de nomina colombiana (PILA,
         UGPP, habilitacion DIAN, consulta por CUNE) trabajan con la compania del registro y solo para
@@ -440,7 +452,6 @@ class ResCompany(models.Model):
             ('8', '8 - Institución Auxiliar del Cooperativismo'),
         ],
         string='Tipo Aportante PILA',
-        default='1',
     )
     l10n_co_pila_arl_id = fields.Many2one(
         'res.partner', string='ARL',
@@ -478,7 +489,6 @@ class ResCompany(models.Model):
             ('S', 'Sucursal'),
         ],
         string='Forma Presentación PILA',
-        default='U',
     )
     l10n_co_pila_codigo_sucursal = fields.Char(
         string='Código Sucursal PILA',

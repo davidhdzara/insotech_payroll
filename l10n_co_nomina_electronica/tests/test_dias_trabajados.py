@@ -29,7 +29,7 @@ class TestDiasTrabajadosCommon(TransactionCase):
         super().setUpClass()
         # Compañía dedicada y descartable -- la build de Odoo.sh corre los tests sobre una
         # COPIA de la BD real de Guapante (ver AUD-DIAN-34 en test_dian_matching.py).
-        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
             'name': 'Compañía de Prueba DiasTrabajados',
         })
         co_country = cls.env['res.country'].search([('code', '=', 'CO')], limit=1)
@@ -45,7 +45,7 @@ class TestDiasTrabajadosCommon(TransactionCase):
         })
 
     def _make_contract(self, name, date_start=date(2024, 1, 1), date_end=None, wage=1800000.0):
-        employee = self.env['hr.employee'].create({
+        employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name,
             'l10n_co_primer_nombre': 'Prueba',
             'l10n_co_primer_apellido': 'Fixture',
@@ -55,7 +55,7 @@ class TestDiasTrabajadosCommon(TransactionCase):
             # bank_account_id (UX-02) -- sin interés aquí, 'Efectivo' evita datos bancarios falsos.
             'l10n_co_ne_payment_method': '10',
         })
-        contract = self.env['hr.contract'].create({
+        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name,
             'employee_id': employee.id,
             'company_id': self.company.id,

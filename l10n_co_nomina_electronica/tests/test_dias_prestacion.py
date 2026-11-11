@@ -17,16 +17,16 @@ class TestDiasPrestacion(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 
             'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real',
             'name': 'Compañía de Prueba Días Prestación'})
         structure_type = cls.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura Días Prestación',
             'country_id': cls.env.ref('base.co').id})
-        employee = cls.env['hr.employee'].create({
+        employee = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Empleado Días Prestación', 'company_id': cls.company.id,
             'l10n_co_ne_payment_method': '10'})
-        contract = cls.env['hr.contract'].create({
+        contract = cls.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Días Prestación', 'employee_id': employee.id,
             'company_id': cls.company.id, 'structure_type_id': structure_type.id,
             'wage': 3000000.0, 'date_start': date(2023, 1, 1), 'state': 'open'})

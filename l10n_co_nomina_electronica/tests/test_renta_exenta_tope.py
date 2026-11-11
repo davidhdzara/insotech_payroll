@@ -13,13 +13,13 @@ class TestRentaExentaTope(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 
             'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real',
             'l10n_co_ne_redondeo_dias': 'DOWN',
             'name': 'Compañía de Prueba Tope Renta Exenta'})
         cls.config = cls.env['l10n.co.retefuente.uvt'].create({
             'year': '2026', 'company_id': cls.company.id, 'procedure': '1'})
-        cls.employee = cls.env['hr.employee'].create({
+        cls.employee = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Tope Renta Exenta', 'company_id': cls.company.id})
 
     def _rete(self, ingreso):

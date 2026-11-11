@@ -18,7 +18,7 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
         if not co_country:
             co_country = self.env.ref('base.co')
 
-        self.employee = self.env['hr.employee'].create({
+        self.employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Juan Pérez Gómez',
             'l10n_co_primer_nombre': 'Prueba',
             'l10n_co_primer_apellido': 'Fixture',
@@ -61,7 +61,7 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
             'name': 'Nómina Regular',
             'type_id': self.structure_type.id,
         })
-        self.contract = self.env['hr.contract'].create({
+        self.contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Juan Pérez',
             'employee_id': self.employee.id,
             'structure_type_id': self.structure_type.id,

@@ -35,15 +35,15 @@ class TestSecuenciasPorCompania(TransactionCase):
 
     @classmethod
     def _compania(cls, nombre, pais):
-        return cls.env['res.company'].create({
+        return cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 
             'name': nombre, 'country_id': cls.env.ref(pais).id,
             'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real',
             'l10n_co_ne_redondeo_dias': 'DOWN'})
 
     def _con_consecutivo(self, company, numero, prefijo='NE'):
-        empleado = self.env['hr.employee'].create({
+        empleado = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Emp %s %s' % (company.name, numero), 'company_id': company.id})
-        contrato = self.env['hr.contract'].create({
+        contrato = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'C', 'employee_id': empleado.id, 'company_id': company.id,
             'structure_type_id': self.tipo.id, 'wage': 1000000.0,
             'date_start': date(2026, 1, 1), 'state': 'open'})

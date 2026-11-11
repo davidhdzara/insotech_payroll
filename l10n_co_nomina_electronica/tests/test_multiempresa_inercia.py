@@ -31,12 +31,12 @@ class TestMultiempresaInercia(TransactionCase):
             'country_id': cls.env.ref('base.mx').id})
 
     def _empleado(self, company, name='Juan Carlos García López', **vals):
-        return self.env['hr.employee'].create({
+        return self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': company.id, **vals})
 
     def _recibo(self, company, struct=None):
         empleado = self._empleado(company, name='Recibo %s' % company.name)
-        contrato = self.env['hr.contract'].create({
+        contrato = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato', 'employee_id': empleado.id, 'company_id': company.id,
             'structure_type_id': self.tipo.id, 'wage': 1000000.0,
             'date_start': date(2026, 1, 1), 'state': 'open'})
@@ -100,7 +100,7 @@ class TestMultiempresaInercia(TransactionCase):
 
     def test_contrato_integral_mexicano_con_salario_bajo_guarda(self):
         mx = self._empleado(self.mx)
-        contrato = self.env['hr.contract'].create({
+        contrato = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Integral MX', 'employee_id': mx.id, 'company_id': self.mx.id,
             'structure_type_id': self.tipo.id, 'wage': 1000000.0,
             'date_start': date(2026, 1, 1), 'state': 'open',

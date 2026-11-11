@@ -15,8 +15,8 @@ class TestLibranzasTope(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.employee = cls.env['hr.employee'].create({'name': 'Empleado Libranzas'})
-        cls.contract = cls.env['hr.contract'].create({
+        cls.employee = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'name': 'Empleado Libranzas'})
+        cls.contract = cls.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Libranzas', 'employee_id': cls.employee.id,
             'wage': 5000000, 'date_start': '2026-01-01', 'state': 'draft'})
         cls.slip = cls.env['hr.payslip'].create({
@@ -107,7 +107,7 @@ class TestLibranzasNominaReal(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía Prueba Libranzas Nómina'})
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía Prueba Libranzas Nómina'})
         cls.env = cls.company.with_company(cls.company).env
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura Libranzas',
@@ -120,10 +120,10 @@ class TestLibranzasNominaReal(TransactionCase):
         cls.juzgado = cls.env['res.partner'].create({'name': 'Juzgado Nómina'})
 
     def _payslip(self, name, wage=5000000.0):
-        employee = self.env['hr.employee'].create({
+        employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({
+        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': wage, 'date_start': '2024-01-01', 'state': 'open'})
