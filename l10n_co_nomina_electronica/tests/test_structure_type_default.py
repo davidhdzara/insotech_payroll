@@ -38,7 +38,7 @@ class TestStructureTypeDefault(TransactionCase):
         generico = self.env['hr.payroll.structure.type'].create({
             'name': 'Genérico de Prueba (.102)', 'country_id': False,
         })
-        compania = self.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía Prueba Reasignación (.102)'})
+        compania = self.env['res.company'].create({'country_id': self.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía Prueba Reasignación (.102)'})
         compania.partner_id.country_id = self.env.ref('base.co').id
         empleado = self.env['hr.employee'].create({
             'name': 'Empleado Reasignación (.102)', 'company_id': compania.id,

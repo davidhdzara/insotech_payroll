@@ -49,7 +49,7 @@ class ResPartner(models.Model):
             empleados = self.env['hr.employee'].sudo().search([
                 ('work_contact_id', 'in', self.ids),
             ])
-            for empleado in empleados:
+            for empleado in empleados._ne_solo_colombia():
                 partner_vat = empleado.work_contact_id.vat
                 if partner_vat and empleado.identification_id != partner_vat:
                     empleado.identification_id = partner_vat

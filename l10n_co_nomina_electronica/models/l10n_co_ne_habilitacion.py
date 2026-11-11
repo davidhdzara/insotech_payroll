@@ -119,7 +119,10 @@ class L10nCoNeHabilitacion(models.AbstractModel):
 
     @api.model
     def _cron_step(self):
-        companies = self.env['res.company'].sudo().search([('l10n_co_ne_hab_state', '=', 'running')])
+        companies = self.env['res.company'].sudo().search([
+            ('l10n_co_ne_hab_state', '=', 'running'),
+            ('partner_id.country_id.code', '=', 'CO'),
+        ])
         for company in companies:
             try:
                 finished = self.with_company(company)._step(company)

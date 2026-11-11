@@ -10,6 +10,8 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
     def setUp(self):
         super(TestHrPayslipLeaveIntegration, self).setUp()
         self.company = self.env.company
+        # La compania activa debe ser colombiana: la logica del modulo solo corre para Colombia.
+        self.company.partner_id.country_id = self.env.ref('base.co')
         
         # En Odoo 18, busquemos el país Colombia de forma robusta
         co_country = self.env['res.country'].search([('code', '=', 'CO')], limit=1)

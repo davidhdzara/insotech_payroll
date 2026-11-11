@@ -131,7 +131,8 @@ class HrContract(models.Model):
         integral_smmlv (13 SMMLV, 10 de salario + 30 % de factor prestacional) x SMMLV de la
         fecha. fecha: la del SMMLV; sin ella, la de inicio del contrato."""
         Parametro = self.env['hr.rule.parameter']
-        for contrato in self.filtered('l10n_co_ne_integral_salary'):
+        for contrato in self.filtered(
+                lambda c: c.l10n_co_ne_integral_salary and c.company_id._ne_es_colombia()):
             fecha_smmlv = fecha or contrato.date_start
             if not fecha_smmlv:
                 continue

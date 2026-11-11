@@ -13,6 +13,8 @@ class TestTercerosDeduccionesContrato(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        # La compania activa debe ser colombiana: la logica del modulo solo corre para Colombia.
+        cls.env.company.partner_id.country_id = cls.env.ref('base.co')
         cls.employee = cls.env['hr.employee'].create({'name': 'Empleado Deducciones'})
         cls.contract = cls.env['hr.contract'].create({
             'name': 'Contrato Deducciones', 'employee_id': cls.employee.id,

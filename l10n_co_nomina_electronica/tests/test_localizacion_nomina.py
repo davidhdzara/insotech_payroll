@@ -34,7 +34,7 @@ class TestHasPayrollEntries(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         # Compañía dedicada y descartable (ver AUD-DIAN-34 en test_dian_matching.py).
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
+        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
             'name': 'Compañía de Prueba Has Payroll Entries',
         })
         cls.company.partner_id.country_id = cls.env.ref('base.co').id
@@ -83,7 +83,7 @@ class TestReloadPayrollPackage(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
+        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
             'name': 'Compañía de Prueba Recargar Paquete',
         })
         cls.company.partner_id.country_id = cls.env.ref('base.co').id

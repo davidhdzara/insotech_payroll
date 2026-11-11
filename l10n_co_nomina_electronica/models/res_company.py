@@ -72,6 +72,14 @@ class ResCompany(models.Model):
         string='Certificados',
     )
 
+    def _ne_es_colombia(self):
+        """True si la compania es colombiana. Unica comprobacion de pais del modulo: lo propio de la
+        nomina colombiana (numeracion, validaciones, sincronizacion de identificacion, IBC, piso
+        integral) solo corre para companias de Colombia, de modo que una compania de otro pais
+        (p. ej. Mexico) que comparta la base no se ve afectada."""
+        self.ensure_one()
+        return self.partner_id.country_id.code == 'CO'
+
     def _get_ne_certificate(self):
         """Certificado usado para firmar nómina electrónica.
 

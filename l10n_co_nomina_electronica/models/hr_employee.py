@@ -186,14 +186,25 @@ class HrEmployee(models.Model):
     # empleado->contacto->empleado->... (ver test_sin_bucle_infinito_entre_
     # employee_y_partner en test_identificacion_sincronizada.py).
     # ──────────────────────────────────────────────────────────────────
+    def _ne_solo_colombia(self):
+        """Los empleados de companias colombianas (ver res.company._ne_es_colombia)."""
+        return self.filtered(lambda e: e.company_id._ne_es_colombia())
+
+    @api.model
+    def _ne_vals_son_colombia(self, vals):
+        """La compania de unos valores de creacion (la del empleado o, sin ella, la activa)."""
+        compania = self.env['res.company'].browse(
+            vals.get('company_id') or self.env.company.id)
+        return compania._ne_es_colombia()
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
-            if vals.get('name') and not any(
+            if self._ne_vals_son_colombia(vals) and vals.get('name') and not any(
                     campo in vals for campo in self._L10N_CO_CAMPOS_NOMBRE.values()):
                 vals.update(self._l10n_co_prellenar_nombre(vals['name']))
         employees = super().create(vals_list)
-        for employee in employees:
+        for employee in employees._ne_solo_colombia():
             if (
                 employee.identification_id
                 and employee.work_contact_id
@@ -209,7 +220,7 @@ class HrEmployee(models.Model):
         if vals.get('name') and not any(
                 campo in vals for campo in self._L10N_CO_CAMPOS_NOMBRE.values()):
             nuevos = self._l10n_co_prellenar_nombre(vals['name'])
-            for employee in self:
+            for employee in self._ne_solo_colombia():
                 actuales = {c: employee[c] or '' for c in self._L10N_CO_CAMPOS_NOMBRE.values()}
                 previos = self._l10n_co_prellenar_nombre(employee.name)
                 if actuales == previos or not any(actuales.values()):
@@ -218,7 +229,7 @@ class HrEmployee(models.Model):
         for employee_id, nuevos in renombrar.items():
             super(HrEmployee, self.browse(employee_id)).write(nuevos)
         if 'identification_id' in vals:
-            for employee in self:
+            for employee in self._ne_solo_colombia():
                 if (
                     employee.identification_id
                     and employee.work_contact_id

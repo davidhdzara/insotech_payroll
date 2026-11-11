@@ -920,10 +920,15 @@ class HrPayslip(models.Model):
                         att=att.display_name, tipo=code,
                         empleado=slip.employee_id.name))
 
+    def _ne_solo_colombia(self):
+        """Los recibos de companias colombianas (ver res.company._ne_es_colombia)."""
+        return self.filtered(lambda s: s.company_id._ne_es_colombia())
+
     def compute_sheet(self):
-        self._ne_validar_terceros_attachments()
+        colombia = self._ne_solo_colombia()
+        colombia._ne_validar_terceros_attachments()
         res = super().compute_sheet()
-        self._ne_validar_terceros_deducciones()
+        colombia._ne_validar_terceros_deducciones()
         return res
 
     # ──────────────────────────────────────────────────────────────────
@@ -1034,11 +1039,12 @@ class HrPayslip(models.Model):
         Sobrescribe la confirmación de la nómina para asignar el consecutivo
         temporal PRE-NOM al número del payslip en Odoo.
         """
-        self._ne_validar_sin_solape()
+        colombia = self._ne_solo_colombia()
+        colombia._ne_validar_sin_solape()
         res = super(HrPayslip, self).action_payslip_done()
-        self._ne_aplicar_libranzas()
-        self._ne_refrescar_ibc_mensual()
-        for rec in self:
+        colombia._ne_aplicar_libranzas()
+        colombia._ne_refrescar_ibc_mensual()
+        for rec in colombia:
             company = rec.company_id
             if company.l10n_co_ne_pre_sequence_id:
                 if not rec.l10n_co_ne_consecutive or rec.l10n_co_ne_consecutive.startswith('PRE-NOM'):
@@ -1705,6 +1711,7 @@ class HrPayslip(models.Model):
         now = fields.Datetime.now()
         companies = self.env['res.company'].sudo().search([
             ('l10n_co_ne_hab_state', '!=', 'running'),
+            ('partner_id.country_id.code', '=', 'CO'),
         ])
         for company in companies:
             # El motor de habilitación ya reconsulta sus propios 'sent' en su propio cron
@@ -3965,13 +3972,15 @@ class HrPayslip(models.Model):
         return 'ne_%s_%s.xml' % (nit, self.l10n_co_ne_consecutive or 'DRAFT')
 
     def action_payslip_draft(self):
-        self._ne_aplicar_libranzas(revertir=True)
+        colombia = self._ne_solo_colombia()
+        colombia._ne_aplicar_libranzas(revertir=True)
         res = super().action_payslip_draft()
-        self._ne_refrescar_ibc_mensual()
+        colombia._ne_refrescar_ibc_mensual()
         return res
 
     def action_payslip_cancel(self):
-        self._ne_aplicar_libranzas(revertir=True)
+        colombia = self._ne_solo_colombia()
+        colombia._ne_aplicar_libranzas(revertir=True)
         res = super().action_payslip_cancel()
-        self._ne_refrescar_ibc_mensual()
+        colombia._ne_refrescar_ibc_mensual()
         return res

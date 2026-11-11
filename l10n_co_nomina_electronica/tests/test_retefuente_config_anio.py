@@ -16,7 +16,7 @@ class TestRetefuenteConfigAnio(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({
+        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 
             'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real',
             'name': 'Compañía de Prueba Config Retención'})
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({

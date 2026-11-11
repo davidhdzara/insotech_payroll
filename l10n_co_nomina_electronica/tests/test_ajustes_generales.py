@@ -14,7 +14,7 @@ class TestAjustesGenerales(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'name': 'Compañía Ajustes Generales'})
+        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 'name': 'Compañía Ajustes Generales'})
         Partner = cls.env['res.partner']
         cls.comfama = Partner.create({'name': 'Comfama', 'l10n_co_entity_type': 'ccf'})
         cls.comfenalco = Partner.create({'name': 'Comfenalco', 'l10n_co_entity_type': 'ccf'})

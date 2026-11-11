@@ -23,7 +23,7 @@ class TestHabilitacionEngine(TransactionCase):
         super().setUpClass()
         # Compañía dedicada y descartable (nunca modificar self.env.company: la build de
         # Odoo.sh corre sobre una copia de la BD real).
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía de Prueba Habilitación NE'})
+        cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía de Prueba Habilitación NE'})
         co_country = cls.env['res.country'].search([('code', '=', 'CO')], limit=1) or cls.env.ref('base.co')
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura Habilitación', 'country_id': co_country.id})
