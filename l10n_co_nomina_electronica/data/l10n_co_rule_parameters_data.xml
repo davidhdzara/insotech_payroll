@@ -359,6 +359,21 @@ escriba <strong>10</strong> para representar "10 SMMLV". Valor vigente: <strong>
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
+    <record id="rule_parameter_aviso_anio_siguiente_desde_mes" model="hr.rule.parameter">
+        <field name="name">Colombia: Aviso de Parámetros del Año Siguiente (Desde el Mes)</field>
+        <field name="code">l10n_co_aviso_anio_siguiente_desde_mes</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Mes del año (1 a 12) desde el cual el panel de Nómina avisa si faltan el SMMLV, la UVT, el auxilio de
+transporte y la configuración de retención en la fuente del AÑO SIGUIENTE, para cargarlos antes de enero.</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número del mes: escriba <strong>11</strong> para "desde noviembre". Valor vigente: <strong>11</strong>.</p></field>
+    </record>
+    <record id="rule_parameter_aviso_anio_siguiente_desde_mes_2024" model="hr.rule.parameter.value">
+        <field name="parameter_value">11</field>
+        <field name="rule_parameter_id" ref="rule_parameter_aviso_anio_siguiente_desde_mes"/>
+        <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
+    </record>
+
     <record id="rule_parameter_piso_salario_integral_smmlv" model="hr.rule.parameter">
         <field name="name">Colombia: Piso Salario Integral (SMMLV)</field>
         <field name="code">l10n_co_piso_salario_integral_smmlv</field>
