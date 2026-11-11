@@ -503,6 +503,15 @@ class L10nCoRetefuenteUvt(models.Model):
     # Helpers
     # ══════════════════════════════════════════════════════════════════
     @api.model
+    def _ne_config_del_anio(self, year, company):
+        """Configuracion del anio para la compania: la propia de la compania y, si no tiene, la
+        COMPARTIDA (company_id vacio). Nunca la de otra compania. Dos busquedas en vez de un
+        orden: con ORDER BY company_id DESC los vacios (NULL) irian primero en PostgreSQL."""
+        propia = self.search([('year', '=', str(year)), ('company_id', '=', company.id)], limit=1)
+        return propia or self.search(
+            [('year', '=', str(year)), ('company_id', '=', False)], limit=1)
+
+    @api.model
     def get_uvt_for_year(self, year, company=None):
         """Obtiene el registro de UVT vigente para un año fiscal y compañía.
 
@@ -512,13 +521,7 @@ class L10nCoRetefuenteUvt(models.Model):
         :raises UserError: si no se encuentra configuración para el año.
         """
         company = company or self.env.company
-        domain = [
-            ('year', '=', str(year)),
-            '|',
-            ('company_id', '=', company.id),
-            ('company_id', '=', False),
-        ]
-        uvt_rec = self.search(domain, limit=1, order='company_id desc')
+        uvt_rec = self._ne_config_del_anio(year, company)
         if not uvt_rec:
             raise UserError(_(
                 'No se encontró configuración de UVT para el año %(year)s. '

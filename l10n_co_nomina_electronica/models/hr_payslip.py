@@ -2503,11 +2503,7 @@ class HrPayslip(models.Model):
         de retencion se omitian en silencio y la nomina salia sin retencion (.167)."""
         self.ensure_one()
         anio = str(self._ne_fecha_parametros().year)
-        Config = self.env['l10n.co.retefuente.uvt']
-        config = Config.search(
-            [('year', '=', anio), ('company_id', '=', self.company_id.id)], limit=1)
-        if not config:
-            config = Config.search([('year', '=', anio)], limit=1)
+        config = self.env['l10n.co.retefuente.uvt']._ne_config_del_anio(anio, self.company_id)
         if not config:
             raise UserError(_(
                 'No hay configuración de retención en la fuente para el año %(anio)s de la '
