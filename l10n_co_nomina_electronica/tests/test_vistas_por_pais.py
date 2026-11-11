@@ -45,3 +45,20 @@ class TestVistasPorPais(TransactionCase):
                       'action_create_elimination'):
             self.assertIn("country_code != 'CO'", self._invisible(
                 arch, "//button[@name='%s']" % boton), boton)
+
+    def test_pestanas_de_retencion_y_deducciones_del_contrato_se_ocultan(self):
+        arch = self._arch('hr.contract')
+        for pagina in ('retefuente_procedimiento', 'deducciones_fijas'):
+            self.assertIn("country_code != 'CO'", self._invisible(
+                arch, "//page[@name='%s']" % pagina), pagina)
+
+    def test_regla_salarial_y_asignacion_ocultan_lo_colombiano_fuera_de_colombia(self):
+        regla = self._arch('hr.salary.rule')
+        self.assertIn("l10n_co_struct_country_code != 'CO'", self._invisible(
+            regla, "//page[@name='clasificacion_colombia']"))
+        asignacion = self._arch('hr.salary.attachment')
+        for campo in ('l10n_co_embargo_porcentaje', 'l10n_co_partner_id', 'l10n_co_embargo_juzgado',
+                      'l10n_co_saldo_pendiente', 'l10n_co_autoriza_liquidacion',
+                      'l10n_co_alcanza_prestaciones', 'l10n_co_alcanza_indemnizacion'):
+            self.assertIn("l10n_co_company_country_code != 'CO'", self._invisible(
+                asignacion, "//field[@name='%s']" % campo), campo)

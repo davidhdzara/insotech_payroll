@@ -28,6 +28,10 @@ class HrSalaryAttachment(models.Model):
 
     _inherit = 'hr.salary.attachment'
 
+    l10n_co_company_country_code = fields.Char(
+        related='company_id.country_id.code', string='País de la compañía',
+        help='Solo para ocultar en la vista lo colombiano fuera de Colombia.')
+
     l10n_co_embargo_porcentaje = fields.Float(
         string='Porcentaje (%)',
         help='Porcentaje del salario neto a embargar. Si se deja en 0, se '

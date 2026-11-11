@@ -8,7 +8,9 @@
         <field name="priority">99</field>
         <field name="arch" type="xml">
             <xpath expr="//notebook" position="inside">
-                <page string="Clasificación Colombia" name="clasificacion_colombia">
+                <page string="Clasificación Colombia" name="clasificacion_colombia"
+                      invisible="l10n_co_struct_country_code != 'CO'">
+                    <field name="l10n_co_struct_country_code" invisible="1"/>
 
                     <group string="Concepto DIAN - Nómina Electrónica" name="dian_concept">
                         <group>

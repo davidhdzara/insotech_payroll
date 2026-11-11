@@ -11,7 +11,8 @@
         <field name="priority">100</field>
         <field name="arch" type="xml">
             <xpath expr="//notebook" position="inside">
-                <page string="Retención en la Fuente" name="retefuente_procedimiento">
+                <page string="Retención en la Fuente" name="retefuente_procedimiento"
+                      invisible="country_code != 'CO'">
                     <group string="Procedimiento" name="retefuente_procedure">
                         <field name="l10n_co_ne_retention_procedure"/>
                     </group>

@@ -36,6 +36,10 @@ class HrSalaryRule(models.Model):
 
     _inherit = 'hr.salary.rule'
 
+    l10n_co_struct_country_code = fields.Char(
+        related='struct_id.country_id.code', string='País de la estructura',
+        help='Solo para ocultar en la vista lo colombiano fuera de Colombia.')
+
     # ──────────────────────────────────────────────────────────────────
     # Concepto DIAN para el XML de nómina electrónica
     # ──────────────────────────────────────────────────────────────────
