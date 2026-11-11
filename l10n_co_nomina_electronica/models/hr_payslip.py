@@ -3100,7 +3100,17 @@ class HrPayslip(models.Model):
         if dias <= 0:
             return 0.0
         dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
-        return self._ne_ultimo_ibc_anterior(contract) / dias_mes * dias
+        tramo_ini = self._ne_tramo_pagable_periodo()[0]
+        if tramo_ini != self.date_from:
+            # Liquidacion (H-168): no tiene historial propio; la base es el ultimo IBC de la
+            # nomina general del contrato antes del tramo (mismo criterio que sus vacaciones).
+            ultimo_ibc = self._ne_ultimo_ibc_anterior(
+                contract,
+                estructura=self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina'),
+                antes_de=tramo_ini)
+        else:
+            ultimo_ibc = self._ne_ultimo_ibc_anterior(contract)
+        return ultimo_ibc / dias_mes * dias
 
     def _ne_ibc_limites(self, salarial, incap, remuneracion, pactados, dias):
         """IBC del recibo con regla del 40%, techo (sin prorratear) y piso (prorrateado

@@ -786,6 +786,19 @@ Para contrato indefinido: no requiere ningun input, el calculo diferencia entre 
             <field name="note">Pagos no salariales por pacto.</field>
         </record>
 
+        <record id="hr_salary_rule_co_liq_ibc_sln" model="hr.salary.rule">
+            <field name="name">IBC Suspension / Licencia No Remunerada Liquidacion (interno)</field>
+            <field name="code">CO_IBC_SLN</field>
+            <field name="sequence">88</field>
+            <field name="category_id" ref="hr_salary_rule_category_acumuladores_internos"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">none</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_sln(contract)</field>
+            <field name="appears_on_payslip" eval="False"/>
+            <field name="note">Base de los dias SLN del tramo del ultimo mes (ultimo IBC de la nomina general antes del tramo, prorrateado por dias). Solo salud y pension; el empleador asume el 100% (igual que la nomina general, H-168).</field>
+        </record>
+
         <record id="hr_salary_rule_co_liq_ibc_incap" model="hr.salary.rule">
             <field name="name">IBC Incapacidades y Licencias MP Liquidacion (interno)</field>
             <field name="code">CO_IBC_INCAP</field>
@@ -810,7 +823,7 @@ Para contrato indefinido: no requiere ningun input, el calculo diferencia entre 
             <field name="amount_python_compute">
 _r = result_rules
 result = payslip._ne_ibc_limites(
-    _r['CO_IBC_SALARIAL']['total'], _r['CO_IBC_INCAP']['total'],
+    _r['CO_IBC_SALARIAL']['total'], _r['CO_IBC_INCAP']['total'] + _r['CO_IBC_SLN']['total'],
     _r['CO_IBC_REMUN']['total'], _r['CO_IBC_PACTADOS']['total'], _r['CO_DIAS_SP']['total'])
             </field>
             <field name="appears_on_payslip" eval="False"/>
@@ -828,7 +841,8 @@ result = payslip._ne_ibc_limites(
             <field name="amount_python_compute">
 # Descuento salud sobre IBC (devengados salariales)
 # En la liquidacion, el IBC incluye los salarios pendientes
-_ibc = result_rules['CO_IBC_SP']['total']  # IBC unico de la liquidacion (H-017b)
+# En SLN el trabajador no paga su cuota ni nadie la asume (H-168: igual que la nomina general).
+_ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])
 result = -abs(_ibc)
 result_rate = payslip._rule_parameter('l10n_co_pct_salud_empleado', payslip.date_to)
             </field>
@@ -851,7 +865,8 @@ result = not employee.l10n_co_ne_foreigner_no_pension
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Descuento pension sobre IBC
-_ibc = result_rules['CO_IBC_SP']['total']  # IBC unico de la liquidacion (H-017b)
+# En SLN el trabajador no paga su cuota ni nadie la asume (H-168: igual que la nomina general).
+_ibc = max(0.0, result_rules['CO_IBC_SP']['total'] - result_rules['CO_IBC_SLN']['total'])
 result = -abs(_ibc)
 result_rate = payslip._rule_parameter('l10n_co_pct_pension_empleado', payslip.date_to)
             </field>
