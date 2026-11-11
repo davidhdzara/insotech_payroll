@@ -13,6 +13,9 @@ V1.0, sección 6.2.8, atributos TipoContrato y SalarioIntegral.
 """
 
 from odoo import api, fields, models, _
+from odoo.exceptions import UserError
+
+from .res_company import NE_CLASES_RIESGO
 
 
 class HrContract(models.Model):
@@ -93,19 +96,15 @@ class HrContract(models.Model):
         help='Marcar si el trabajador tiene salario variable.',
     )
     l10n_co_pila_clase_riesgo = fields.Selection(
-        selection=[
-            ('1', 'I - Riesgo Mínimo'),
-            ('2', 'II - Riesgo Bajo'),
-            ('3', 'III - Riesgo Medio'),
-            ('4', 'IV - Riesgo Alto'),
-            ('5', 'V - Riesgo Máximo'),
-        ],
+        selection=NE_CLASES_RIESGO,
         string='Clase de Riesgo ARL',
-        default='1',
+        help='Solo si este contrato tiene una clase distinta de la general de la empresa '
+             '(Nómina > Configuración > Ajustes). Vacío: se usa la general.',
     )
     l10n_co_pila_centro_trabajo = fields.Char(
         string='Centro de Trabajo',
-        help='Código del centro de trabajo para ARL.',
+        help='Código del centro de trabajo para ARL. Vacío: se usa el general de la empresa '
+             '(Nómina > Configuración > Ajustes).',
     )
     l10n_co_pila_actividad_economica = fields.Many2one(
         'l10n.co.pila.ciiu',
@@ -123,6 +122,31 @@ class HrContract(models.Model):
         string='Tarifa Especial AFP',
         help='Tarifa especial de AFP si aplica.',
     )
+
+    def _ne_clase_riesgo(self):
+        """Clase de riesgo ARL efectiva: la del contrato y, si no tiene, la general de la
+        empresa. Única fuente para el aporte ARL y para PILA. Sin ninguna: UserError."""
+        self.ensure_one()
+        clase = self.l10n_co_pila_clase_riesgo or self.company_id.l10n_co_pila_clase_riesgo
+        if not clase:
+            raise UserError(_(
+                'No hay Clase de Riesgo ARL para el contrato de %(employee)s: ni el contrato '
+                '(pestaña PILA) ni la empresa %(company)s (Nómina > Configuración > Ajustes, '
+                'bloque PILA) la tienen configurada.',
+                employee=self.employee_id.name, company=self.company_id.name))
+        return clase
+
+    def _ne_centro_trabajo(self):
+        """Centro de trabajo ARL efectivo (contrato -> empresa). Sin ninguno: UserError."""
+        self.ensure_one()
+        centro = self.l10n_co_pila_centro_trabajo or self.company_id.l10n_co_pila_centro_trabajo
+        if not centro:
+            raise UserError(_(
+                'No hay Centro de Trabajo ARL para el contrato de %(employee)s: ni el contrato '
+                '(pestaña PILA) ni la empresa %(company)s (Nómina > Configuración > Ajustes, '
+                'bloque PILA) lo tienen configurado.',
+                employee=self.employee_id.name, company=self.company_id.name))
+        return centro
 
     @api.onchange('l10n_co_pila_actividad_economica')
     def _onchange_pila_actividad_economica(self):

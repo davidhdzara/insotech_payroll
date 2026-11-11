@@ -31,7 +31,7 @@ class TestLiquidacionWizardDeparture(TransactionCase):
         super().setUpClass()
         # Compañía dedicada y descartable (ver AUD-DIAN-34 en test_dian_matching.py: la build
         # de Odoo.sh corre los tests sobre una COPIA de la BD real de Guapante).
-        cls.company = cls.env['res.company'].create({
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
             'name': 'Compañía de Prueba Retiro RRHH',
         })
         co_country = cls.env['res.country'].search([('code', '=', 'CO')], limit=1)

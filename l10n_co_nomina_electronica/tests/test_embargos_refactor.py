@@ -12,7 +12,7 @@ class TestEmbargosRefactor(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'name': 'Compañía Embargos Refactor'})
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'name': 'Compañía Embargos Refactor'})
         cls.env = cls.company.with_company(cls.company).env
         cls.employee = cls.env['hr.employee'].create({
             'name': 'Empleado Embargos', 'company_id': cls.company.id})

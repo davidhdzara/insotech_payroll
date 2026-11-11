@@ -42,7 +42,7 @@ class TestNotaAjusteEliminar(TransactionCase):
         super().setUpClass()
         co = cls.env.ref('base.co')
         cop = cls.env['res.currency'].search([('name', '=', 'COP')], limit=1)
-        cls.company = cls.env['res.company'].create({
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
             'name': 'Compañía de Prueba Eliminar',
             'currency_id': cop.id,
             'vat': '900123456-7',

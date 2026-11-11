@@ -21,7 +21,7 @@ class TestArlClaseRiesgo(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'name': 'Compañía de Prueba ARL Clase de Riesgo'})
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'name': 'Compañía de Prueba ARL Clase de Riesgo'})
         cls.env = cls.company.with_company(cls.company).env
         co = cls.env.ref('base.co')
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
@@ -92,6 +92,7 @@ class TestArlClaseRiesgo(TransactionCase):
     def test_sin_clase_levanta_usererror_y_nombra_al_empleado(self):
         payslip = self._payslip('1')
         payslip.contract_id.l10n_co_pila_clase_riesgo = False
+        payslip.company_id.l10n_co_pila_clase_riesgo = False  # .161: tampoco hay general
         with self.assertRaises(UserError) as exc:
             payslip._ne_pct_arl()
         self.assertIn(payslip.employee_id.name, str(exc.exception))

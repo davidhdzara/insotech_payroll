@@ -337,10 +337,15 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                     )
 
             # Validar código CCF
-            if not getattr(emp, 'l10n_co_pila_ccf_code', None):
-                errors.append(
-                    '- %s: Falta CCF o el contacto no tiene Codigo PILA.' % emp_name
-                )
+            try:
+                ccf = emp._ne_caja_compensacion()
+            except UserError as err:
+                errors.append('- %s: %s' % (emp_name, err.args[0]))
+            else:
+                if not ccf.l10n_co_pila_entity_code:
+                    errors.append(
+                        '- %s: La Caja de Compensación no tiene Codigo PILA.' % emp_name
+                    )
 
             # Validar número de identificación
             if not emp.identification_id:
@@ -865,8 +870,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 employee, 'l10n_co_pila_eps_code', '') or '',
             'codigo_eps_traslado': getattr(
                 employee, 'l10n_co_pila_eps_traslado', '') or '',
-            'codigo_ccf': getattr(
-                employee, 'l10n_co_pila_ccf_code', '') or '',
+            'codigo_ccf': employee._ne_caja_compensacion().l10n_co_pila_entity_code or '',
 
             # Días cotizados
             'dias_pension': dias_pension,
@@ -905,8 +909,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
 
             # ARL
             'tarifa_arl': tarifa_arl,
-            'centro_trabajo': getattr(
-                contract, 'l10n_co_pila_centro_trabajo', '') or '',
+            'centro_trabajo': contract._ne_centro_trabajo(),
             'cotizacion_arl': cotizacion_arl,
 
             # Parafiscales
@@ -929,8 +932,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             # ARL detalle
             'codigo_arl': getattr(
                 self.company_id, 'l10n_co_pila_arl_code', '') or '',
-            'clase_riesgo': getattr(
-                contract, 'l10n_co_pila_clase_riesgo', '1') or '1',
+            'clase_riesgo': contract._ne_clase_riesgo(),
             'tarifa_especial_pension': getattr(
                 contract, 'l10n_co_pila_tarifa_especial_afp', '') or '',
 

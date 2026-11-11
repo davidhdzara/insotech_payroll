@@ -24,6 +24,7 @@ from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 
 from ..services import dian_utils
+from .res_company import NE_MEDIOS_PAGO
 
 
 class HrEmployee(models.Model):
@@ -108,6 +109,44 @@ class HrEmployee(models.Model):
         particulas = {p.strip().lower() for p in raw.split(',') if p.strip()}
         partes = dian_utils.split_name(full_name or '', particulas)
         return {campo: partes[clave] for clave, campo in self._L10N_CO_CAMPOS_NOMBRE.items()}
+
+    def _ne_caja_compensacion(self):
+        """Caja de Compensación efectiva (res.partner). Única fuente para el asiento por
+        tercero y para PILA.
+
+        Con "¿Maneja empleados en diferentes ciudades?" activa en la empresa, es la del empleado
+        y es obligatoria (sin ella: error, sin caer a la general). Desactivada, es siempre la
+        general de la empresa. Sin dato: UserError que nombra al empleado/empresa y el campo."""
+        self.ensure_one()
+        company = self.company_id
+        if company.l10n_co_pila_ccf_por_empleado:
+            if not self.l10n_co_pila_ccf_id:
+                raise UserError(_(
+                    'El empleado %(employee)s no tiene Caja de Compensación y la empresa '
+                    '%(company)s maneja la caja por empleado. Complétela en la pestaña '
+                    'Nómina Colombia del empleado.',
+                    employee=self.name, company=company.name))
+            return self.l10n_co_pila_ccf_id
+        if not company.l10n_co_pila_ccf_id:
+            raise UserError(_(
+                'La empresa %(company)s no tiene Caja de Compensación general (Nómina > '
+                'Configuración > Ajustes, bloque PILA). Se necesita para el empleado '
+                '%(employee)s.',
+                company=company.name, employee=self.name))
+        return company.l10n_co_pila_ccf_id
+
+    def _ne_medio_pago(self):
+        """Medio de pago efectivo (código DIAN '1'/'2'/'10'): el del empleado y, si no tiene, el
+        general de la empresa. Sin ninguno: UserError (nunca se asume Transferencia)."""
+        self.ensure_one()
+        metodo = self.l10n_co_ne_payment_method or self.company_id.l10n_co_ne_payment_method
+        if not metodo:
+            raise UserError(_(
+                'No hay Medio de Pago para el empleado %(employee)s: ni el empleado ni la '
+                'empresa %(company)s (Nómina > Configuración > Ajustes, bloque Parámetros '
+                'Nómina Colombia) lo tienen configurado.',
+                employee=self.name, company=self.company_id.name))
+        return metodo
 
     def _l10n_co_nombre_dian(self):
         """Los 4 datos de nombre para XML/PILA/UGPP, desde los campos (única fuente).
@@ -296,17 +335,12 @@ class HrEmployee(models.Model):
     # de esta sección: no tiene equivalente nativo verificado.
     # ──────────────────────────────────────────────────────────────────
     l10n_co_ne_payment_method = fields.Selection(
-        selection=[
-            ('1', 'Transferencia Bancaria'),
-            ('2', 'Cheque'),
-            ('10', 'Efectivo'),
-        ],
+        selection=NE_MEDIOS_PAGO,
         string='Método de Pago',
-        default='1',
-        help='Método de pago de la nómina al trabajador. Se refleja en '
-             'el atributo Metodo del nodo <Pago> del XML. La cuenta '
-             'bancaria se elige en "Información privada" (Cuenta '
-             'Bancaria).',
+        help='Solo si este empleado se paga distinto al medio general de la empresa '
+             '(Nómina > Configuración > Ajustes). Vacío: se usa el general. Se refleja en el '
+             'atributo Metodo del nodo <Pago> del XML. La cuenta bancaria se elige en '
+             '"Información privada" (Cuenta Bancaria).',
     )
 
     # ──────────────────────────────────────────────────────────────────
@@ -349,6 +383,8 @@ class HrEmployee(models.Model):
         domain=[('l10n_co_entity_type', '=', 'ccf')],
         help='Contacto de la Caja de Compensación Familiar del empleado.',
     )
+    l10n_co_pila_ccf_por_empleado = fields.Boolean(
+        related='company_id.l10n_co_pila_ccf_por_empleado', string='Caja por empleado')
     l10n_co_pila_eps_code = fields.Char(
         string='Código EPS', related='l10n_co_pila_eps_id.l10n_co_pila_entity_code',
         help='Código PILA derivado del contacto de la EPS.',

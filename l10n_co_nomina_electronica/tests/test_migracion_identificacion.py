@@ -37,7 +37,7 @@ class TestMigracionIdentificacion(TransactionCase):
         # Compañía dedicada y descartable (ver AUD-DIAN-34 en
         # test_dian_matching.py), colombiana -- el backfill del tipo solo
         # aplica a compañías colombianas.
-        cls.company = cls.env['res.company'].create({
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
             'name': 'Compañía de Prueba Migración Identificación',
         })
         cls.co_country = cls.env.ref('base.co')

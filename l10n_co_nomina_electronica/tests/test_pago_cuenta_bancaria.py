@@ -26,7 +26,7 @@ class TestPagoCuentaBancaria(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
             'name': 'Compañía de Prueba Pago Cuenta Bancaria',
         })
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
@@ -145,7 +145,8 @@ class TestPagoCuentaBancaria(TransactionCase):
         employee = self.env['hr.employee'].create({
             'name': 'Empleado Nuevo Sin Cuenta', 'company_id': self.company.id,
         })
-        self.assertEqual(employee.l10n_co_ne_payment_method, '1')
+        # .161: sin valor por defecto silencioso; el medio efectivo sale de la empresa.
+        self.assertFalse(employee.l10n_co_ne_payment_method)
         self.assertFalse(employee.bank_account_id)
         # y cambiarlo después a Transferencia explícita tampoco falla
         employee.l10n_co_ne_payment_method = '10'

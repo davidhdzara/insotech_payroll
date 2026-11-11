@@ -14,7 +14,7 @@ class TestEstructurasSinDiasTrabajados(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'name': 'Compañía de Prueba Sin Días'})
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'name': 'Compañía de Prueba Sin Días'})
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura Sin Días', 'country_id': cls.env.ref('base.co').id})
         cls.est_prima = cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_prima')

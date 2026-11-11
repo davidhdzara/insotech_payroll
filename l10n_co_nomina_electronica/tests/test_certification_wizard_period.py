@@ -28,7 +28,7 @@ class TestCertificationWizardPeriod(TransactionCase):
         # -- sin esto, el fallback de esta prueba podría chocar con payslips
         # 'done' reales de la compañía por defecto en la copia de la BD de
         # staging/Guapante sobre la que corre la build.
-        cls.company = cls.env['res.company'].create({
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
             'name': 'Compañía de Prueba Periodo Habilitación',
         })
         co_country = cls.env['res.country'].search([('code', '=', 'CO')], limit=1)

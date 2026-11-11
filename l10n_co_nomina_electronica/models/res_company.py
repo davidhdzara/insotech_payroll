@@ -21,6 +21,20 @@ from odoo.tools.misc import str2bool
 
 from ..services import dian_utils
 
+# Selecciones compartidas entre la empresa (valor general) y el contrato/empleado (excepción).
+NE_CLASES_RIESGO = [
+    ('1', 'I - Riesgo Mínimo'),
+    ('2', 'II - Riesgo Bajo'),
+    ('3', 'III - Riesgo Medio'),
+    ('4', 'IV - Riesgo Alto'),
+    ('5', 'V - Riesgo Máximo'),
+]
+NE_MEDIOS_PAGO = [
+    ('1', 'Transferencia Bancaria'),
+    ('2', 'Cheque'),
+    ('10', 'Efectivo'),
+]
+
 
 class ResCompany(models.Model):
     """Configuración de la empresa para Nómina Electrónica DIAN."""
@@ -415,6 +429,58 @@ class ResCompany(models.Model):
         string='Código Operador PILA',
         help='Código del operador de información PILA (ej: 89 para Enlace).',
     )
+
+    # ──────────────────────────────────────────────────────────────────
+    # H-161: valores GENERALES de la empresa, con excepción por empleado/contrato.
+    # El valor efectivo se resuelve siempre con los métodos _ne_* de hr.employee y
+    # hr.contract (empleado/contrato -> empresa); sin valor, error nombrado.
+    # ──────────────────────────────────────────────────────────────────
+    l10n_co_pila_ccf_por_empleado = fields.Boolean(
+        string='¿Maneja empleados en diferentes ciudades?',
+        default=False,
+        help='Si está activa, la Caja de Compensación se elige por empleado (y es obligatoria '
+             'en cada uno). Si no, toda la empresa usa la Caja de Compensación general.',
+    )
+    l10n_co_pila_ccf_id = fields.Many2one(
+        'res.partner', string='Caja de Compensación general',
+        domain=[('l10n_co_entity_type', '=', 'ccf')],
+        help='Contacto de la Caja de Compensación Familiar de toda la empresa.',
+    )
+    l10n_co_pila_clase_riesgo = fields.Selection(
+        selection=NE_CLASES_RIESGO, string='Clase de Riesgo ARL general',
+        help='Clase de riesgo ARL de la empresa. Un contrato puede tener otra clase propia '
+             '(pestaña PILA del contrato).',
+    )
+    l10n_co_pila_centro_trabajo = fields.Char(
+        string='Centro de Trabajo ARL general',
+        help='Código del centro de trabajo ARL de la empresa. Un contrato puede tener otro '
+             'propio (pestaña PILA del contrato).',
+    )
+    l10n_co_ne_payment_method = fields.Selection(
+        selection=NE_MEDIOS_PAGO, string='Medio de Pago general',
+        help='Medio de pago de la nómina de la empresa (atributo Metodo del nodo <Pago> del '
+             'XML). Un empleado puede tener otro propio.',
+    )
+
+    def write(self, vals):
+        if 'l10n_co_pila_ccf_por_empleado' in vals and not vals['l10n_co_pila_ccf_por_empleado']:
+            for company in self.filtered('l10n_co_pila_ccf_por_empleado'):
+                general = (
+                    vals['l10n_co_pila_ccf_id'] if 'l10n_co_pila_ccf_id' in vals
+                    else company.l10n_co_pila_ccf_id.id)
+                distintos = self.env['hr.employee'].sudo().with_context(active_test=False).search_count([
+                    ('company_id', '=', company.id),
+                    ('l10n_co_pila_ccf_id', '!=', False),
+                    ('l10n_co_pila_ccf_id', '!=', general or False),
+                ])
+                if distintos:
+                    raise ValidationError(_(
+                        'No se puede desactivar "¿Maneja empleados en diferentes ciudades?" en '
+                        '%(company)s: %(n)s empleado(s) tienen una Caja de Compensación distinta '
+                        'de la general. Deje a esos empleados con la caja general (o elija como '
+                        'general la que corresponde) y vuelva a intentarlo.',
+                        company=company.name, n=distintos))
+        return super().write(vals)
 
     # ──────────────────────────────────────────────────────────────────
     # Computes

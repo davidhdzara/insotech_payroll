@@ -107,6 +107,11 @@ class ResConfigSettings(models.TransientModel):
     l10n_co_pila_codigo_sucursal = fields.Char(related='company_id.l10n_co_pila_codigo_sucursal', readonly=False)
     l10n_co_pila_nombre_sucursal = fields.Char(related='company_id.l10n_co_pila_nombre_sucursal', readonly=False)
     l10n_co_pila_operador_code = fields.Char(related='company_id.l10n_co_pila_operador_code', readonly=False)
+    l10n_co_pila_ccf_por_empleado = fields.Boolean(related='company_id.l10n_co_pila_ccf_por_empleado', readonly=False)
+    l10n_co_pila_ccf_id = fields.Many2one(related='company_id.l10n_co_pila_ccf_id', readonly=False)
+    l10n_co_pila_clase_riesgo = fields.Selection(related='company_id.l10n_co_pila_clase_riesgo', readonly=False)
+    l10n_co_pila_centro_trabajo = fields.Char(related='company_id.l10n_co_pila_centro_trabajo', readonly=False)
+    l10n_co_ne_payment_method = fields.Selection(related='company_id.l10n_co_ne_payment_method', readonly=False)
 
     # Cuentas Predeterminadas -- Diarios por Estructura Salarial (doc 36 v2)
     l10n_co_ne_journal_nomina_id = fields.Many2one('account.journal', string='Diario — Nómina General')

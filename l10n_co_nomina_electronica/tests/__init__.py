@@ -54,3 +54,4 @@ from . import test_nombres_empleado
 from . import test_ugpp_dias
 from . import test_recibos_solapados
 from . import test_sln_aportes
+from . import test_ajustes_generales

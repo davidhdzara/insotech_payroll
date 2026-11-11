@@ -24,7 +24,7 @@ class TestLiquidacionFechaParametros(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
             'name': 'Compañía de Prueba Fecha Parámetros Liquidación'})
         co_country = cls.env.ref('base.co')
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({

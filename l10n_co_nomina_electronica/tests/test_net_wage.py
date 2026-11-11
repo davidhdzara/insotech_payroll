@@ -17,7 +17,7 @@ class TestNetWage(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'name': 'Compañía de Prueba Net Wage'})
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'name': 'Compañía de Prueba Net Wage'})
         cls.env = cls.company.with_company(cls.company).env
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura Net Wage',

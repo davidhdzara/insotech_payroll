@@ -65,7 +65,10 @@
                     <group>
                         <field name="l10n_co_pila_eps_id" options="{'no_create': True}"/>
                         <field name="l10n_co_pila_afp_id" options="{'no_create': True}"/>
-                        <field name="l10n_co_pila_ccf_id" options="{'no_create': True}"/>
+                        <field name="l10n_co_pila_ccf_por_empleado" invisible="1"/>
+                        <field name="l10n_co_pila_ccf_id" options="{'no_create': True}"
+                               invisible="not l10n_co_pila_ccf_por_empleado"
+                               required="l10n_co_pila_ccf_por_empleado"/>
                     </group>
                     <group>
                         <field name="l10n_co_pila_afp_traslado"/>

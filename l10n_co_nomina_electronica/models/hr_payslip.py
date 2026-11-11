@@ -965,6 +965,8 @@ class HrPayslip(models.Model):
                     regla=line.name, reparto=sum(filas.mapped('amount')),
                     linea=abs(line.total), nomina=self.display_name))
             return [(f.partner_id, f.amount) for f in filas]
+        if origen == 'employee_ccf':
+            return [(self.employee_id._ne_caja_compensacion(), 1.0)]
         modelo, campo = self._NE_TERCERO_ORIGEN_CAMPO[origen]
         partner = self[modelo][campo]
         if not partner:
@@ -2109,7 +2111,7 @@ class HrPayslip(models.Model):
         asume la Clase I en silencio)."""
         self.ensure_one()
         contract = self.contract_id
-        clase = contract.l10n_co_pila_clase_riesgo
+        clase = contract._ne_clase_riesgo()
         codigo = self._NE_ARL_PARAMETRO_POR_CLASE.get(clase)
         if not codigo:
             raise UserError(_(
@@ -2154,7 +2156,7 @@ class HrPayslip(models.Model):
         consecutivo, para no gastar uno en un documento que no se puede armar)."""
         self.ensure_one()
         employee = self.employee_id
-        metodo = employee.l10n_co_ne_payment_method or '1'
+        metodo = employee._ne_medio_pago()
         if metodo == '1' and not employee.bank_account_id:
             raise UserError(_(
                 'El empleado %(employee)s no tiene una Cuenta Bancaria configurada '
@@ -2197,7 +2199,7 @@ class HrPayslip(models.Model):
         """
         self.ensure_one()
         employee = self.employee_id
-        metodo = employee.l10n_co_ne_payment_method or '1'
+        metodo = employee._ne_medio_pago()
         cuenta = employee.bank_account_id
         self._ne_validar_cuenta_transferencia()
         return {

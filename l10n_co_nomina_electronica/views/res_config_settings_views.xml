@@ -156,6 +156,9 @@
                         <setting help="En días de suspensión o licencia no remunerada la pensión patronal es opcional en el sector privado (Concepto Min. Protección Social 134658, CST art. 53).">
                             <field name="l10n_co_ne_pension_patronal_sln"/>
                         </setting>
+                        <setting string="Medio de Pago" help="Medio de pago de la nómina de la empresa. Un empleado puede tener otro propio (pestaña Nómina Colombia del empleado).">
+                            <field name="l10n_co_ne_payment_method"/>
+                        </setting>
                         <setting>
                             <div class="text-muted" id="l10n_co_ne_annual_params_text">
                                 Los valores de SMMLV, auxilio de transporte y UVT se configuran
@@ -169,6 +172,17 @@
                         </setting>
                         <setting string="ARL" help="Contacto de la ARL a la que está afiliada la empresa. El código PILA (ej: 14-11) se toma del contacto.">
                             <field name="l10n_co_pila_arl_id" options="{'no_create': True}"/>
+                        </setting>
+                        <setting string="Caja de Compensación" help="Si la empresa tiene empleados en diferentes ciudades, active la casilla y elija la caja en cada empleado; si no, elija aquí la caja de toda la empresa.">
+                            <field name="l10n_co_pila_ccf_por_empleado"/>
+                            <field name="l10n_co_pila_ccf_id" options="{'no_create': True}"
+                                   invisible="l10n_co_pila_ccf_por_empleado"/>
+                        </setting>
+                        <setting string="Clase de Riesgo ARL" help="Clase de riesgo de la empresa. Un contrato puede tener otra propia (pestaña PILA del contrato).">
+                            <field name="l10n_co_pila_clase_riesgo"/>
+                        </setting>
+                        <setting string="Centro de Trabajo ARL" help="Código del centro de trabajo ARL de la empresa. Un contrato puede tener otro propio (pestaña PILA del contrato).">
+                            <field name="l10n_co_pila_centro_trabajo"/>
                         </setting>
                         <setting string="SENA" help="Contacto al que se causa el aporte parafiscal al SENA.">
                             <field name="l10n_co_sena_partner_id" options="{'no_create': True}"/>
