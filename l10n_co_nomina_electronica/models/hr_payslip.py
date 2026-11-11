@@ -2487,6 +2487,28 @@ class HrPayslip(models.Model):
         return (meses * dias_mes + self._ne_dia_comercial(fecha_fin, dias_mes)
                 - self._ne_dia_comercial(fecha_ini, dias_mes) + 1)
 
+    def _ne_retefuente_config(self):
+        """Configuracion de retencion en la fuente (l10n.co.retefuente.uvt) del anio de la
+        nomina (anio de _ne_fecha_parametros: la fecha de retiro en la liquidacion). Primero la de
+        la compania del recibo; si no hay, la del anio sin compania propia (mismo criterio de
+        siempre). Sin configuracion: UserError que nombra anio y compania -- antes las reglas
+        de retencion se omitian en silencio y la nomina salia sin retencion (.167)."""
+        self.ensure_one()
+        anio = str(self._ne_fecha_parametros().year)
+        Config = self.env['l10n.co.retefuente.uvt']
+        config = Config.search(
+            [('year', '=', anio), ('company_id', '=', self.company_id.id)], limit=1)
+        if not config:
+            config = Config.search([('year', '=', anio)], limit=1)
+        if not config:
+            raise UserError(_(
+                'No hay configuración de retención en la fuente para el año %(anio)s de la '
+                'empresa %(company)s (Nómina > Configuración > Nómina Colombia > Retención en la '
+                'Fuente). Cárguela antes de calcular la nómina "%(nomina)s": sin ella no se '
+                'puede calcular la retención.',
+                anio=anio, company=self.company_id.name, nomina=self.display_name))
+        return config
+
     def _ne_fecha_parametros(self):
         """Fecha con la que se resuelven los hr.rule.parameter (SMMLV, auxilio, topes, divisores).
 

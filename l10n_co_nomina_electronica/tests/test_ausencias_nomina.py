@@ -57,6 +57,10 @@ class TestAusenciasNomina(TransactionCase):
         cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 
             'name': 'Compañía de Prueba Ausencias',
         })
+        # .167: sin configuración de retención del año el cálculo falla (antes se omitía); algunas
+        # pruebas de este archivo usan enero de 2027, que los datos no traen.
+        cls.env['l10n.co.retefuente.uvt'].create({
+            'year': '2027', 'company_id': cls.company.id, 'procedure': '1'})
         # H-013 (2026-10-08, hallazgo de Tech Lead en servidor real): la conversión nativa
         # de hr.leave a hr.work.entry filtra el resource.calendar.leaves por la compañía
         # del CONTRATO -- si el entorno de la prueba sigue en env.company (compañía 1) y

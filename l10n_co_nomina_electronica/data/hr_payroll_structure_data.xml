@@ -1106,29 +1106,15 @@ recibo ni afecta el neto.</field>
             <field name="condition_select">python</field>
             <field name="condition_python">
 # Calculo automatico de retencion en la fuente
-# Busca configuracion del ano; si no existe, no aplica
-_rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-    ('year', '=', str(payslip.date_from.year)),
-    ('company_id', '=', employee.company_id.id),
-], limit=1)
-if not _rete_cfg:
-    _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-        ('year', '=', str(payslip.date_from.year)),
-    ], limit=1)
+# Configuracion de retencion del ano; si no existe, error claro (.167: antes se omitia en silencio)
+_rete_cfg = payslip._ne_retefuente_config()  # UserError si falta la del año (.167)
 result = bool(_rete_cfg)
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Calculo automatico: Procedimiento 1 o 2 segun configuracion
 # Usa el metodo compute_retefuente() del modelo l10n.co.retefuente.uvt
-_rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-    ('year', '=', str(payslip.date_from.year)),
-    ('company_id', '=', employee.company_id.id),
-], limit=1)
-if not _rete_cfg:
-    _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-        ('year', '=', str(payslip.date_from.year)),
-    ], limit=1)
+_rete_cfg = payslip._ne_retefuente_config()  # UserError si falta la del año (.167)
 
 # Calcular IBC y bruto para la depuracion
 _gross = categories['GROSS'] if categories.get('GROSS') else contract.wage
@@ -1162,15 +1148,8 @@ La depuracion incluye: aportes obligatorios, voluntarios, AFC, dependientes, ren
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
             <field name="condition_python">
-# Misma condicion que CO_RETEFUENTE -- solo aplica si hay config de retefuente
-_rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-    ('year', '=', str(payslip.date_from.year)),
-    ('company_id', '=', employee.company_id.id),
-], limit=1)
-if not _rete_cfg:
-    _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-        ('year', '=', str(payslip.date_from.year)),
-    ], limit=1)
+# Misma configuracion que CO_RETEFUENTE (error claro si falta la del ano, .167)
+_rete_cfg = payslip._ne_retefuente_config()  # UserError si falta la del año (.167)
 result = bool(_rete_cfg)
             </field>
             <field name="amount_select">code</field>
@@ -1182,14 +1161,7 @@ result = bool(_rete_cfg)
 # patron que las reglas de provisiones (doc 18): un valor que se necesita
 # leer despues, no una deduccion real. Recalcula compute_retefuente() --
 # mismos inputs deterministicos que CO_RETEFUENTE, sin efectos secundarios.
-_rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-    ('year', '=', str(payslip.date_from.year)),
-    ('company_id', '=', employee.company_id.id),
-], limit=1)
-if not _rete_cfg:
-    _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-        ('year', '=', str(payslip.date_from.year)),
-    ], limit=1)
+_rete_cfg = payslip._ne_retefuente_config()  # UserError si falta la del año (.167)
 
 _gross = categories['GROSS'] if categories.get('GROSS') else contract.wage
 _ibc_pension = categories.get('DEV_SAL', contract.wage)
@@ -1220,15 +1192,8 @@ en meses futuros via payslip._sum().</field>
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
             <field name="condition_python">
-# Misma condicion que CO_RETEFUENTE -- solo aplica si hay config de retefuente
-_rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-    ('year', '=', str(payslip.date_from.year)),
-    ('company_id', '=', employee.company_id.id),
-], limit=1)
-if not _rete_cfg:
-    _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-        ('year', '=', str(payslip.date_from.year)),
-    ], limit=1)
+# Misma configuracion que CO_RETEFUENTE (error claro si falta la del ano, .167)
+_rete_cfg = payslip._ne_retefuente_config()  # UserError si falta la del año (.167)
 result = bool(_rete_cfg)
             </field>
             <field name="amount_select">code</field>
@@ -1256,15 +1221,8 @@ fijo de Procedimiento 2 (Art. 384 ET). No aparece en el recibo ni afecta el neto
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">python</field>
             <field name="condition_python">
-# Misma condicion que CO_RETEFUENTE -- solo aplica si hay config de retefuente
-_rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-    ('year', '=', str(payslip.date_from.year)),
-    ('company_id', '=', employee.company_id.id),
-], limit=1)
-if not _rete_cfg:
-    _rete_cfg = employee.env['l10n.co.retefuente.uvt'].search([
-        ('year', '=', str(payslip.date_from.year)),
-    ], limit=1)
+# Misma configuracion que CO_RETEFUENTE (error claro si falta la del ano, .167)
+_rete_cfg = payslip._ne_retefuente_config()  # UserError si falta la del año (.167)
 result = bool(_rete_cfg)
             </field>
             <field name="amount_select">code</field>
