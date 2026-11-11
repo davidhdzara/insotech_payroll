@@ -45,7 +45,7 @@ class TestNotaAjusteEliminar(TransactionCase):
         cls.company = cls.env['res.company'].create({'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
             'name': 'Compañía de Prueba Eliminar',
             'currency_id': cop.id,
-            'vat': '900123456-7',
+            'vat': '900123456-8',  # DV calculado: l10n_co valida el digito de verificacion del NIT
         })
         state = cls.env['res.country.state'].search([('country_id', '=', co.id)], limit=1)
         if not state:
