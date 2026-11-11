@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <data noupdate="1">
+    <data noupdate="0">
+        <!-- noupdate="0": el codigo de evaluacion de los avisos es del modulo y se actualiza con cada -u.
+             (Con noupdate="1" el cambio del .180 no llego a las BD existentes: el flag del registro en BD no
+             basta, manda el de este bloque.) -->
 
         <!--
             Advertencia en el Dashboard de Nómina cuando el año en curso no
