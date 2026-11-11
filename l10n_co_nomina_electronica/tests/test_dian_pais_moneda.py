@@ -107,6 +107,8 @@ class TestDianPaisMoneda(TransactionCase):
             'identification_id': '60' + str(self.env['hr.employee'].search_count([])),
             'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10',
+            'l10n_co_ne_worker_type': '01',  # sin default (.181)
+            'l10n_co_ne_worker_subtype': '00',
         }
         employee = self.env['hr.employee'].create(employee_vals)
         # UX-02 (2026-10-11): _ne_tipo_documento() exige un tipo de documento con

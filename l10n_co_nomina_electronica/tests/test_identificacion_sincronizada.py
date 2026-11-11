@@ -33,6 +33,7 @@ class TestIdentificacionSincronizada(TransactionCase):
 
     def _make_employee(self, name, identification_id=None, vals=None):
         create_vals = {
+            'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00',
             'name': name,
             'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10',

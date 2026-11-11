@@ -31,6 +31,16 @@ class TestAvisoAnioSiguiente(TransactionCase):
                   mode='exec', nocopy=True)
         return locales.get('warning_count', 0)
 
+    def setUp(self):
+        """Independiente de la BD: deja SMMLV, UVT y auxilio con UN valor del 1-ene-2026 y ninguno
+        entre el 1-dic-2025 y el 31-dic-2027 aparte de ese (la transaccion se revierte)."""
+        super().setUp()
+        Valor = self.env['hr.rule.parameter.value']
+        Valor.search([
+            ('code', 'in', CODES), ('date_from', '>=', datetime.date(2025, 12, 1)),
+            ('date_from', '<=', datetime.date(2027, 12, 31))]).unlink()
+        self._valores(datetime.date(2026, 1, 1))
+
     def _valores(self, fecha):
         for code in CODES:
             parametro = self.env['hr.rule.parameter'].search([('code', '=', code)], limit=1)
