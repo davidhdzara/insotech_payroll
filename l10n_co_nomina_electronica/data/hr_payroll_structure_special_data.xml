@@ -202,10 +202,11 @@ if not _rete_cfg:
     ], limit=1)
 
 _valor_prima = result_rules['CO_PRIMA_VALOR']['total']
-_ibc = _valor_prima
-
+# .164 (CST Art. 307; ET arts. 55-56): la prima no lleva aportes de salud ni pension del
+# empleado, y los aportes obligatorios solo son ingreso no constitutivo cuando se pagan
+# efectivamente -> IBC 0: la base de retencion no resta aportes que no existieron.
 _rete_result = _rete_cfg.compute_retefuente(
-    employee, _valor_prima, _ibc, _ibc, employee.company_id
+    employee, _valor_prima, 0.0, 0.0, employee.company_id
 )
 _valor = _rete_result.get('retencion_pesos', 0)
 result = -abs(_valor) if _valor &gt; 0 else 0
