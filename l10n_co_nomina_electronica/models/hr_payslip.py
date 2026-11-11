@@ -104,7 +104,7 @@ DEDUCTION_SIMPLE_CONCEPTS = {
 # compañía en cada ejecución -- un lote acotado, no todo el histórico
 # pendiente de una sola vez (ver data/ir_cron_dian_status_recheck.xml, cuyo
 # intervalo SÍ es un dato editable en Ajustes, no una constante de código).
-_CRON_RECHECK_BATCH_LIMIT = 200
+_CRON_RECHECK_BATCH_LIMIT = 200  # valor por defecto; el vigente es el ir.config_parameter recheck_batch_limit
 
 # H-012 (2026-10-06): plazo máximo (horas) que un documento 'sent' se reconsulta
 # automáticamente antes de marcarse 'uncertain' y salir del cron -- valor por defecto,
@@ -1745,7 +1745,9 @@ class HrPayslip(models.Model):
                 # asigna junto con el exchange que lo produjo) -- nunca por write_date.
                 return _sent_since.get(slip.l10n_co_ne_zip_key) or slip.create_date
 
-            pending = pending.sorted(key=_waiting_since)[:_CRON_RECHECK_BATCH_LIMIT]
+            batch_limit = company._ne_config_int_param(
+                'l10n_co_nomina_electronica.recheck_batch_limit', _CRON_RECHECK_BATCH_LIMIT)
+            pending = pending.sorted(key=_waiting_since)[:batch_limit]
 
             max_hours = company._ne_config_int_param(
                 'l10n_co_nomina_electronica.recheck_max_hours',

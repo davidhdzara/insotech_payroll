@@ -1623,7 +1623,10 @@ result = result_rules['CO_PROV_CESANTIAS']['total'] * pct / 100
 # dias habiles/ano, NO incluye auxilio de transporte. Distinto del disfrute
 # real de vacaciones (integracion con hr.leave, tipo VACACIONES) -- esta
 # regla es la acumulacion del pasivo, no el pago cuando se toman.
-result = contract.wage / 24.0
+# 1/24 = 15 dias habiles por cada 360 de servicio: salario x dias_mes / divisor_vacaciones
+# (30 / 720), de los mismos parametros que usa la liquidacion de vacaciones.
+_fecha = payslip._ne_fecha_parametros()
+result = contract.wage * payslip._rule_parameter('l10n_co_dias_mes_comercial', _fecha) / payslip._rule_parameter('l10n_co_divisor_vacaciones', _fecha)
             </field>
             <field name="appears_on_payslip" eval="False"/>
         </record>

@@ -56,5 +56,13 @@
             <field name="key">l10n_co_nomina_electronica.recheck_max_hours</field>
             <field name="value">72</field>
         </record>
+
+        <!-- Fila 9 del doc 50 (.184): cuantos documentos 'sent' reconsulta como maximo cada corrida del
+             cron por compañia (antes constante de codigo, 200). Decision de funcionamiento, segun el
+             volumen. Leido por _cron_recheck_sent_status() via ResCompany._ne_config_int_param(). -->
+        <record id="config_parameter_recheck_batch_limit" model="ir.config_parameter">
+            <field name="key">l10n_co_nomina_electronica.recheck_batch_limit</field>
+            <field name="value">200</field>
+        </record>
     </data>
 </odoo>
