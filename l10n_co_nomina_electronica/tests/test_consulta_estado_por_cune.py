@@ -64,11 +64,41 @@ class TestConsultaEstadoPorCune(TransactionCase):
             wizard.action_check_status()
         self.assertIn('no encontrado', str(exc.exception))
 
+    def _usuario(self, login, companias):
+        return self.env['res.users'].create({
+            'name': login, 'login': login, 'company_id': companias[0].id,
+            'company_ids': [(6, 0, companias.ids)],
+            'groups_id': [(6, 0, [self.env.ref('base.group_user').id,
+                                  self.env.ref('hr_payroll.group_hr_payroll_manager').id])]})
+
+    def _otra_compania(self):
+        return self.env['res.company'].create({
+            'name': 'Otra Compania CUNE', 'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': self.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN'})
+
     def test_cune_de_otra_compania_no_se_resuelve(self):
-        otra = self.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': self.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Otra Compañía Consulta CUNE'})
-        payslip = self._payslip('OtraCia')
-        self._envio(payslip, 'CUNE-OTRA-CIA')
-        wizard = self.env['l10n.co.ne.status.cune.wizard'].with_company(otra).create(
-            {'cune': 'CUNE-OTRA-CIA'})
-        with self.assertRaises(UserError):
-            wizard.with_company(otra).action_check_status()
+        """Un usuario cuyas companias permitidas son solo 'otra' no encuentra el CUNE de la
+        compania A: la regla multiempresa del historial de envios lo oculta (no es un filtro del
+        asistente por la compania activa)."""
+        otra = self._otra_compania()
+        payslip = self._payslip('CiaA')
+        self._envio(payslip, 'CUNE-CIA-A')
+        usuario = self._usuario('cune_solo_otra', otra)
+        wizard = self.env['l10n.co.ne.status.cune.wizard'].with_user(usuario).with_context(
+            allowed_company_ids=[otra.id]).create({'cune': 'CUNE-CIA-A'})
+        with self.assertRaises(UserError) as exc:
+            wizard.action_check_status()
+        self.assertIn('no encontrado', str(exc.exception))
+
+    def test_usuario_con_ambas_companias_resuelve_el_cune_hasta_la_consulta(self):
+        otra = self._otra_compania()
+        payslip = self._payslip('CiaA2')
+        self._envio(payslip, 'CUNE-CIA-A2', zip_key='ZIP-BBB')
+        usuario = self._usuario('cune_ambas', self.company | otra)
+        wizard = self.env['l10n.co.ne.status.cune.wizard'].with_user(usuario).with_context(
+            allowed_company_ids=[otra.id, self.company.id]).create({'cune': 'CUNE-CIA-A2'})
+        with patch(
+            'odoo.addons.l10n_co_nomina_electronica.models.hr_payslip.HrPayslip.'
+            'action_check_dian_status', autospec=True, return_value=True,
+        ) as consulta:
+            wizard.action_check_status()
+        self.assertEqual(consulta.call_args[0][0], payslip)
