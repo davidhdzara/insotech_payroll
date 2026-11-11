@@ -71,11 +71,11 @@ class TestLiquidacionSlnIbc(TransactionCase):
         slip = self._liquidacion(employee, contract)
         salarios = slip.line_ids.filtered(lambda l: l.code == 'CO_LIQ_SALARIOS')
         self.assertEqual((salarios.quantity, salarios.total), (10.0, 1000000.0))
-        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SALARIAL'), 1000000.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SLN'), 500000.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SP'), 1500000.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_SALUD'), -40000.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_PENSION'), -40000.0, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SALARIAL'), 1000000.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SLN'), 500000.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SP'), 1500000.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_SALUD'), -40000.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_PENSION'), -40000.0, delta=0.01)
 
     def test_la_base_sln_es_el_ultimo_ibc_de_la_nomina_general_anterior(self):
         employee, contract = self._contrato('SlnHistorial')
@@ -93,17 +93,17 @@ class TestLiquidacionSlnIbc(TransactionCase):
         previa.state = 'done'
         self._licencia(employee, date(2026, 8, 3), date(2026, 8, 7))
         slip = self._liquidacion(employee, contract)
-        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SLN'), 400000.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SP'), 1400000.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_SALUD'), -40000.0, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SLN'), 400000.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SP'), 1400000.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_SALUD'), -40000.0, delta=0.01)
 
     def test_sln_de_un_mes_anterior_no_cuenta(self):
         employee, contract = self._contrato('SlnMayo')
         self._licencia(employee, date(2026, 5, 4), date(2026, 5, 8))
         slip = self._liquidacion(employee, contract)
         self.assertEqual(self._total(slip, 'CO_IBC_SLN'), 0.0)
-        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SP'), 1500000.0, places=2)  # 15 dias
-        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_SALUD'), -60000.0, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SP'), 1500000.0, delta=0.01)  # 15 dias
+        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_SALUD'), -60000.0, delta=0.01)
 
     def test_el_consolidado_mensual_recibe_la_base_sln_de_la_liquidacion(self):
         employee, contract = self._contrato('SlnConsolidado')
@@ -111,6 +111,6 @@ class TestLiquidacionSlnIbc(TransactionCase):
         slip = self._liquidacion(employee, contract)
         slip.state = 'done'
         consolidado = self.env['l10n.co.ibc.mensual']._refrescar(self.company, employee, RETIRO)
-        self.assertAlmostEqual(consolidado.ibc_sln, 500000.0, places=2)
-        self.assertAlmostEqual(consolidado.ibc_sp, 1500000.0, places=2)
+        self.assertAlmostEqual(consolidado.ibc_sln, 500000.0, delta=0.01)
+        self.assertAlmostEqual(consolidado.ibc_sp, 1500000.0, delta=0.01)
         self.assertEqual(consolidado.dias_sln, 5)

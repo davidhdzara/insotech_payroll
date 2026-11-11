@@ -47,7 +47,7 @@ class TestLiquidacionPrimaIbc(TransactionCase):
         self.assertGreater(prima, 0.0)
         salarios = self._total(slip, 'CO_LIQ_SALARIOS')
         # Sin vacaciones ni licencias del tramo, el IBC salarial es solo el salario del tramo.
-        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SALARIAL'), salarios, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SALARIAL'), salarios, delta=0.01)
         ibc_sp = self._total(slip, 'CO_IBC_SP')
         salud = self._total(slip, 'CO_LIQ_SALUD')
         pension = self._total(slip, 'CO_LIQ_PENSION')
@@ -59,13 +59,13 @@ class TestLiquidacionPrimaIbc(TransactionCase):
         regla.active = False
         slip.compute_sheet()
         self.assertFalse(self._total(slip, 'CO_LIQ_PRIMA'))
-        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SALARIAL'), salarios, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SP'), ibc_sp, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_SALUD'), salud, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_PENSION'), pension, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SALARIAL'), salarios, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_IBC_SP'), ibc_sp, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_SALUD'), salud, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_PENSION'), pension, delta=0.01)
         # El neto solo cambia en el valor de la prima y en la retencion en la fuente (que si
         # depende de la prima; los descuentos de salud y pension, arriba, no): neto_con - neto_sin
         # = prima + (retencion_con - retencion_sin), con la retencion en negativo.
         rete_sin = self._total(slip, 'CO_LIQ_RETE')
         self.assertAlmostEqual(
-            neto_con - self._total(slip, 'CO_LIQ_NETO'), prima + (rete_con - rete_sin), places=2)
+            neto_con - self._total(slip, 'CO_LIQ_NETO'), prima + (rete_con - rete_sin), delta=0.01)

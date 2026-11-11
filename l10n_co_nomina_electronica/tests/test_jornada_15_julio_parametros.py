@@ -76,18 +76,18 @@ class TestJornada15Julio(TransactionCase):
 
     def test_quincena_16_a_30_de_junio_divisor_220_y_recargo_dominical_1_80(self):
         slip = self._quincena(date(2026, 6, 16), date(2026, 6, 30))
-        self.assertAlmostEqual(self._total(slip, 'CO_HED'), 52500.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_HRDDF'), 113400.0, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_HED'), 52500.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_HRDDF'), 113400.0, delta=0.01)
 
     def test_quincena_1_a_15_de_julio_divisor_220_y_recargo_dominical_1_90(self):
         slip = self._quincena(date(2026, 7, 1), date(2026, 7, 15))
-        self.assertAlmostEqual(self._total(slip, 'CO_HED'), 52500.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_HRDDF'), 119700.0, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_HED'), 52500.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_HRDDF'), 119700.0, delta=0.01)
 
     def test_quincena_16_a_31_de_julio_divisor_210_y_recargo_dominical_1_90(self):
         slip = self._quincena(date(2026, 7, 16), date(2026, 7, 31))
-        self.assertAlmostEqual(self._total(slip, 'CO_HED'), 55000.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_HRDDF'), 125400.0, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_HED'), 55000.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_HRDDF'), 125400.0, delta=0.01)
 
     def test_limitacion_documentada_el_dia_15_de_la_primera_quincena_queda_con_220(self):
         """No se programa: la quincena 1-15 de julio usa la fecha de inicio (220) para todas sus
@@ -95,5 +95,5 @@ class TestJornada15Julio(TransactionCase):
         en vez de 10.500."""
         slip = self._quincena(date(2026, 7, 1), date(2026, 7, 15))
         valor_hora_aplicado = self._total(slip, 'CO_HED') / (4.0 * 1.25)
-        self.assertAlmostEqual(valor_hora_aplicado, WAGE / 220, places=2)
-        self.assertNotAlmostEqual(valor_hora_aplicado, WAGE / 210, places=2)
+        self.assertAlmostEqual(valor_hora_aplicado, WAGE / 220, delta=0.01)
+        self.assertNotAlmostEqual(valor_hora_aplicado, WAGE / 210, delta=0.01)

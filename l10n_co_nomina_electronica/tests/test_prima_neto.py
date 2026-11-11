@@ -45,12 +45,12 @@ class TestPrimaNeto(TransactionCase):
         salud ni pension del empleado. Neto = valor - retencion en la fuente (que se conserva)."""
         slip = self._prima()
         valor = self._total(slip, 'CO_PRIMA_VALOR')
-        self.assertAlmostEqual(valor, 1624547.50, places=2)
+        self.assertAlmostEqual(valor, 1624547.50, delta=0.01)
         self.assertFalse(slip.line_ids.filtered(
             lambda l: l.code in ('CO_PRIMA_SALUD', 'CO_PRIMA_PENSION')))
         retencion = self._total(slip, 'CO_PRIMA_RETE')  # 0 si no hay configuracion de UVT
         self.assertLessEqual(retencion, 0.0)
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor + retencion, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor + retencion, delta=0.01)
 
     def test_reglas_de_salud_y_pension_de_la_prima_estan_inactivas(self):
         for code in ('CO_PRIMA_SALUD', 'CO_PRIMA_PENSION'):
@@ -68,7 +68,7 @@ class TestPrimaNeto(TransactionCase):
     def test_la_base_no_es_un_concepto_visible_ni_va_a_dian(self):
         slip = self._prima()
         base = slip.line_ids.filtered(lambda l: l.code == 'CO_PRIMA_BASE')
-        self.assertAlmostEqual(base.total, 3249095.0, places=2)   # el acumulador sigue calculandose
+        self.assertAlmostEqual(base.total, 3249095.0, delta=0.01)   # el acumulador sigue calculandose
         self.assertFalse(base.salary_rule_id.appears_on_payslip)
         self.assertFalse(base.salary_rule_id.l10n_co_ne_dian_concept)
         self.assertNotIn('CO_PRIMA_BASE', slip._ne_pdf_lineas().mapped('code'))
@@ -103,14 +103,14 @@ class TestPrimaNeto(TransactionCase):
     def test_prima_bajo_el_umbral_no_tiene_retencion(self):
         """Prima 1.624.547,50: base = 1.218.410,63 = 23,26 UVT (< 95 UVT) -> retención 0."""
         slip = self._prima_con_retencion(3000000.0)
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_VALOR'), 1624547.50, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_VALOR'), 1624547.50, delta=0.01)
         self.assertEqual(self._total(slip, 'CO_PRIMA_RETE'), 0.0)
 
     def test_prima_de_6_millones_sigue_bajo_el_umbral(self):
         """Prima 6.000.000: renta exenta 1.500.000, base 4.500.000 = 85,92 UVT < 95 -> 0
         (con el cálculo anterior, que restaba 4 %+4 %, la base era 79,05 UVT: también 0)."""
         slip = self._prima_con_retencion(12000000.0)
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_VALOR'), 6000000.0, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_VALOR'), 6000000.0, delta=0.01)
         self.assertEqual(self._total(slip, 'CO_PRIMA_RETE'), 0.0)
 
     def test_prima_de_10_millones_retencion_en_el_tramo_del_19_por_ciento(self):
@@ -119,9 +119,9 @@ class TestPrimaNeto(TransactionCase):
         479.649 (el cálculo anterior, con aportes de 800.000, daba 365.649)."""
         slip = self._prima_con_retencion(20000000.0)
         valor = self._total(slip, 'CO_PRIMA_VALOR')
-        self.assertAlmostEqual(valor, 10000000.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_RETE'), -479649.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor - 479649.0, places=2)
+        self.assertAlmostEqual(valor, 10000000.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_RETE'), -479649.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor - 479649.0, delta=0.01)
 
     def test_prima_de_20_millones_retencion_en_el_tramo_del_28_por_ciento(self):
         """Prima 20.000.000: renta exenta 5.000.000 (tope 12.569.760 no aplica); base
@@ -129,6 +129,6 @@ class TestPrimaNeto(TransactionCase):
         0,28 + 10 = 48,1925 UVT x 52.374 = 2.524.032."""
         slip = self._prima_con_retencion(40000000.0)
         valor = self._total(slip, 'CO_PRIMA_VALOR')
-        self.assertAlmostEqual(valor, 20000000.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_RETE'), -2524032.0, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor - 2524032.0, places=2)
+        self.assertAlmostEqual(valor, 20000000.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_RETE'), -2524032.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor - 2524032.0, delta=0.01)

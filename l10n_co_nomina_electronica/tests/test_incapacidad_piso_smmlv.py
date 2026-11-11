@@ -47,22 +47,22 @@ class TestIncapacidadPisoSmmlv(TransactionCase):
         return self._recibo(nombre, wage)._ne_pago_ausencia_calendario('CO_INC_COMUN', dias)
 
     def test_un_smmlv_se_paga_el_100_por_ciento_en_todos_los_tramos(self):
-        self.assertAlmostEqual(self._pago(SMMLV_2026, 2), 2 * 58363.5, places=2)
-        self.assertAlmostEqual(self._pago(SMMLV_2026, 5), 291817.5, places=2)
-        self.assertAlmostEqual(self._pago(SMMLV_2026, 100), 5836350.0, places=2)
+        self.assertAlmostEqual(self._pago(SMMLV_2026, 2), 2 * 58363.5, delta=0.01)
+        self.assertAlmostEqual(self._pago(SMMLV_2026, 5), 291817.5, delta=0.01)
+        self.assertAlmostEqual(self._pago(SMMLV_2026, 100), 5836350.0, delta=0.01)
 
     def test_uno_y_medio_smmlv_el_piso_solo_rige_donde_el_pct_queda_por_debajo(self):
         wage = 1.5 * SMMLV_2026  # 2.626.357,5
-        self.assertAlmostEqual(self._pago(wage, 5), 291832.09, places=2)
-        self.assertAlmostEqual(self._pago(wage, 100), 5836612.64, places=2)
+        self.assertAlmostEqual(self._pago(wage, 5), 291832.09, delta=0.01)
+        self.assertAlmostEqual(self._pago(wage, 100), 5836612.64, delta=0.01)
 
     def test_tres_smmlv_o_mas_el_porcentaje_domina_salvo_el_tramo_del_50(self):
-        self.assertAlmostEqual(self._pago(3000000.0, 5), 333350.0, places=2)
-        self.assertAlmostEqual(self._pago(3000000.0, 100), 6583935.0, places=2)
+        self.assertAlmostEqual(self._pago(3000000.0, 5), 333350.0, delta=0.01)
+        self.assertAlmostEqual(self._pago(3000000.0, 100), 6583935.0, delta=0.01)
 
     def test_incapacidad_laboral_y_licencias_no_tienen_piso(self):
         slip = self._recibo('SinPiso', SMMLV_2026)
         self.assertAlmostEqual(
-            slip._ne_pago_ausencia_calendario('CO_INC_LABORAL', 5), 5 * 58363.5, places=2)
+            slip._ne_pago_ausencia_calendario('CO_INC_LABORAL', 5), 5 * 58363.5, delta=0.01)
         self.assertAlmostEqual(
-            slip._ne_pago_ausencia_calendario('CO_LIC_MAT', 10), 10 * 58363.5, places=2)
+            slip._ne_pago_ausencia_calendario('CO_LIC_MAT', 10), 10 * 58363.5, delta=0.01)

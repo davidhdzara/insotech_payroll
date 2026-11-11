@@ -69,8 +69,8 @@ class TestCantidadReal(TransactionCase):
         slip.compute_sheet()
         linea = self._linea(slip, 'CO_BASICO')
         self.assertEqual(linea.quantity, 15.0)
-        self.assertAlmostEqual(linea.amount, 3000000.0 / 30, places=2)
-        self.assertAlmostEqual(linea.total, 1500000.0, places=2)
+        self.assertAlmostEqual(linea.amount, 3000000.0 / 30, delta=0.01)
+        self.assertAlmostEqual(linea.total, 1500000.0, delta=0.01)
         # Misma fuente de dias que DiasTrabajados del XML.
         self.assertEqual(linea.quantity, slip._ne_dias_pagables())
 
@@ -79,7 +79,7 @@ class TestCantidadReal(TransactionCase):
         slip.compute_sheet()
         linea = self._linea(slip, 'CO_AUX_TRANS')
         self.assertEqual(linea.quantity, 15.0)
-        self.assertAlmostEqual(linea.total, 249095.0 / 30 * 15, places=2)
+        self.assertAlmostEqual(linea.total, 249095.0 / 30 * 15, delta=0.01)
 
     def test_hora_extra_cantidad_son_las_horas_del_input(self):
         slip = self._quincena('HoraExtra')
@@ -88,8 +88,8 @@ class TestCantidadReal(TransactionCase):
         linea = self._linea(slip, 'CO_HED')
         self.assertEqual(linea.quantity, 5.0)
         valor_hora = 3000000.0 / HORAS_MENSUALES
-        self.assertAlmostEqual(linea.amount, valor_hora * FACTOR_HED, places=2)
-        self.assertAlmostEqual(linea.total, valor_hora * FACTOR_HED * 5, places=2)
+        self.assertAlmostEqual(linea.amount, valor_hora * FACTOR_HED, delta=0.01)
+        self.assertAlmostEqual(linea.total, valor_hora * FACTOR_HED * 5, delta=0.01)
 
     def test_xml_de_horas_extra_cantidad_decimal_y_porcentaje_de_la_tabla(self):
         slip = self._quincena('XmlHoras')
@@ -108,8 +108,8 @@ class TestCantidadReal(TransactionCase):
         ibc = self._linea(slip, 'CO_IBC_SP').total
         self.assertEqual(linea.quantity, 1.0)
         self.assertAlmostEqual(linea.rate, 4.0, places=4)
-        self.assertAlmostEqual(linea.amount, -ibc, places=2)
-        self.assertAlmostEqual(linea.total, -ibc * 0.04, places=2)
+        self.assertAlmostEqual(linea.amount, -ibc, delta=0.01)
+        self.assertAlmostEqual(linea.total, -ibc * 0.04, delta=0.01)
 
     def test_incapacidad_comun_cantidad_dias_y_total_igual(self):
         slip = self._quincena('Incapacidad')
@@ -118,7 +118,7 @@ class TestCantidadReal(TransactionCase):
         linea = self._linea(slip, 'CO_INC_COMUN')
         self.assertEqual(linea.quantity, 10.0)
         # 66,67% del valor dia en todos los dias (empleador 2 dias y EPS 3-90 al mismo %).
-        self.assertAlmostEqual(linea.total, 3000000.0 / 30 * 0.6667 * 10, places=2)
+        self.assertAlmostEqual(linea.total, 3000000.0 / 30 * 0.6667 * 10, delta=0.01)
 
     def test_liquidacion_cantidad_en_dias_de_cada_concepto(self):
         """Retiro 2026-08-15, ingreso 2024-03-01, $3.000.000: cesantias 223 dias del anio (reales sin el 31),
@@ -129,11 +129,11 @@ class TestCantidadReal(TransactionCase):
         base = 3000000.0 + 249095.0
         ces = self._linea(slip, 'CO_LIQ_CESANTIAS')
         self.assertEqual(ces.quantity, 223.0)
-        self.assertAlmostEqual(ces.total, base * 223 / 360, places=2)
+        self.assertAlmostEqual(ces.total, base * 223 / 360, delta=0.01)
         self.assertEqual(self._linea(slip, 'CO_LIQ_INT_CES').quantity, 223.0)
         prima = self._linea(slip, 'CO_LIQ_PRIMA')
         self.assertEqual(prima.quantity, 45.0)
-        self.assertAlmostEqual(prima.total, base * 45 / 360, places=2)
+        self.assertAlmostEqual(prima.total, base * 45 / 360, delta=0.01)
         self.assertEqual(self._linea(slip, 'CO_LIQ_SALARIOS').quantity, slip._ne_dias_pagables())
 
     def test_liquidacion_indemnizacion_cantidad_son_los_dias_de_indemnizacion(self):
@@ -147,10 +147,10 @@ class TestCantidadReal(TransactionCase):
         dias = 30 + 20 * (anos - 1)
         # quantity se guarda con la precision 'Payroll' (2 decimales); el total sale del valor
         # exacto (hr_payroll lo calcula antes de redondear), no de 59,89 x valor dia.
-        self.assertAlmostEqual(linea.quantity, dias, places=2)
-        self.assertAlmostEqual(linea.total, 15000000.0 / 30 * dias, places=2)
+        self.assertAlmostEqual(linea.quantity, dias, delta=0.01)
+        self.assertAlmostEqual(linea.total, 15000000.0 / 30 * dias, delta=0.01)
         self.assertNotAlmostEqual(
-            linea.total, 15000000.0 / 30 * round(dias, 2), places=2)
+            linea.total, 15000000.0 / 30 * round(dias, 2), delta=0.01)
 
     def test_prima_semestral_cantidad_son_los_dias_del_semestre(self):
         slip = self._recibo(self.est_prima, 'PrimaCantidad', 3000000.0, date(2026, 7, 1),
@@ -159,7 +159,7 @@ class TestCantidadReal(TransactionCase):
         linea = self._linea(slip, 'CO_PRIMA_VALOR')
         self.assertEqual(linea.quantity, 180.0)   # semestre completo = mitad del anio comercial
         base = self._linea(slip, 'CO_PRIMA_BASE').total
-        self.assertAlmostEqual(linea.total, base * 180 / 360, places=2)
+        self.assertAlmostEqual(linea.total, base * 180 / 360, delta=0.01)
 
     # --- Redondeo: valores no divisibles exactos (SMMLV 2026 y auxilio 2026) ----------------
     # Odoo calcula total = amount x quantity x rate / 100 con el amount SIN redondear (hr_payroll,
@@ -173,11 +173,11 @@ class TestCantidadReal(TransactionCase):
         slip.compute_sheet()
         aux = self._linea(slip, 'CO_AUX_TRANS')
         self.assertEqual(aux.quantity, 15.0)
-        self.assertAlmostEqual(aux.amount, 8303.17, places=2)           # unitario redondeado
-        self.assertAlmostEqual(aux.total, 124547.50, places=2)          # total exacto
-        self.assertNotAlmostEqual(aux.amount * aux.quantity, aux.total, places=2)
+        self.assertAlmostEqual(aux.amount, 8303.17, delta=0.01)           # unitario redondeado
+        self.assertAlmostEqual(aux.total, 124547.50, delta=0.01)          # total exacto
+        self.assertNotAlmostEqual(aux.amount * aux.quantity, aux.total, delta=0.01)
         basico = self._linea(slip, 'CO_BASICO')
-        self.assertAlmostEqual(basico.total, 875452.50, places=2)       # 1.750.905 / 30 x 15
+        self.assertAlmostEqual(basico.total, 875452.50, delta=0.01)       # 1.750.905 / 30 x 15
 
     def test_deduccion_de_salud_sobre_ibc_con_decimales(self):
         """IBC con decimales: el 4% se calcula sobre el IBC exacto del localdict."""

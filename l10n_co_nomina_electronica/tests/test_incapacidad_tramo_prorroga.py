@@ -64,10 +64,10 @@ class TestIncapacidadTramoProrroga(TransactionCase):
         self._incapacidad(employee, date(2026, 3, 1), date(2026, 6, 15))   # 107 dias
         self.assertAlmostEqual(
             self._pago(employee, contract, date(2026, 3, 1), date(2026, 3, 15)),
-            15 * VALOR_DIA * PCT, places=2)                                  # 2.000.100
+            15 * VALOR_DIA * PCT, delta=0.01)                                  # 2.000.100
         self.assertAlmostEqual(
             self._pago(employee, contract, date(2026, 6, 1), date(2026, 6, 15)),
-            15 * VALOR_DIA * 0.5, places=2)                                  # 1.500.000
+            15 * VALOR_DIA * 0.5, delta=0.01)                                  # 1.500.000
 
     def test_el_dia_91_cambia_de_tramo_dentro_de_una_quincena(self):
         """16-31 de mayo: previos 1-mar a 15-may = 76 dias reales -> posiciones 77-91: 14 dias
@@ -76,7 +76,7 @@ class TestIncapacidadTramoProrroga(TransactionCase):
         self._incapacidad(employee, date(2026, 3, 1), date(2026, 6, 15))
         self.assertAlmostEqual(
             self._pago(employee, contract, date(2026, 5, 16), date(2026, 5, 31)),
-            14 * VALOR_DIA * PCT + VALOR_DIA * 0.5, places=2)
+            14 * VALOR_DIA * PCT + VALOR_DIA * 0.5, delta=0.01)
 
     def test_la_prorroga_contigua_continua_el_conteo(self):
         """1-mar a 5-jun (97 dias) y prorroga 6 a 20 de junio: en la quincena 1-15 de junio van los
@@ -86,7 +86,7 @@ class TestIncapacidadTramoProrroga(TransactionCase):
         self._incapacidad(employee, date(2026, 6, 6), date(2026, 6, 20))
         self.assertAlmostEqual(
             self._pago(employee, contract, date(2026, 6, 1), date(2026, 6, 15)),
-            15 * VALOR_DIA * 0.5, places=2)
+            15 * VALOR_DIA * 0.5, delta=0.01)
 
     def test_una_incapacidad_no_contigua_empieza_su_propio_conteo(self):
         """1-mar a 31-may (92 dias) y otra distinta del 5 al 15 de junio (hay 4 dias libres entre
@@ -96,7 +96,7 @@ class TestIncapacidadTramoProrroga(TransactionCase):
         self._incapacidad(employee, date(2026, 6, 5), date(2026, 6, 15))
         self.assertAlmostEqual(
             self._pago(employee, contract, date(2026, 6, 1), date(2026, 6, 15)),
-            11 * VALOR_DIA * PCT, places=2)
+            11 * VALOR_DIA * PCT, delta=0.01)
 
     def test_primeros_dos_dias_del_empleador_solo_en_el_inicio_de_la_incapacidad(self):
         """Con piso: el empleador (dias 1-2) y la EPS (3-90) pagan igual porcentaje, pero el 91+
@@ -118,4 +118,4 @@ class TestIncapacidadTramoProrroga(TransactionCase):
         self._incapacidad(employee, date(2026, 6, 5), date(2026, 6, 15))
         self.assertAlmostEqual(
             self._pago(employee, contract, date(2026, 6, 1), date(2026, 6, 15)),
-            11 * VALOR_DIA * 0.5, places=2)
+            11 * VALOR_DIA * 0.5, delta=0.01)

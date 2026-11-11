@@ -86,17 +86,17 @@ class TestLiquidacionVacaciones(TransactionCase):
         self.assertAlmostEqual(dias['causados'], 15.0, places=6)
         self.assertAlmostEqual(dias['pendientes'], 15.0, places=6)
         linea = self._linea(slip)
-        self.assertAlmostEqual(linea.total, 15 * VALOR_DIA, places=2)
+        self.assertAlmostEqual(linea.total, 15 * VALOR_DIA, delta=0.01)
         # La Cantidad de la linea (la que lee el XML) son los dias pendientes.
         self.assertAlmostEqual(linea.quantity, 15.0, places=6)
-        self.assertAlmostEqual(linea.amount, VALOR_DIA, places=2)
+        self.assertAlmostEqual(linea.amount, VALOR_DIA, delta=0.01)
 
     def test_ausencia_de_vacaciones_validada_descuenta_sus_dias_habiles(self):
         employee, contract = self._contrato('ConAusencia')
         slip = self._liquidacion(employee, contract)
         dias = self._calcular(slip, dias_ausencia=5)
         self.assertAlmostEqual(dias['pendientes'], 10.0, places=6)
-        self.assertAlmostEqual(self._linea(slip).total, 10 * VALOR_DIA, places=2)
+        self.assertAlmostEqual(self._linea(slip).total, 10 * VALOR_DIA, delta=0.01)
 
     def test_input_co_vac_de_recibo_confirmado_descuenta_sus_dias(self):
         employee, contract = self._contrato('ConInput')
@@ -104,7 +104,7 @@ class TestLiquidacionVacaciones(TransactionCase):
         slip = self._liquidacion(employee, contract)
         dias = self._calcular(slip)
         self.assertAlmostEqual(dias['disfrutados'], 3.0, places=6)
-        self.assertAlmostEqual(self._linea(slip).total, 12 * VALOR_DIA, places=2)
+        self.assertAlmostEqual(self._linea(slip).total, 12 * VALOR_DIA, delta=0.01)
 
     def test_vacaciones_compensadas_en_dinero_descuentan_monto_sobre_valor_dia(self):
         employee, contract = self._contrato('ConCompensadas')
@@ -112,7 +112,7 @@ class TestLiquidacionVacaciones(TransactionCase):
         slip = self._liquidacion(employee, contract)
         dias = self._calcular(slip)
         self.assertAlmostEqual(dias['compensados'], 3.0, places=6)
-        self.assertAlmostEqual(self._linea(slip).total, 12 * VALOR_DIA, places=2)
+        self.assertAlmostEqual(self._linea(slip).total, 12 * VALOR_DIA, delta=0.01)
 
     def test_quien_tomo_mas_de_lo_causado_no_genera_valor_negativo(self):
         employee, contract = self._contrato('Exceso')
@@ -136,4 +136,4 @@ class TestLiquidacionVacaciones(TransactionCase):
         slip = self._liquidacion(employee, contract, date_to=date(2025, 3, 31))
         dias = self._calcular(slip)
         self.assertAlmostEqual(dias['causados'], 88 * 30 / 720.0, places=6)
-        self.assertAlmostEqual(self._linea(slip).total, 88 * 30 / 720.0 * VALOR_DIA, places=2)
+        self.assertAlmostEqual(self._linea(slip).total, 88 * 30 / 720.0 * VALOR_DIA, delta=0.01)

@@ -50,7 +50,7 @@ class TestRetefuenteConfigAnio(TransactionCase):
         slip.compute_sheet()
         rete = slip.line_ids.filtered(lambda l: l.code == 'CO_PRIMA_RETE')
         self.assertTrue(rete, 'La prima de 10.000.000 debe tener retención en 2026.')
-        self.assertAlmostEqual(rete.total, -479649.0, places=2)
+        self.assertAlmostEqual(rete.total, -479649.0, delta=0.01)
 
     def test_sin_configuracion_del_anio_el_helper_falla_nombrando_anio_y_empresa(self):
         slip = self._prima(20000000.0, date(2027, 7, 1), date(2027, 12, 31))

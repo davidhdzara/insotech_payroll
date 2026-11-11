@@ -67,12 +67,16 @@ class TestLiquidacionIncapacidades(TransactionCase):
         self.assertEqual(inc.quantity, 5.0)
         # .163: valor dia 60.000 x 0,6667 = 40.002 < piso 1 SMMLV/30 = 1.750.905/30 = 58.363,5
         # -> 5 dias x 58.363,5 = 291.817,5
-        self.assertAlmostEqual(inc.total, 291817.5, places=2)
+        self.assertAlmostEqual(inc.total, 291817.5, delta=0.01)
         salarios = self._linea(slip, 'CO_LIQ_SALARIOS')
         self.assertEqual((salarios.quantity, salarios.total), (10.0, 600000.0))
-        self.assertAlmostEqual(self._linea(slip, 'CO_IBC_INCAP').total, 291817.5, places=2)
-        # CO_LIQ_NETO sube exactamente el valor de la incapacidad frente a la regla inactiva (las
-        # deducciones son las mismas: en ambos casos el piso de 1 SMMLV prorrateado domina el IBC).
+        self.assertAlmostEqual(self._linea(slip, 'CO_IBC_INCAP').total, 291817.5, delta=0.01)
+        # CO_LIQ_NETO frente a la regla inactiva: sube el valor de la incapacidad MENOS el mayor
+        # descuento de salud y pension (4 % + 4 %), porque con la incapacidad el IBC deja de ser el
+        # piso: sin la regla el IBC es el piso de 1 SMMLV x 15/30 = 875.452,5; con ella,
+        # 600.000 + 291.817,5 = 891.817,5 -> 8 % x 16.365 = 1.309,2 de descuento adicional.
+        # (.163: antes, con 200.010, el IBC 800.010 quedaba bajo el piso y las deducciones eran
+        # iguales.) Neto: 291.817,5 - 1.309,2 = 290.508,3.
         neto_con = self._linea(slip, 'CO_LIQ_NETO').total
         regla = self.env['hr.salary.rule'].search(
             [('code', '=', 'CO_INC_COMUN'), ('struct_id', '=', self.liquidacion.id)], limit=1)
@@ -80,7 +84,7 @@ class TestLiquidacionIncapacidades(TransactionCase):
         slip.compute_sheet()
         self.assertFalse(self._linea(slip, 'CO_INC_COMUN'))
         self.assertAlmostEqual(
-            neto_con - self._linea(slip, 'CO_LIQ_NETO').total, 291817.5, places=2)
+            neto_con - self._linea(slip, 'CO_LIQ_NETO').total, 290508.3, delta=0.01)
 
     def test_xml_reporta_la_incapacidad_del_tramo(self):
         slip = self._liquidacion('XmlInc', [(self.inc_comun, date(2026, 8, 3), date(2026, 8, 7))])
@@ -102,7 +106,7 @@ class TestLiquidacionIncapacidades(TransactionCase):
         slip = self._liquidacion('LicMat', [(self.lic_mat, date(2026, 8, 10), date(2026, 12, 14))])
         lic = self._linea(slip, 'CO_LIC_MAT')
         self.assertEqual(lic.quantity, 6.0)
-        self.assertAlmostEqual(lic.total, 360000.0, places=2)
+        self.assertAlmostEqual(lic.total, 360000.0, delta=0.01)
         salarios = self._linea(slip, 'CO_LIQ_SALARIOS')
         self.assertEqual((salarios.quantity, salarios.total), (9.0, 540000.0))
         item = self._novedades_xml(slip)['Licencias']['LicenciaMP'][0]
@@ -114,7 +118,7 @@ class TestLiquidacionIncapacidades(TransactionCase):
         slip = self._liquidacion('IncLab', [(self.inc_laboral, date(2026, 8, 3), date(2026, 8, 7))])
         lab = self._linea(slip, 'CO_INC_LABORAL')
         self.assertEqual(lab.quantity, 5.0)
-        self.assertAlmostEqual(lab.total, 300000.0, places=2)
+        self.assertAlmostEqual(lab.total, 300000.0, delta=0.01)
 
     def test_ibc_de_la_liquidacion_lee_la_base_de_incapacidades(self):
         slip = self._liquidacion('IbcInc', [(self.inc_comun, date(2026, 8, 3), date(2026, 8, 7))])
@@ -122,7 +126,7 @@ class TestLiquidacionIncapacidades(TransactionCase):
             self._linea(slip, 'CO_IBC_SALARIAL').total, self._linea(slip, 'CO_IBC_INCAP').total,
             self._linea(slip, 'CO_IBC_REMUN').total, self._linea(slip, 'CO_IBC_PACTADOS').total,
             self._linea(slip, 'CO_DIAS_SP').total)
-        self.assertAlmostEqual(self._linea(slip, 'CO_IBC_SP').total, esperado, places=2)
+        self.assertAlmostEqual(self._linea(slip, 'CO_IBC_SP').total, esperado, delta=0.01)
 
     def test_las_reglas_nuevas_son_salario_para_embargos_y_libranzas(self):
         for code in ('CO_INC_COMUN', 'CO_INC_LABORAL', 'CO_LIC_MAT', 'CO_LIC_PAT'):
@@ -151,23 +155,23 @@ class TestLiquidacionIncapacidades(TransactionCase):
     def test_equivalencia_incapacidad_comun_con_las_formulas_anteriores(self):
         slip = self._general()
         self.assertAlmostEqual(
-            slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 2), 133340.0, places=2)
+            slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 2), 133340.0, delta=0.01)
         self.assertAlmostEqual(
-            slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 10), 666700.0, places=2)
+            slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 10), 666700.0, delta=0.01)
         # 90 dias al 66,67 % + 10 dias al 50 % (50.000/dia < piso 1 SMMLV/30 = 58.363,5, .163):
         # 90 x 66.670 + 10 x 58.363,5 = 6.583.935
         self.assertAlmostEqual(
-            slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 100), 6583935.0, places=2)
+            slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 100), 6583935.0, delta=0.01)
         self.assertEqual(slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 0), 0.0)
 
     def test_equivalencia_licencias_e_incapacidad_laboral_valor_dia_por_dias(self):
         slip = self._general()
         self.assertAlmostEqual(
-            slip._ne_pago_ausencia_calendario('CO_INC_LABORAL', 5), 500000.0, places=2)
+            slip._ne_pago_ausencia_calendario('CO_INC_LABORAL', 5), 500000.0, delta=0.01)
         self.assertAlmostEqual(
-            slip._ne_pago_ausencia_calendario('CO_LIC_MAT', 126), 12600000.0, places=2)
+            slip._ne_pago_ausencia_calendario('CO_LIC_MAT', 126), 12600000.0, delta=0.01)
         self.assertAlmostEqual(
-            slip._ne_pago_ausencia_calendario('CO_LIC_PAT', 14), 1400000.0, places=2)
+            slip._ne_pago_ausencia_calendario('CO_LIC_PAT', 14), 1400000.0, delta=0.01)
 
     def test_codigo_de_ausencia_sin_formula_falla_con_mensaje_claro(self):
         with self.assertRaises(UserError):

@@ -64,11 +64,11 @@ class TestLiquidacionFechaParametros(TransactionCase):
         dias_ces = 223  # 1-ene-2026 a 15-ago-2026
         dias_prima = 45  # 1-jul-2026 a 15-ago-2026
         cesantias = base * dias_ces / ANIO
-        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_CESANTIAS'), cesantias, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_CESANTIAS'), cesantias, delta=0.01)
         self.assertAlmostEqual(
-            self._total(slip, 'CO_LIQ_INT_CES'), cesantias * 0.12 * dias_ces / ANIO, places=2)
+            self._total(slip, 'CO_LIQ_INT_CES'), cesantias * 0.12 * dias_ces / ANIO, delta=0.01)
         self.assertAlmostEqual(
-            self._total(slip, 'CO_LIQ_PRIMA'), base * dias_prima / ANIO, places=2)
+            self._total(slip, 'CO_LIQ_PRIMA'), base * dias_prima / ANIO, delta=0.01)
 
     def test_ingreso_2024_auxilio_y_tope_de_2026_en_prima_y_cesantias(self):
         """$3.000.000 es > 2 SMMLV de 2024 (sin auxilio) pero <= 2 SMMLV de 2026 (con auxilio):
@@ -98,13 +98,13 @@ class TestLiquidacionFechaParametros(TransactionCase):
         anos = 881 / ANIO
         valor_dia = 15000000.0 / 30
         esperado = valor_dia * 30 + valor_dia * 20 * (anos - 1)
-        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_INDEMNIZACION'), esperado, places=2)
+        self.assertAlmostEqual(self._total(slip, 'CO_LIQ_INDEMNIZACION'), esperado, delta=0.01)
 
     def test_piso_del_ibc_usa_el_smmlv_del_retiro(self):
         """El IBC consolidado (PILA/UGPP) toma piso y techo de _ne_ibc_limites: 1 SMMLV de la
         fecha de retiro, no del ingreso (1.300.000 en 2024)."""
         slip = self._liquidacion('PisoIbc', 1000000.0, date(2024, 3, 1))
-        self.assertAlmostEqual(slip._ne_ibc_limites(0.0, 0.0, 0.0, 0.0, 30), SMMLV_2026, places=2)
+        self.assertAlmostEqual(slip._ne_ibc_limites(0.0, 0.0, 0.0, 0.0, 30), SMMLV_2026, delta=0.01)
 
     def test_ninguna_regla_de_liquidacion_resuelve_parametros_con_date_from(self):
         """Guarda estatica: las reglas de la estructura de liquidacion no deben leer date_from

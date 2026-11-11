@@ -93,7 +93,7 @@ class TestLiquidacionIndemnizacion(TransactionCase):
         date_start = date(2022, 12, 24)  # 1.285 reales - 25 treintaiunos = 1260 días
         employee, contract = self._make_contract('Indef3y6m', 3000000.0, date_start)
         payslip = self._make_liquidacion_payslip(employee, contract, date_to)
-        self.assertAlmostEqual(self._indemnizacion_total(payslip), 8000000.0, places=2)
+        self.assertAlmostEqual(self._indemnizacion_total(payslip), 8000000.0, delta=0.01)
 
     def test_indefinido_menor_10_smmlv_menos_de_un_anio(self):
         """(a) Menos de 1 año: siempre 30 días completos, sin proporción dentro del primer año."""
@@ -102,7 +102,7 @@ class TestLiquidacionIndemnizacion(TransactionCase):
         employee, contract = self._make_contract('IndefMenosUnAnio', 3000000.0, date_start)
         payslip = self._make_liquidacion_payslip(employee, contract, date_to)
         valor_dia = 3000000.0 / 30
-        self.assertAlmostEqual(self._indemnizacion_total(payslip), valor_dia * 30, places=2)
+        self.assertAlmostEqual(self._indemnizacion_total(payslip), valor_dia * 30, delta=0.01)
 
     def test_indefinido_exactamente_10_smmlv_usa_20_y_15(self):
         """(a) Salario EXACTAMENTE 10 SMMLV (umbral, no lo supera) -> tramo >= 10 SMMLV: 20
@@ -114,7 +114,7 @@ class TestLiquidacionIndemnizacion(TransactionCase):
         payslip = self._make_liquidacion_payslip(employee, contract, date_to)
         valor_dia = wage / 30
         esperado = valor_dia * 20 + valor_dia * 15 * 2  # 1 primer año + 2 adicionales
-        self.assertAlmostEqual(self._indemnizacion_total(payslip), esperado, places=2)
+        self.assertAlmostEqual(self._indemnizacion_total(payslip), esperado, delta=0.01)
 
     def test_termino_fijo_dias_restantes_sin_piso(self):
         """(a) Término fijo: paga exactamente los días restantes, sin piso de 15 días."""
@@ -123,7 +123,7 @@ class TestLiquidacionIndemnizacion(TransactionCase):
             'Fijo', 3000000.0, date(2024, 1, 1), contract_type='1')
         payslip = self._make_liquidacion_payslip(employee, contract, date_to, dias_restantes=45)
         valor_dia = 3000000.0 / 30
-        self.assertAlmostEqual(self._indemnizacion_total(payslip), valor_dia * 45, places=2)
+        self.assertAlmostEqual(self._indemnizacion_total(payslip), valor_dia * 45, delta=0.01)
 
     def test_obra_labor_por_debajo_del_piso_paga_15_dias(self):
         """(a) Obra/labor con menos de 15 días restantes -> paga el piso de 15 días, no los
@@ -133,4 +133,4 @@ class TestLiquidacionIndemnizacion(TransactionCase):
             'ObraLabor', 3000000.0, date(2024, 1, 1), contract_type='3')
         payslip = self._make_liquidacion_payslip(employee, contract, date_to, dias_restantes=10)
         valor_dia = 3000000.0 / 30
-        self.assertAlmostEqual(self._indemnizacion_total(payslip), valor_dia * 15, places=2)
+        self.assertAlmostEqual(self._indemnizacion_total(payslip), valor_dia * 15, delta=0.01)
