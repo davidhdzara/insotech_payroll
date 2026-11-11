@@ -5,7 +5,7 @@ Hallazgo de QA en pantalla (recibo de prima 8571): CO_PRIMA_NETO = BASE + VALOR 
 = 2.991.678,70, porque la base (salario + auxilio) estaba en PREST y sumaba al neto; ademas el
 nodo Primas del XML sumaba la Cantidad de las dos lineas (1 + 180 = 181). Valores a mano:
 $3.000.000 con auxilio 2026 (249.095) -> base 3.249.095; semestre completo de 180 dias ->
-valor 3.249.095 x 180 / 360 = 1.624.547,50; salud y pension 4% de ese valor = 64.981,90 c/u.
+valor 3.249.095 x 180 / 360 = 1.624.547,50. Desde .164 sin salud ni pension (CST Art. 307).
 """
 
 from datetime import date
@@ -40,15 +40,30 @@ class TestPrimaNeto(TransactionCase):
     def _total(self, slip, code):
         return sum(slip.line_ids.filtered(lambda l: l.code == code).mapped('total'))
 
-    def test_neto_es_valor_menos_deducciones_sin_sumar_la_base(self):
+    def test_neto_es_valor_menos_retencion_sin_salud_ni_pension_ni_la_base(self):
+        """.164 (CST Art. 307): la prima no es salario ni factor salarial -> sin descuento de
+        salud ni pension del empleado. Neto = valor - retencion en la fuente (que se conserva)."""
         slip = self._prima()
         valor = self._total(slip, 'CO_PRIMA_VALOR')
         self.assertAlmostEqual(valor, 1624547.50, places=2)
-        deducciones = sum(self._total(slip, c) for c in (
-            'CO_PRIMA_SALUD', 'CO_PRIMA_PENSION', 'CO_PRIMA_RETE'))
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_SALUD'), -64981.90, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_PENSION'), -64981.90, places=2)
-        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor + deducciones, places=2)
+        self.assertFalse(slip.line_ids.filtered(
+            lambda l: l.code in ('CO_PRIMA_SALUD', 'CO_PRIMA_PENSION')))
+        retencion = self._total(slip, 'CO_PRIMA_RETE')  # 0 si no hay configuracion de UVT
+        self.assertLessEqual(retencion, 0.0)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor + retencion, places=2)
+
+    def test_reglas_de_salud_y_pension_de_la_prima_estan_inactivas(self):
+        for code in ('CO_PRIMA_SALUD', 'CO_PRIMA_PENSION'):
+            regla = self.env['hr.salary.rule'].with_context(active_test=False).search(
+                [('code', '=', code), ('struct_id', '=', self.est_prima.id)])
+            self.assertTrue(regla, 'Debe conservarse el registro de %s (historial).' % code)
+            self.assertFalse(regla.active)
+
+    def test_xml_de_la_prima_no_trae_descuento_de_salud_ni_pension(self):
+        slip = self._prima()
+        deducciones = slip._build_deducciones(slip._group_lines_by_concept())
+        self.assertNotIn('Salud', deducciones)
+        self.assertNotIn('FondoPension', deducciones)
 
     def test_la_base_no_es_un_concepto_visible_ni_va_a_dian(self):
         slip = self._prima()
