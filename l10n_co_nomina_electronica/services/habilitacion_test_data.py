@@ -123,6 +123,8 @@ TEST_CONTRACT_WAGE = 1800000.0
 TEST_CONTRACT_START_YEARS_AGO = 2
 TEST_CONTRACT_COMMON_VALUES = {
     'l10n_co_ne_contract_type': '2',  # Término Indefinido
+    'l10n_co_pila_tipo_cotizante': '01',  # Dependiente (sin default: el contrato en proceso lo exige)
+    'l10n_co_pila_subtipo_cotizante': '00',  # No aplica
     'l10n_co_ne_integral_salary': False,
     'wage': TEST_CONTRACT_WAGE,
     'state': 'open',
