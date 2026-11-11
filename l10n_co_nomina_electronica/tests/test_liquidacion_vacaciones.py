@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """CO_LIQ_VACACIONES descuenta las vacaciones ya disfrutadas o compensadas.
 
-Dias causados = dias COMERCIALES de servicio x 30 / 720 (15 por cada 360; meses de 30, el 31
-no suma). Los valores esperados se calculan a mano: con ingreso 2025-01-01 y retiro 2025-12-31
-son 360 dias comerciales (365 reales) = 15 dias causados; salario $3.000.000 => valor dia $100.000. Las ausencias (hr.leave -> work entries)
+Dias causados = dias de prestacion de servicio x 30 / 720 (15 por cada 360; dias reales, febrero
+28/29 y el 31 no cuenta, modo 'real'). Los valores esperados se calculan a mano: con ingreso
+2025-01-01 y retiro 2026-01-02 son 367 reales - 7 treintaiunos = 360 dias = 15 dias causados; salario $3.000.000 => valor dia $100.000. Las ausencias (hr.leave -> work entries)
 se simulan con mock sobre _ne_ausencia_habil: aqui se prueba el descuento, no la conversion
 nativa de ausencias (ya cubierta en test_ausencias_nomina).
 """
@@ -14,7 +14,7 @@ from unittest import mock
 from odoo.tests.common import TransactionCase
 
 INGRESO = date(2025, 1, 1)
-RETIRO = date(2025, 12, 31)  # 360 dias comerciales de servicio (365 reales), inclusivo
+RETIRO = date(2026, 1, 2)  # 360 dias de servicio (367 reales - 7 treintaiunos), inclusivo
 VALOR_DIA = 100000.0
 
 
@@ -22,7 +22,7 @@ class TestLiquidacionVacaciones(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 
             'name': 'Compañía de Prueba Vacaciones Liquidación'})
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura Vacaciones', 'country_id': cls.env.ref('base.co').id})
@@ -131,9 +131,9 @@ class TestLiquidacionVacaciones(TransactionCase):
         self.assertAlmostEqual(dias['pendientes'], 15.0, places=6)
 
     def test_contrato_corto_causa_dias_proporcionales(self):
-        """90 dias de servicio -> 90 x 30 / 720 = 3,75 dias = $375.000."""
+        """88 dias de servicio (90 reales - el 31-ene y el 31-mar) -> 88 x 30 / 720 = 3,666667 dias."""
         employee, contract = self._contrato('Corto', date_start=date(2025, 1, 1))
         slip = self._liquidacion(employee, contract, date_to=date(2025, 3, 31))
         dias = self._calcular(slip)
-        self.assertAlmostEqual(dias['causados'], 3.75, places=6)
-        self.assertAlmostEqual(self._linea(slip).total, 3.75 * VALOR_DIA, places=2)
+        self.assertAlmostEqual(dias['causados'], 88 * 30 / 720.0, places=6)
+        self.assertAlmostEqual(self._linea(slip).total, 88 * 30 / 720.0 * VALOR_DIA, places=2)

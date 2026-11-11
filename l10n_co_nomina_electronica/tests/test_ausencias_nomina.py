@@ -54,7 +54,7 @@ class TestAusenciasNomina(TransactionCase):
         super().setUpClass()
         # Compañía dedicada y descartable (ver AUD-DIAN-34 en test_dian_matching.py: la
         # build de Odoo.sh corre los tests sobre una COPIA de la BD real de Guapante).
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 
             'name': 'Compañía de Prueba Ausencias',
         })
         # H-013 (2026-10-08, hallazgo de Tech Lead en servidor real): la conversión nativa

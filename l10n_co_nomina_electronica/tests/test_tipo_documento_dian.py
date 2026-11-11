@@ -26,7 +26,7 @@ class TestTipoDocumentoDian(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         # Compañía dedicada y descartable (ver AUD-DIAN-34 en test_dian_matching.py).
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 
             'name': 'Compañía de Prueba Tipo Documento',
         })
         cls.co_country = cls.env['res.country'].search([('code', '=', 'CO')], limit=1)

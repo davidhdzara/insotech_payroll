@@ -18,7 +18,7 @@ class TestConsultaEstadoPorCune(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         co = cls.env.ref('base.co')
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'name': 'Compañía de Prueba Consulta CUNE'})
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'name': 'Compañía de Prueba Consulta CUNE'})
         cls.env = cls.company.with_company(cls.company).env
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura CUNE', 'country_id': co.id})
@@ -65,7 +65,7 @@ class TestConsultaEstadoPorCune(TransactionCase):
         self.assertIn('no encontrado', str(exc.exception))
 
     def test_cune_de_otra_compania_no_se_resuelve(self):
-        otra = self.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'name': 'Otra Compañía Consulta CUNE'})
+        otra = self.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'name': 'Otra Compañía Consulta CUNE'})
         payslip = self._payslip('OtraCia')
         self._envio(payslip, 'CUNE-OTRA-CIA')
         wizard = self.env['l10n.co.ne.status.cune.wizard'].with_company(otra).create(

@@ -17,7 +17,7 @@ class TestLiquidacionPrimaIbc(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.company = cls.env['res.company'].create({
-            'l10n_co_pila_clase_riesgo': '1', 'name': 'Compañía de Prueba Prima IBC Liquidación'})
+            'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'name': 'Compañía de Prueba Prima IBC Liquidación'})
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura Prima IBC', 'country_id': cls.env.ref('base.co').id})
         cls.liquidacion = cls.env.ref(
