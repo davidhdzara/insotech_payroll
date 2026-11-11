@@ -123,13 +123,19 @@ class ResConfigSettings(models.TransientModel):
 
     def get_values(self):
         res = super().get_values()
-        for fname, xmlid in _NE_STRUCTURE_JOURNAL_FIELDS.items():
-            structure = self.env.ref(xmlid, raise_if_not_found=False)
-            res[fname] = structure.journal_id.id if structure else False
+        # Los diarios de las estructuras colombianas solo se leen/escriben para una compania
+        # colombiana: la regla nativa por pais oculta esas estructuras a quien solo tiene
+        # companias de otro pais (y leerlas daria "Error de acceso").
+        if self.env.company._ne_es_colombia():
+            for fname, xmlid in _NE_STRUCTURE_JOURNAL_FIELDS.items():
+                structure = self.env.ref(xmlid, raise_if_not_found=False)
+                res[fname] = structure.journal_id.id if structure else False
         return res
 
     def set_values(self):
         super().set_values()
+        if not self.env.company._ne_es_colombia():
+            return
         for fname, xmlid in _NE_STRUCTURE_JOURNAL_FIELDS.items():
             structure = self.env.ref(xmlid, raise_if_not_found=False)
             if structure:
