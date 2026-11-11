@@ -2617,7 +2617,7 @@ class HrPayslip(models.Model):
         - CO_INC_LABORAL: ARL al 100 % desde el primer dia. CO_LIC_MAT y CO_LIC_PAT: 100 % del
           salario, a cargo de la EPS (H-014, CST Art. 236 mod. Ley 2114/2021).
         Parametros normativos desde hr.rule.parameter a la fecha de _ne_fecha_parametros().
-        Sin piso de SMMLV (el criterio vigente de la regla; decision pendiente de David)."""
+        CO_INC_COMUN tiene piso de 1 SMMLV por dia (H-163, CST Art. 227): ver abajo."""
         self.ensure_one()
         if codigo not in _NOVEDAD_AUSENCIA_CALENDARIO_CODES:
             raise UserError(_(
@@ -2635,13 +2635,21 @@ class HrPayslip(models.Model):
         pct_3_90 = self._rule_parameter('l10n_co_pct_incapacidad_3_90', fecha) / 100
         pct_91_mas = self._rule_parameter('l10n_co_pct_incapacidad_91_mas', fecha) / 100
         limite_3_90 = self._rule_parameter('l10n_co_dias_incapacidad_limite_3_90', fecha)
+        # H-163 (CST art. 227; T-468/2010): los porcentajes aplican "siempre y cuando el valor
+        # liquido a pagar no sea inferior al SMMLV": valor por dia = max(valor_dia x pct del
+        # tramo, SMMLV / dias_mes), en todos los tramos. Con salario de 1 SMMLV se paga el 100 %.
+        smmlv_dia = self._rule_parameter('l10n_co_smmlv', fecha) / dias_mes
+
+        def _por_dia(pct):
+            return max(valor_dia * pct, smmlv_dia)
+
         if dias <= dias_emp:
-            return valor_dia * pct_emp * dias
+            return _por_dia(pct_emp) * dias
         if dias <= limite_3_90:
-            return valor_dia * pct_emp * dias_emp + valor_dia * pct_3_90 * (dias - dias_emp)
-        return (valor_dia * pct_emp * dias_emp
-                + valor_dia * pct_3_90 * (limite_3_90 - dias_emp)
-                + valor_dia * pct_91_mas * (dias - limite_3_90))
+            return _por_dia(pct_emp) * dias_emp + _por_dia(pct_3_90) * (dias - dias_emp)
+        return (_por_dia(pct_emp) * dias_emp
+                + _por_dia(pct_3_90) * (limite_3_90 - dias_emp)
+                + _por_dia(pct_91_mas) * (dias - limite_3_90))
 
     def _ne_ausencia_calendario(self, work_entry_code):
         """Única fuente de días CALENDARIO corridos (lunes a domingo, festivos incluidos)

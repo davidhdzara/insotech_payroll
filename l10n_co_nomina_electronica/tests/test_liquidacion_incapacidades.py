@@ -65,11 +65,12 @@ class TestLiquidacionIncapacidades(TransactionCase):
         slip = self._liquidacion('IncComun', [(self.inc_comun, date(2026, 8, 3), date(2026, 8, 7))])
         inc = self._linea(slip, 'CO_INC_COMUN')
         self.assertEqual(inc.quantity, 5.0)
-        # 2 dias empleador + 3 dias EPS, ambos al 66,67 %: 60.000 x 0,6667 x 5
-        self.assertAlmostEqual(inc.total, 200010.0, places=2)
+        # .163: valor dia 60.000 x 0,6667 = 40.002 < piso 1 SMMLV/30 = 1.750.905/30 = 58.363,5
+        # -> 5 dias x 58.363,5 = 291.817,5
+        self.assertAlmostEqual(inc.total, 291817.5, places=2)
         salarios = self._linea(slip, 'CO_LIQ_SALARIOS')
         self.assertEqual((salarios.quantity, salarios.total), (10.0, 600000.0))
-        self.assertAlmostEqual(self._linea(slip, 'CO_IBC_INCAP').total, 200010.0, places=2)
+        self.assertAlmostEqual(self._linea(slip, 'CO_IBC_INCAP').total, 291817.5, places=2)
         # CO_LIQ_NETO sube exactamente el valor de la incapacidad frente a la regla inactiva (las
         # deducciones son las mismas: en ambos casos el piso de 1 SMMLV prorrateado domina el IBC).
         neto_con = self._linea(slip, 'CO_LIQ_NETO').total
@@ -79,7 +80,7 @@ class TestLiquidacionIncapacidades(TransactionCase):
         slip.compute_sheet()
         self.assertFalse(self._linea(slip, 'CO_INC_COMUN'))
         self.assertAlmostEqual(
-            neto_con - self._linea(slip, 'CO_LIQ_NETO').total, 200010.0, places=2)
+            neto_con - self._linea(slip, 'CO_LIQ_NETO').total, 291817.5, places=2)
 
     def test_xml_reporta_la_incapacidad_del_tramo(self):
         slip = self._liquidacion('XmlInc', [(self.inc_comun, date(2026, 8, 3), date(2026, 8, 7))])
@@ -88,7 +89,7 @@ class TestLiquidacionIncapacidades(TransactionCase):
         self.assertEqual(
             (items[0]['FechaInicio'], items[0]['FechaFin'], items[0]['Cantidad'], items[0]['Tipo']),
             ('2026-08-03', '2026-08-07', '5', '1'))
-        self.assertEqual(items[0]['Pago'], '200010.00')
+        self.assertEqual(items[0]['Pago'], '291817.50')
 
     def test_incapacidad_de_un_mes_anterior_no_se_paga_ni_se_descuenta_ni_va_al_xml(self):
         slip = self._liquidacion('IncAbril', [(self.inc_comun, date(2026, 4, 6), date(2026, 4, 10))])
@@ -153,9 +154,10 @@ class TestLiquidacionIncapacidades(TransactionCase):
             slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 2), 133340.0, places=2)
         self.assertAlmostEqual(
             slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 10), 666700.0, places=2)
-        # 90 dias al 66,67 % + 10 dias al 50 %
+        # 90 dias al 66,67 % + 10 dias al 50 % (50.000/dia < piso 1 SMMLV/30 = 58.363,5, .163):
+        # 90 x 66.670 + 10 x 58.363,5 = 6.583.935
         self.assertAlmostEqual(
-            slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 100), 6500300.0, places=2)
+            slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 100), 6583935.0, places=2)
         self.assertEqual(slip._ne_pago_ausencia_calendario('CO_INC_COMUN', 0), 0.0)
 
     def test_equivalencia_licencias_e_incapacidad_laboral_valor_dia_por_dias(self):

@@ -277,7 +277,9 @@ class TestAusenciasNomina(TransactionCase):
         Ya no rige "básico + novedad = sueldo" para este concepto: el 33.33% restante de
         esos días NO se paga. Lo que sí debe seguir cumpliéndose: sin doble pago (el básico
         descuenta exactamente los días de la incapacidad)."""
-        wage = 1800000.0
+        # .163: con 3.000.000 el 66,67 % supera el piso de 1 SMMLV por dia (el piso se prueba en
+        # test_incapacidad_piso_smmlv).
+        wage = 3000000.0
         employee, contract = self._make_contract('IncComun', wage=wage)
         self._make_validated_leave(
             employee, contract, self.leave_type_inc_comun, date(2026, 9, 1), date(2026, 9, 2))
@@ -292,7 +294,7 @@ class TestAusenciasNomina(TransactionCase):
         self.assertAlmostEqual(
             self._novedad(payslip, 'CO_INC_COMUN'), valor_dia * dias * 0.6667, delta=0.01)
 
-    def _incapacidad_comun_pagada(self, nombre, ini, fin, wage=1800000.0):
+    def _incapacidad_comun_pagada(self, nombre, ini, fin, wage=3000000.0):
         employee, contract = self._make_contract(nombre, wage=wage)
         self._make_validated_leave(
             employee, contract, self.leave_type_inc_comun, ini, fin)
@@ -324,8 +326,9 @@ class TestAusenciasNomina(TransactionCase):
         (hr.rule.parameter), separado del de la EPS: cambiarlo cambia solo esos días."""
         valor = self.env.ref('l10n_co_nomina_electronica.rule_parameter_pct_incapacidad_empleador_2024')
         valor.parameter_value = '50'
+        # 4.000.000: valor dia 133.333 x 50 % = 66.667 supera el piso (58.363,5 en 2026).
         pagado, valor_dia = self._incapacidad_comun_pagada(
-            'IncEmpParam', date(2026, 9, 1), date(2026, 9, 4))
+            'IncEmpParam', date(2026, 9, 1), date(2026, 9, 4), wage=4000000.0)
         # 2 días del empleador al 50% + 2 días de la EPS al 66.67%
         self.assertAlmostEqual(
             pagado, valor_dia * (2 * 0.5 + 2 * 0.6667), delta=0.01)

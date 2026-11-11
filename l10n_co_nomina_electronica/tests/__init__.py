@@ -56,3 +56,4 @@ from . import test_recibos_solapados
 from . import test_sln_aportes
 from . import test_ajustes_generales
 from . import test_dias_comerciales
+from . import test_incapacidad_piso_smmlv
