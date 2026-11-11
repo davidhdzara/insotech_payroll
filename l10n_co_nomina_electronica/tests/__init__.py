@@ -62,3 +62,4 @@ from . import test_jornada_15_julio_parametros
 from . import test_retefuente_config_anio
 from . import test_liquidacion_sln_ibc
 from . import test_redondeo_dias_xml
+from . import test_incapacidad_tramo_prorroga
