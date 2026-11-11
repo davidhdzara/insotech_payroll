@@ -138,6 +138,8 @@ result = -abs(result_rules['CO_PRIMA_VALOR']['total'])
 result_rate = payslip._rule_parameter('l10n_co_pct_salud_empleado', payslip.date_from)
             </field>
             <field name="appears_on_payslip" eval="True"/>
+            <field name="active" eval="False"/>
+            <field name="note">Inactiva desde .164: la prima no es salario ni factor salarial (CST Art. 307), no lleva descuento de salud ni pension del empleado. Se conserva el registro por el historial de recibos ya confirmados.</field>
             <field name="l10n_co_ne_dian_concept">Salud</field>
         </record>
 
@@ -161,6 +163,8 @@ result = -abs(result_rules['CO_PRIMA_VALOR']['total'])
 result_rate = payslip._rule_parameter('l10n_co_pct_pension_empleado', payslip.date_from)
             </field>
             <field name="appears_on_payslip" eval="True"/>
+            <field name="active" eval="False"/>
+            <field name="note">Inactiva desde .164: la prima no es salario ni factor salarial (CST Art. 307), no lleva descuento de salud ni pension del empleado. Se conserva el registro por el historial de recibos ya confirmados.</field>
             <field name="l10n_co_ne_dian_concept">FondoPension</field>
         </record>
 

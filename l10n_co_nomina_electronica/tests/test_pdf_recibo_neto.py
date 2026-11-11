@@ -98,7 +98,7 @@ class TestPdfReciboNeto(TransactionCase):
     def test_prima_y_bonificacion_usan_su_propia_linea_de_neto(self):
         prima = self._recibo(self.est_prima, 'Prima')
         self._con_nativas(prima)
-        for code, total in (('CO_PRIMA_VALOR', 1500000.0), ('CO_PRIMA_SALUD', -60000.0),
+        for code, total in (('CO_PRIMA_VALOR', 1500000.0), ('CO_PRIMA_RETE', -60000.0),
                             ('CO_PRIMA_NETO', 1440000.0)):
             self._linea(prima, code, total)
         self.assertEqual(prima._ne_pdf_neto(), 1440000.0)

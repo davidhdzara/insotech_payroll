@@ -57,3 +57,4 @@ from . import test_sln_aportes
 from . import test_ajustes_generales
 from . import test_dias_comerciales
 from . import test_incapacidad_piso_smmlv
+from . import test_liquidacion_prima_ibc
