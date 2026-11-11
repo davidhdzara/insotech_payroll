@@ -24,14 +24,16 @@ class L10nCoNeStatusCuneWizard(models.TransientModel):
     def _resolve_payslip(self):
         self.ensure_one()
         cune = (self.cune or '').strip()
+        # Sin filtrar por la compania activa: la regla multiempresa del intercambio deja ver solo
+        # los de las companias autorizadas; la compania del documento decide el resto.
         documento = self.env['l10n.co.ne.exchange.document'].search([
             ('cune', '=', cune),
-            ('company_id', '=', self.env.company.id),
         ], order='id desc', limit=1)
         if not documento:
             raise UserError(_(
-                'CUNE no encontrado en el historial de envíos de esta compañía. Solo se pueden '
+                'CUNE no encontrado en el historial de envíos de sus compañías. Solo se pueden '
                 'consultar documentos que este sistema ya envió a la DIAN.'))
+        documento.company_id._ne_exigir_colombia()
         payslip = documento.payslip_id
         if not payslip.l10n_co_ne_zip_key:
             # El envío guardó el ZipKey en el intercambio, no necesariamente en la nómina.

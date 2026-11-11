@@ -15,7 +15,7 @@ electrónica.
 """
 
 from odoo import api, fields, models, _
-from odoo.exceptions import ValidationError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tools import convert
 from odoo.tools.misc import str2bool
 
@@ -114,6 +114,18 @@ class ResCompany(models.Model):
         companies = super().create(vals_list)
         companies._ne_asegurar_secuencias()
         return companies
+
+    def _ne_exigir_colombia(self):
+        """Error claro si la compania no es colombiana: los asistentes de nomina colombiana (PILA,
+        UGPP, habilitacion DIAN, consulta por CUNE) trabajan con la compania del registro y solo para
+        companias de Colombia."""
+        for company in self:
+            if not company._ne_es_colombia():
+                raise UserError(_(
+                    'La compañía "%(company)s" no es colombiana: esta opción solo aplica a '
+                    'compañías de Colombia. Cambie de compañía en el selector superior o '
+                    'verifique el país de la compañía (Ajustes > Compañías).',
+                    company=company.name))
 
     def _ne_es_colombia(self):
         """True si la compania es colombiana. Unica comprobacion de pais del modulo: lo propio de la

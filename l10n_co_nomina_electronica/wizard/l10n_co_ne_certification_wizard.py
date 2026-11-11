@@ -117,6 +117,12 @@ class L10nCoNeCertificationWizard(models.TransientModel):
         compute='_compute_counts', string='Aceptadas (Ajuste)',
     )
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        wizards = super().create(vals_list)
+        wizards.company_id._ne_exigir_colombia()
+        return wizards
+
     @api.depends(
         'payslip_individual_ids.l10n_co_ne_state',
         'payslip_ajuste_ids.l10n_co_ne_state',

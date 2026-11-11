@@ -68,6 +68,7 @@ from . import test_multiempresa_inercia
 from . import test_secuencias_por_compania
 from . import test_retefuente_config_compartida
 from . import test_multiempresa_aislamiento
+from . import test_wizards_compania_del_registro
 from . import test_liquidacion_sln_ibc
 from . import test_redondeo_dias_xml
 from . import test_incapacidad_tramo_prorroga

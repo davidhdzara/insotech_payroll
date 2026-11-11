@@ -204,6 +204,12 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     # ──────────────────────────────────────────────────────────────────
     # Computed display name
     # ──────────────────────────────────────────────────────────────────
+    @api.model_create_multi
+    def create(self, vals_list):
+        wizards = super().create(vals_list)
+        wizards.company_id._ne_exigir_colombia()
+        return wizards
+
     @api.depends('year', 'month', 'company_id')
     def _compute_display_name(self):
         """Calcula el nombre para mostrar del wizard."""

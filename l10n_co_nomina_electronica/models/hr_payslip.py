@@ -927,7 +927,12 @@ class HrPayslip(models.Model):
     def compute_sheet(self):
         colombia = self._ne_solo_colombia()
         colombia._ne_validar_terceros_attachments()
-        res = super().compute_sheet()
+        # Cada recibo se calcula en el contexto de SU compania: los parametros (hr.rule.parameter,
+        # por pais) y env.company salen de la compania del recibo, no de la activa en el selector.
+        res = True
+        for company in self.company_id:
+            recibos = self.filtered(lambda s, c=company: s.company_id == c).with_company(company)
+            res = super(HrPayslip, recibos).compute_sheet()
         colombia._ne_validar_terceros_deducciones()
         return res
 
