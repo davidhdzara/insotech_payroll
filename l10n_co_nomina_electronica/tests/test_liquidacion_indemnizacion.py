@@ -21,7 +21,7 @@ class TestLiquidacionIndemnizacion(TransactionCase):
         super().setUpClass()
         # Compañía dedicada y descartable (ver AUD-DIAN-34 en test_dian_matching.py: la build
         # de Odoo.sh corre los tests sobre una COPIA de la BD real de Guapante).
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 
             'name': 'Compañía de Prueba Indemnización',
         })
         co_country = cls.env['res.country'].search([('code', '=', 'CO')], limit=1)
@@ -88,9 +88,9 @@ class TestLiquidacionIndemnizacion(TransactionCase):
 
     def test_indefinido_menor_10_smmlv_3_5_anios(self):
         """(a) 3,5 años, $3.000.000 -> 80 días = $8.000.000 (30 + 2,5x20). 1260 días
-        COMERCIALES (meses de 30, inclusivos / 360) dan 3,5 años."""
+        (reales sin el 31, inclusivos / 360) dan 3,5 años."""
         date_to = date(2026, 6, 30)
-        date_start = date(2023, 1, 1)  # 41 meses x 30 + 30 = 1260 días comerciales
+        date_start = date(2022, 12, 24)  # 1.285 reales - 25 treintaiunos = 1260 días
         employee, contract = self._make_contract('Indef3y6m', 3000000.0, date_start)
         payslip = self._make_liquidacion_payslip(employee, contract, date_to)
         self.assertAlmostEqual(self._indemnizacion_total(payslip), 8000000.0, places=2)
@@ -98,7 +98,7 @@ class TestLiquidacionIndemnizacion(TransactionCase):
     def test_indefinido_menor_10_smmlv_menos_de_un_anio(self):
         """(a) Menos de 1 año: siempre 30 días completos, sin proporción dentro del primer año."""
         date_to = date(2026, 6, 30)
-        date_start = date(2026, 1, 1)  # 180 días comerciales = 0,5 años
+        date_start = date(2025, 12, 29)  # 184 reales - 4 treintaiunos = 180 días = 0,5 años
         employee, contract = self._make_contract('IndefMenosUnAnio', 3000000.0, date_start)
         payslip = self._make_liquidacion_payslip(employee, contract, date_to)
         valor_dia = 3000000.0 / 30
@@ -106,9 +106,9 @@ class TestLiquidacionIndemnizacion(TransactionCase):
 
     def test_indefinido_exactamente_10_smmlv_usa_20_y_15(self):
         """(a) Salario EXACTAMENTE 10 SMMLV (umbral, no lo supera) -> tramo >= 10 SMMLV: 20
-        días primer año + 15 por cada año adicional. 3 años exactos (1080 días comerciales)."""
+        días primer año + 15 por cada año adicional. 3 años exactos (1080 días)."""
         date_to = date(2026, 6, 30)
-        date_start = date(2023, 7, 1)  # 35 meses x 30 + 30 = 1080 días comerciales
+        date_start = date(2023, 6, 26)  # 1.101 reales - 21 treintaiunos = 1080 días
         wage = self.smmlv_2026 * 10
         employee, contract = self._make_contract('Indef10Smmlv', wage, date_start)
         payslip = self._make_liquidacion_payslip(employee, contract, date_to)

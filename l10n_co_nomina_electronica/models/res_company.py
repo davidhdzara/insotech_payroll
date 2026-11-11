@@ -462,6 +462,18 @@ class ResCompany(models.Model):
              'XML). Un empleado puede tener otro propio.',
     )
 
+    l10n_co_ne_febrero_modo = fields.Selection(
+        selection=[
+            ('real', 'Días reales'),
+            ('30', 'Mes de 30 días'),
+        ],
+        string='Febrero en prestaciones',
+        help='Cómo se cuentan los días en prima, cesantías, intereses, indemnización y vacaciones '
+             'causadas de la liquidación (el divisor sigue siendo 360). "Días reales": febrero '
+             'cuenta 28 (29 si es bisiesto) y el día 31 no cuenta. "Mes de 30 días": cada mes, '
+             'febrero incluido, cuenta 30. No afecta el sueldo mensual ni los días de PILA.',
+    )
+
     def write(self, vals):
         if 'l10n_co_pila_ccf_por_empleado' in vals and not vals['l10n_co_pila_ccf_por_empleado']:
             for company in self.filtered('l10n_co_pila_ccf_por_empleado'):

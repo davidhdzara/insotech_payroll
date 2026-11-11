@@ -24,7 +24,7 @@ class TestLiquidacionFechaParametros(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 
             'name': 'Compañía de Prueba Fecha Parámetros Liquidación'})
         co_country = cls.env.ref('base.co')
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
@@ -59,8 +59,9 @@ class TestLiquidacionFechaParametros(TransactionCase):
     def _verificar_prestaciones_con_auxilio_2026(self, slip):
         slip.compute_sheet()
         base = 3000000.0 + AUX_2026
-        # Días comerciales (meses de 30): 7 meses (ene-jul) x 30 + 15 = 225; jul 30 + 15 = 45.
-        dias_ces = 225  # 1-ene-2026 a 15-ago-2026
+        # Días reales sin el 31 (modo 'real'): 227 reales - 4 treintaiunos (31-ene, mar, may, jul)
+        # = 223; prima 1-jul a 15-ago: 46 reales - el 31-jul = 45.
+        dias_ces = 223  # 1-ene-2026 a 15-ago-2026
         dias_prima = 45  # 1-jul-2026 a 15-ago-2026
         cesantias = base * dias_ces / ANIO
         self.assertAlmostEqual(self._total(slip, 'CO_LIQ_CESANTIAS'), cesantias, places=2)
@@ -93,8 +94,8 @@ class TestLiquidacionFechaParametros(TransactionCase):
         slip = self._liquidacion(
             'Indemnizacion2024', 15000000.0, date(2024, 3, 1), cause='sin_justa_causa')
         slip.compute_sheet()
-        # Días comerciales 1-mar-2024 a 15-ago-2026: 29 meses x 30 + 15 = 885.
-        anos = 885 / ANIO
+        # Días 1-mar-2024 a 15-ago-2026: 898 reales - 17 treintaiunos = 881.
+        anos = 881 / ANIO
         valor_dia = 15000000.0 / 30
         esperado = valor_dia * 30 + valor_dia * 20 * (anos - 1)
         self.assertAlmostEqual(self._total(slip, 'CO_LIQ_INDEMNIZACION'), esperado, places=2)

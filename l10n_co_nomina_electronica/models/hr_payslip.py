@@ -2446,16 +2446,42 @@ class HrPayslip(models.Model):
             return dias_mes
         return min(d.day, dias_mes)
 
-    def _ne_dias_comerciales(self, fecha_ini, fecha_fin):
-        """Días COMERCIALES (calendario de 360 días: meses de 30) de [fecha_ini, fecha_fin],
-        ambos extremos incluidos. Convención laboral colombiana (decisión de David: "el 31
-        prácticamente se regala"): el último día real de cada mes cuenta como día 30
-        (_ne_dia_comercial), así febrero completo = 30 y un día 31 no suma. Única fuente para
-        prima, cesantías, intereses, indemnización y vacaciones causadas de la liquidación.
-        0 si el rango está invertido. Días por mes: hr.rule.parameter l10n_co_dias_mes_comercial."""
+    def _ne_dias_prestacion(self, fecha_ini, fecha_fin):
+        """Dias de [fecha_ini, fecha_fin] (extremos incluidos) para prima, cesantias, intereses,
+        indemnizacion y vacaciones causadas de la liquidacion. El divisor del anio sigue siendo
+        360 (hr.rule.parameter l10n_co_dias_anio_comercial); aqui solo se cuentan los dias.
+
+        El tratamiento de febrero es un parametro de la compania (Ajustes > Nomina,
+        l10n_co_ne_febrero_modo), sin valor por defecto:
+        - 'real' (decision de David, Guapante): los dias reales que se tienen, ni mas ni menos:
+          febrero cuenta 28 (29 si es bisiesto), completo o parcial; el dia 31 de los meses de
+          31 dias no cuenta (se "regala"). Un semestre ene-jun = 178, jul-dic = 180, un anio = 358
+          (359 si es bisiesto).
+        - '30': mes comercial de 30 dias (el ultimo dia real de cada mes cuenta como 30; febrero
+          completo = 30; un semestre = 180, un anio = 360), con _ne_dia_comercial.
+        NO afecta al sueldo mensual ni a los dias de PILA (_ne_dias_bajo_contrato): ahi febrero
+        sigue siendo 30. 0 si el rango esta invertido. Sin el parametro: UserError."""
         self.ensure_one()
+        modo = self.company_id.l10n_co_ne_febrero_modo
+        if not modo:
+            raise UserError(_(
+                'La empresa %(company)s no tiene configurado el tratamiento de febrero en las '
+                'prestaciones (Nómina > Configuración > Ajustes, bloque Parámetros Nómina '
+                'Colombia, "Febrero en prestaciones"). Se necesita para calcular la nómina '
+                '"%(nomina)s".', company=self.company_id.name, nomina=self.display_name))
         if fecha_fin < fecha_ini:
             return 0
+        if modo == 'real':
+            dias = (fecha_fin - fecha_ini).days + 1
+            anio, mes = fecha_ini.year, fecha_ini.month
+            while (anio, mes) <= (fecha_fin.year, fecha_fin.month):
+                if self._ne_dias_en_mes_calendario(anio, mes) == 31 \
+                        and fecha_ini <= fecha_fin.replace(year=anio, month=mes, day=31) <= fecha_fin:
+                    dias -= 1
+                mes += 1
+                if mes == 13:
+                    anio, mes = anio + 1, 1
+            return dias
         dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
         meses = (fecha_fin.year - fecha_ini.year) * 12 + (fecha_fin.month - fecha_ini.month)
         return (meses * dias_mes + self._ne_dia_comercial(fecha_fin, dias_mes)
@@ -2480,7 +2506,7 @@ class HrPayslip(models.Model):
     def _ne_liq_vacaciones_dias(self):
         """Dias de vacaciones causadas, ya tomadas y pendientes del contrato al retiro.
 
-        Causadas: dias comerciales (_ne_dias_comerciales) de inicio de contrato a date_to x dias_mes / divisor_vacaciones (15 dias
+        Causadas: dias de prestacion (_ne_dias_prestacion) de inicio de contrato a date_to x dias_mes / divisor_vacaciones (15 dias
         habiles por 360 de servicio, Art. 186 CST; con los parametros 30 y 720 = dias / 24).
         Ya tomadas, de las mismas fuentes que paga la nomina mensual (una sola fuente):
         - disfrutadas: hr.leave validadas CO_VAC en dias HABILES del calendario del contrato
@@ -2496,7 +2522,7 @@ class HrPayslip(models.Model):
         fecha = self._ne_fecha_parametros()
         dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', fecha)
         divisor = self._rule_parameter('l10n_co_divisor_vacaciones', fecha)
-        dias_servicio = self._ne_dias_comerciales(contract.date_start, self.date_to)
+        dias_servicio = self._ne_dias_prestacion(contract.date_start, self.date_to)
         causados = dias_servicio * dias_mes / divisor
 
         disfrutados, _detalle = self._ne_ausencia_habil('CO_VAC')

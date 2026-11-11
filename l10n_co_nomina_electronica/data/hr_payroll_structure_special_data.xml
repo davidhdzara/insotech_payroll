@@ -100,7 +100,7 @@ _inicio_efectivo = max(_inicio_contrato, _inicio_sem)
 _fin_efectivo = min(payslip.date_to, _fin_sem)
 
 # Dias trabajados en el semestre
-_dias = payslip._ne_dias_comerciales(_inicio_efectivo, _fin_efectivo)
+_dias = payslip._ne_dias_prestacion(_inicio_efectivo, _fin_efectivo)
 
 # Tope maximo: un semestre completo = mitad del anio comercial (AUD-DIAN-34,
 # 2026-10-05: 180 no es un umbral legal propio, es la mitad de los 360 dias
@@ -340,7 +340,7 @@ else:
 
 # Fecha efectiva de inicio: la mayor entre inicio contrato e inicio semestre
 _inicio_efectivo = max(contract.date_start, _inicio_sem)
-_dias = payslip._ne_dias_comerciales(_inicio_efectivo, _fecha_fin)
+_dias = payslip._ne_dias_prestacion(_inicio_efectivo, _fecha_fin)
 # Tope maximo: un semestre completo = mitad del anio comercial (AUD-DIAN-34,
 # 2026-10-05: misma derivacion que CO_PRIMA, ver su comentario -- 180 no es
 # un umbral legal propio).
@@ -389,7 +389,7 @@ _year = _fecha_fin.year
 _inicio_periodo = date(_year, 1, 1)
 _inicio_efectivo = max(contract.date_start, _inicio_periodo)
 
-_dias = payslip._ne_dias_comerciales(_inicio_efectivo, _fecha_fin)
+_dias = payslip._ne_dias_prestacion(_inicio_efectivo, _fecha_fin)
 _dias = min(_dias, payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_to))
 
 # Cesantias proporcionales
@@ -427,7 +427,7 @@ _year = _fecha_fin.year
 _inicio_periodo = date(_year, 1, 1)
 _inicio_efectivo = max(contract.date_start, _inicio_periodo)
 
-_dias = payslip._ne_dias_comerciales(_inicio_efectivo, _fecha_fin)
+_dias = payslip._ne_dias_prestacion(_inicio_efectivo, _fecha_fin)
 _dias = min(_dias, payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_to))
 
 # Intereses sobre cesantias: pct_intereses_cesantias% anual proporcional
@@ -676,7 +676,7 @@ _fecha_inicio = contract.date_start
 _fecha_fin = payslip.date_to
 
 # Dias trabajados totales
-_dias_totales = payslip._ne_dias_comerciales(_fecha_inicio, _fecha_fin)
+_dias_totales = payslip._ne_dias_prestacion(_fecha_inicio, _fecha_fin)
 _anos = _dias_totales / payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_to)
 _anos_completos = int(_anos)
 _valor_dia = _salario / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_to)

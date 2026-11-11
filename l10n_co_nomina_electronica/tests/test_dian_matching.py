@@ -56,7 +56,7 @@ class TestDianMatchingCommon(TransactionCase):
         # UNIQUE(company_id) y abortó la carga del módulo ("Failed to
         # load registry"). Compañía dedicada y descartable para todo
         # el aislamiento de estas pruebas.
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 
             'name': 'Compañía de Prueba DIAN Matching',
         })
         co_country = cls.env['res.country'].search([('code', '=', 'CO')], limit=1)

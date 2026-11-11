@@ -19,7 +19,7 @@ class IbcBase(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'name': 'Compañía Prueba IBC'})
+        cls.company = cls.env['res.company'].create({'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'name': 'Compañía Prueba IBC'})
         cls.env = cls.company.with_company(cls.company).env
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura IBC', 'country_id': cls.env.ref('base.co').id})

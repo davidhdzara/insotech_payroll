@@ -55,7 +55,7 @@ from . import test_ugpp_dias
 from . import test_recibos_solapados
 from . import test_sln_aportes
 from . import test_ajustes_generales
-from . import test_dias_comerciales
+from . import test_dias_prestacion
 from . import test_incapacidad_piso_smmlv
 from . import test_liquidacion_prima_ibc
 from . import test_jornada_15_julio_parametros
