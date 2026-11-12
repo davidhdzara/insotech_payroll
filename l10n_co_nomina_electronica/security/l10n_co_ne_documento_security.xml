@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Aislamiento multiempresa del documento mensual DIAN y de sus intentos (doc 51, doc 53 §3.1):
+         reglas globales company_id in company_ids, igual que recibo/lote en hr_payroll. -->
+    <record id="rule_l10n_co_ne_documento_company" model="ir.rule">
+        <field name="name">Documento mensual DIAN: compañías autorizadas</field>
+        <field name="model_id" ref="model_l10n_co_ne_documento"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_l10n_co_ne_documento_intento_company" model="ir.rule">
+        <field name="name">Intentos de envío DIAN: compañías autorizadas</field>
+        <field name="model_id" ref="model_l10n_co_ne_documento_intento"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>

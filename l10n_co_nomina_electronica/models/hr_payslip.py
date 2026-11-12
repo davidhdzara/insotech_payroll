@@ -109,6 +109,36 @@ class HrPayslip(models.Model):
     _name = 'hr.payslip'
     _inherit = ['hr.payslip', 'l10n.co.ne.documento.mixin']
 
+    # Documento mensual DIAN al que pertenece el recibo (doc 53 §3.2, etapa 1b). El ciclo DIAN por recibo
+    # (campos del mixin) sigue intacto hasta la etapa 5; esto solo agrega el enlace.
+    l10n_co_ne_documento_id = fields.Many2one(
+        'l10n.co.ne.documento', string='Documento DIAN mensual', copy=False, index=True,
+        ondelete='restrict', check_company=True,
+        help='Documento mensual de nómina electrónica (uno por empleado y mes) que incluye este recibo.')
+    l10n_co_ne_documento_state = fields.Selection(
+        related='l10n_co_ne_documento_id.state', string='Estado DIAN del documento', store=True)
+    l10n_co_ne_intento_ids = fields.One2many(
+        related='l10n_co_ne_documento_id.intento_ids', string='Intentos DIAN', readonly=True)
+    l10n_co_ne_documento_message = fields.Html(
+        related='l10n_co_ne_documento_id.message', string='Motivo DIAN', readonly=True)
+
+    @api.constrains('l10n_co_ne_documento_id', 'company_id', 'employee_id', 'credit_note')
+    def _check_documento_coherente(self):
+        """Un recibo del documento mensual es de la misma compañía y empleado, y no es nota de crédito. Los
+        documentos legacy (1:1 con lo ya transmitido) quedan fuera: conservan lo que hubo."""
+        for slip in self:
+            doc = slip.l10n_co_ne_documento_id
+            if not doc or doc.legacy:
+                continue
+            if slip.company_id != doc.company_id or slip.employee_id != doc.employee_id:
+                raise ValidationError(_(
+                    'El recibo "%(recibo)s" no es de la compañía y el empleado del documento "%(doc)s".',
+                    recibo=slip.display_name, doc=doc.display_name))
+            if slip.credit_note:
+                raise ValidationError(_(
+                    'El recibo "%(recibo)s" es una nota de crédito y no puede ir en un documento mensual.',
+                    recibo=slip.display_name))
+
 
 
 

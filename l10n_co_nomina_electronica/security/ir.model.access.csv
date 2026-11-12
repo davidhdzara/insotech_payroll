@@ -24,3 +24,7 @@ access_l10n_co_ibc_mensual_manager,l10n.co.ibc.mensual manager,model_l10n_co_ibc
 access_l10n_co_ibc_mensual_user,l10n.co.ibc.mensual user,model_l10n_co_ibc_mensual,hr_payroll.group_hr_payroll_user,1,0,0,0
 access_l10n_co_pila_planilla_manager,l10n.co.pila.planilla manager,model_l10n_co_pila_planilla,hr_payroll.group_hr_payroll_manager,1,1,1,1
 access_l10n_co_pila_planilla_user,l10n.co.pila.planilla user,model_l10n_co_pila_planilla,hr_payroll.group_hr_payroll_user,1,0,0,0
+access_l10n_co_ne_documento_manager,l10n.co.ne.documento manager,model_l10n_co_ne_documento,hr_payroll.group_hr_payroll_manager,1,1,1,1
+access_l10n_co_ne_documento_user,l10n.co.ne.documento user,model_l10n_co_ne_documento,hr_payroll.group_hr_payroll_user,1,0,0,0
+access_l10n_co_ne_documento_intento_manager,l10n.co.ne.documento.intento manager,model_l10n_co_ne_documento_intento,hr_payroll.group_hr_payroll_manager,1,1,1,0
+access_l10n_co_ne_documento_intento_user,l10n.co.ne.documento.intento user,model_l10n_co_ne_documento_intento,hr_payroll.group_hr_payroll_user,1,0,0,0
