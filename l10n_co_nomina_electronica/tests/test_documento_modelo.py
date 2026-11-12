@@ -264,3 +264,13 @@ class TestDocumentoModelo(TransactionCase):
         with patch.object(type(self.company), '_ne_es_colombia', lambda s: False):
             self.assertFalse(self.env['l10n.co.ne.documento']._ne_migrar_legacy())
         self.assertFalse(slip.l10n_co_ne_documento_id)
+
+    # ── Vistas ───────────────────────────────────────────────────────
+    def test_vistas_del_documento_cargan(self):
+        for tipo in ('form', 'list', 'search'):
+            vista = self.env['l10n.co.ne.documento'].get_view(view_type=tipo)
+            self.assertTrue(vista['arch'], tipo)
+        recibo = self.env['hr.payslip'].get_view(view_type='form')
+        self.assertIn('l10n_co_ne_documento_state', recibo['arch'])
+        self.assertIn('edi_documents', recibo['arch'])
+        self.assertTrue(self.env.ref('l10n_co_nomina_electronica.menu_l10n_co_ne_documento'))
