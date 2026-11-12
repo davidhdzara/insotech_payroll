@@ -545,6 +545,18 @@ class ResCompany(models.Model):
              'febrero incluido, cuenta 30. No afecta el sueldo mensual ni los días de PILA.',
     )
 
+    l10n_co_ne_fuente_fecha_pago = fields.Selection(
+        selection=[
+            ('contabilidad', 'Pagos de Contabilidad'),
+            ('recibo', 'Fecha de pago del recibo'),
+        ],
+        string='Fuente de la fecha de pago',
+        help='De dónde sale la fecha de pago que decide el mes del documento de nómina electrónica y se reporta '
+             'en FechasPagos. "Pagos de Contabilidad": las fechas de los pagos conciliados del asiento del recibo. '
+             '"Fecha de pago del recibo": el campo Fecha de pago del recibo, que se llena con la acción Registrar '
+             'pago. Sin valor por defecto: si falta, se pide elegirlo.',
+    )
+
     l10n_co_ne_redondeo_dias = fields.Selection(
         selection=[
             ('HALF-UP', 'HALF-UP (al entero más cercano; 0,5 sube)'),

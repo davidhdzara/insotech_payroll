@@ -1337,6 +1337,44 @@ class HrPayslip(models.Model):
                 anio=anio, company=self.company_id.name, nomina=self.display_name))
         return config
 
+    def _ne_fechas_pago(self):
+        """Fechas de pago del recibo (ordenadas y distintas): UNICO accesor del módulo (doc 53 §20.3).
+
+        La fuente es un ajuste de la COMPAÑÍA, nunca por registro (Ajustes > Nómina, sin valor por defecto):
+        'recibo' -> la fecha de pago del recibo (acción Registrar pago); 'contabilidad' -> las fechas de los pagos
+        conciliados del asiento del recibo. Sin fecha no se supone ninguna: error claro."""
+        self.ensure_one()
+        fuente = self.company_id.l10n_co_ne_fuente_fecha_pago
+        if not fuente:
+            raise UserError(_(
+                'La compañía "%(compania)s" no tiene definida la fuente de la fecha de pago. Elíjala en Ajustes > '
+                'Nómina > "Fuente de la fecha de pago".', compania=self.company_id.name))
+        if fuente == 'recibo':
+            if not self.paid_date:
+                raise UserError(_(
+                    'El recibo "%(recibo)s" (%(empleado)s) no tiene fecha de pago. Regístrela con la acción '
+                    '"Registrar pago".', recibo=self.display_name, empleado=self.employee_id.display_name))
+            return [fields.Date.to_date(self.paid_date)]
+        fechas = self._ne_fechas_pagos_contables()
+        if not fechas:
+            raise UserError(_(
+                'El recibo "%(recibo)s" (%(empleado)s) no tiene pagos conciliados en Contabilidad: no se puede '
+                'saber su fecha de pago.', recibo=self.display_name, empleado=self.employee_id.display_name))
+        return fechas
+
+    def _ne_fecha_pago(self):
+        """Primera fecha de pago: define el mes del documento (Oficio DIAN 901476: pago o abono, lo primero)."""
+        return self._ne_fechas_pago()[0]
+
+    def _ne_fechas_pagos_contables(self):
+        """Fechas de los pagos contables (account.payment) conciliados con las líneas del asiento del recibo.
+        NO VERIFICADO en Odoo cargado: el camino es el nativo por conciliaciones parciales (matched_*)."""
+        self.ensure_one()
+        lineas = self.move_id.line_ids
+        contrapartes = lineas.matched_debit_ids.debit_move_id | lineas.matched_credit_ids.credit_move_id
+        pagos = contrapartes.payment_id.filtered(lambda p: p.move_id.state == 'posted')
+        return sorted({p.date for p in pagos})
+
     def _ne_fecha_parametros(self):
         """Fecha con la que se resuelven los hr.rule.parameter (SMMLV, auxilio, topes, divisores).
 

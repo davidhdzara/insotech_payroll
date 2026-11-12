@@ -1,6 +1,6 @@
 {
     'name': 'Colombia - Nómina',
-    'version': '18.0.3.0.191',
+    'version': '18.0.3.0.192',
     'category': 'Human Resources/Payroll',
     'countries': ['co'],
     'summary': 'Generación y envío de Nómina Electrónica a la DIAN (Resolución 000013 de 2021)',
@@ -74,6 +74,7 @@ Funcionalidades principales:
         'data/hr_payroll_open_modules_domain_data.xml',
         # Views
         'wizard/hr_payslip_send_views.xml',
+        'wizard/hr_payslip_registrar_pago_views.xml',
         'wizard/l10n_co_ne_certification_wizard_views.xml',
         'views/l10n_co_ne_operation_mode_views.xml',
         # AUD-DIAN-34 (2026-10-04): hr_retefuente_views.xml debe cargar

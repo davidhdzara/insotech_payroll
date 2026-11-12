@@ -85,3 +85,4 @@ from . import test_incapacidad_tramo_prorroga
 from . import test_tiempo_laborado_360
 from . import test_dian_message
 from . import test_documento_modelo
+from . import test_fecha_pago
