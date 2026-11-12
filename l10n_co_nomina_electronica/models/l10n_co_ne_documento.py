@@ -8,7 +8,9 @@ DIAN; sus campos de estado son ``etapa`` + ``state`` calculado del último inten
 ``l10n_co_dian.document``)."""
 
 import logging
-from datetime import datetime as _dt
+from datetime import datetime as _dt, time, timedelta
+
+import pytz
 
 from markupsafe import Markup
 
@@ -97,8 +99,11 @@ class L10nCoNeDocumento(models.Model):
     legacy = fields.Boolean(string='Migrado (legacy)', copy=False, readonly=True,
                             help='Documento migrado 1:1 desde un recibo ya transmitido: conserva su CUNE y número; '
                                  'queda fuera de la unicidad por mes y del plazo.')
-    fecha_limite = fields.Date(string='Fecha límite', copy=False,
-                               help='10.º día hábil del mes siguiente; lo calcula la etapa 2 (festivos y días hábiles configurables).')
+    fecha_limite = fields.Date(
+        string='Fecha límite', compute='_compute_fecha_limite', store=True, readonly=True,
+        help='10.º día hábil del mes siguiente al del documento (Res. DIAN 000013/2021 art. 8). Día hábil = día con '
+             'jornada en el calendario del contrato (o de la compañía) y no festivo (D10). Solo alerta, no bloquea. '
+             'No aplica a documentos migrados ni a notas de ajuste.')
 
     # Cola de envío y alertas (patrón de account.move.send; los llena el asistente y el cron, etapas 2 y 4).
     sending_data = fields.Json(string='Datos de envío en cola', copy=False, readonly=True)
@@ -165,6 +170,197 @@ class L10nCoNeDocumento(models.Model):
             doc.alertas_texto = Markup('<ul>%s</ul>') % Markup('').join(
                 Markup('<li>%s: %s</li>') % (etiquetas.get(a.get('level'), a.get('level') or ''),
                                               a.get('message') or '') for a in items) if items else False
+
+    # ──────────────────────────────────────────────────────────────────
+    # Plazo de transmisión (doc 53 §4.4, D10)
+    # ──────────────────────────────────────────────────────────────────
+    DIAS_HABILES_PLAZO = 10   # Res. DIAN 000013/2021 art. 8: 10 primeros días hábiles del mes siguiente
+
+    def _ne_calendario(self):
+        """Calendario laboral del documento: el del contrato; si no, el de la compañía."""
+        self.ensure_one()
+        return self.contract_id.resource_calendar_id or self.company_id.resource_calendar_id
+
+    def _ne_dias_habiles(self, desde, hasta):
+        """Fechas hábiles de [desde, hasta]: con jornada en el calendario y sin festivo (compute_leaves nativo: los
+        festivos globales de la compañía). El sábado cuenta si la jornada lo incluye (D10)."""
+        self.ensure_one()
+        calendario = self._ne_calendario()
+        if not calendario:
+            return set()
+        zona = pytz.timezone(calendario.tz or self.env.user.tz or 'UTC')
+        inicio = zona.localize(_dt.combine(desde, time.min))
+        fin = zona.localize(_dt.combine(hasta, time.max))
+        intervalos = calendario.with_company(self.company_id)._work_intervals_batch(
+            inicio, fin, compute_leaves=True)[False]
+        return {a.astimezone(zona).date() for a, _b, _rec in intervalos}
+
+    def _ne_calcular_fecha_limite(self):
+        """10.º día hábil del mes siguiente, o False si no se puede calcular (sin calendario o sin 10 días hábiles
+        en ~45 días: falta cargar jornada o hay festivos de más)."""
+        self.ensure_one()
+        primero = (self.period.replace(day=28) + timedelta(days=4)).replace(day=1)
+        dias = int(self.env['hr.rule.parameter']._get_parameter_from_code(
+            'l10n_co_ne_dias_plazo_transmision', primero))   # Res. DIAN 000013/2021 art. 8 (versionado)
+        habiles = sorted(self._ne_dias_habiles(primero, primero + timedelta(days=44)))
+        return habiles[dias - 1] if len(habiles) >= dias else False
+
+    @api.depends('period', 'contract_id.resource_calendar_id', 'company_id.resource_calendar_id',
+                 'legacy', 'is_adjustment')
+    def _compute_fecha_limite(self):
+        for doc in self:
+            doc.fecha_limite = (doc._ne_calcular_fecha_limite()
+                                if doc.period and not doc.legacy and not doc.is_adjustment else False)
+
+    # ──────────────────────────────────────────────────────────────────
+    # Preparar: agrupar recibos, crear/reutilizar el documento y validarlo (doc 53 §17.2, §20.2, §22.2)
+    # ──────────────────────────────────────────────────────────────────
+    @api.model
+    def _ne_recibos_del_mes(self, company, employee, period):
+        """Recibos pagados (hechos o pagados, no notas de crédito) del empleado cuya PRIMERA fecha de pago cae en el
+        mes ``period``. Con fuente 'recibo' filtra en SQL por fecha; con 'contabilidad' calcula por recibo."""
+        fin = (period.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        dominio = [('company_id', '=', company.id), ('employee_id', '=', employee.id),
+                   ('state', 'in', ('done', 'paid')), ('credit_note', '=', False)]
+        if company.l10n_co_ne_fuente_fecha_pago == 'recibo':
+            return self.env['hr.payslip'].search(dominio + [('paid_date', '>=', period), ('paid_date', '<=', fin)])
+        candidatos = self.env['hr.payslip'].search(dominio)
+        return candidatos.filtered(lambda s: s._ne_fechas_pagos_contables()
+                                   and period <= s._ne_fechas_pagos_contables()[0] <= fin)
+
+    @api.model
+    def _ne_preparar(self, recibos):
+        """Agrupa ``recibos`` por (compañía, empleado, mes de la primera fecha de pago), crea o reutiliza el documento
+        de cada grupo, enlaza TODOS los recibos pagados del mes (no solo los seleccionados) y lo valida.
+
+        No gasta consecutivo ni envía. Devuelve ``{'documentos': recordset, 'sin_fecha': [(recibo, motivo)]}``: los
+        recibos sin fecha de pago (o no hechos) no pertenecen a ningún mes y se informan aparte."""
+        resultado = {'documentos': self.browse(), 'sin_fecha': []}
+        previos = recibos.l10n_co_ne_documento_id   # antes de relinkear: de dónde vienen los recibos
+        grupos = {}
+        for slip in recibos:
+            if not slip.company_id._ne_es_colombia():
+                resultado['sin_fecha'].append((slip, _('La compañía no es colombiana.')))
+                continue
+            if slip.state not in ('done', 'paid'):
+                resultado['sin_fecha'].append((slip, _('El recibo no está en estado "Hecho" ni "Pagado".')))
+                continue
+            try:
+                primera = slip._ne_fecha_pago()
+            except UserError as error:
+                resultado['sin_fecha'].append((slip, str(error)))
+                continue
+            clave = (slip.company_id, slip.employee_id, primera.replace(day=1))
+            grupos.setdefault(clave, self.env['hr.payslip'])
+            grupos[clave] |= slip
+        for (company, employee, period) in grupos:
+            doc = self._ne_documento_del_grupo(company, employee, period)
+            if doc.state in ('draft', 'ready', 'invoice_sending_failed') and not doc.is_being_sent:
+                doc._ne_componer(self._ne_recibos_del_mes(company, employee, period))
+            doc._ne_validar()
+            resultado['documentos'] |= doc
+        # Un recibo que cambió de mes (nueva fecha de pago) sale del documento donde estaba: ese documento se
+        # recompone y revalida; si queda vacío y sin historia, se elimina.
+        for previo in previos - resultado['documentos']:
+            if previo.legacy or previo.is_adjustment or previo.state not in ('draft', 'ready'):
+                continue
+            previo._ne_componer(self._ne_recibos_del_mes(previo.company_id, previo.employee_id, previo.period))
+            if previo.payslip_ids:
+                previo._ne_validar()
+            else:
+                previo.unlink()
+        return resultado
+
+    @api.model
+    def _ne_documento_del_grupo(self, company, employee, period):
+        doc = self.search([
+            ('company_id', '=', company.id), ('employee_id', '=', employee.id), ('period', '=', period),
+            ('is_adjustment', '=', False), ('legacy', '=', False), ('eliminado', '=', False)], limit=1)
+        return doc or self.create({'company_id': company.id, 'employee_id': employee.id, 'period': period})
+
+    def _ne_componer(self, recibos):
+        """Deja exactamente ``recibos`` en el documento (los que ya no corresponden se sueltan) y fija el contrato.
+        Solo se compone un documento sin transmitir (draft/ready/envío fallido): lo llama ``_ne_preparar``."""
+        self.ensure_one()
+        sueltos = self.payslip_ids - recibos
+        if sueltos:
+            sueltos.write({'l10n_co_ne_documento_id': False})
+        nuevos = recibos - self.payslip_ids
+        if nuevos:
+            nuevos.write({'l10n_co_ne_documento_id': self.id})
+        contratos = recibos.sorted('date_to').contract_id
+        self.contract_id = contratos[-1:] or False
+        if self.etapa == 'ready':
+            self.etapa = 'draft'   # cambió la composición: se revalida
+
+    def _ne_validar(self):
+        """Calcula las alertas (persistidas en ``alertas``) y pasa a 'ready' si no hay bloqueos. Alertas de esta
+        etapa; las del XML (conciliación de totales, Salud/FondoPension) llegan con la etapa 3."""
+        self.ensure_one()
+        alertas = []
+
+        def alerta(key, level, message, **extra):
+            alertas.append(dict({'key': key, 'level': level, 'message': message}, **extra))
+
+        if self.state in ('invoice_pending', 'uncertain'):
+            alerta('en_proceso', 'danger', _('El documento espera el veredicto de la DIAN: consulte su estado primero.'))
+        elif self.state == 'invoice_accepted':
+            alerta('aceptado', 'danger', _(
+                'El documento ya fue aceptado por la DIAN: un cambio se corrige con una nota de ajuste.'))
+        if not self.payslip_ids:
+            alerta('sin_recibos', 'danger', _('El documento no tiene recibos pagados en el mes.'))
+        # Datos incompletos: los mismos prerrequisitos del ciclo por recibo, sin sus chequeos de estado.
+        try:
+            self.env['hr.payslip']._validate_company_ne_config(self.company_id)
+        except UserError as error:
+            alerta('compania', 'danger', str(error))
+        for slip in self.payslip_ids:
+            try:
+                self._ne_validar_datos_recibo(slip)
+            except UserError as error:
+                alerta('datos_%s' % slip.id, 'danger', str(error))
+        # Recibos del mes que NO entraron (sin fecha de pago, en borrador...): ¿falta una quincena?
+        fin = (self.period.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        faltan = self.env['hr.payslip'].search([
+            ('company_id', '=', self.company_id.id), ('employee_id', '=', self.employee_id.id),
+            ('credit_note', '=', False), ('state', '!=', 'cancel'),
+            ('date_to', '>=', self.period), ('date_to', '<=', fin), ('id', 'not in', self.payslip_ids.ids)])
+        if faltan:
+            alerta('faltan_recibos', 'warning', _(
+                'Hay recibos del mes que no están en el documento (sin pagar, pagados en otro mes o sin fecha de pago): %(recibos)s.',
+                recibos=', '.join(faltan.mapped('display_name'))), confirmable=True)
+        # Mes en curso sin liquidación final pagada (D14: confirmación explícita del usuario, no bloqueo).
+        hoy = fields.Date.context_today(self)
+        liquidacion = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion',
+                                   raise_if_not_found=False)
+        if hoy <= fin and not self.payslip_ids.filtered(lambda s: s.struct_id == liquidacion):
+            alerta('mes_en_curso', 'warning', _(
+                'El mes del documento no ha terminado y el empleado no tiene liquidación final pagada en él.'),
+                confirmable=True)
+        # Plazo de transmisión (D10): solo alerta, no bloquea.
+        if self.fecha_limite and hoy > self.fecha_limite and self.state in (
+                'draft', 'ready', 'invoice_sending_failed'):
+            alerta('plazo_vencido', 'warning', _(
+                'El plazo de transmisión venció el %(fecha)s (10 días hábiles del mes siguiente).',
+                fecha=self.fecha_limite))
+        elif not self.fecha_limite and not self.legacy and not self.is_adjustment:
+            alerta('plazo_sin_calcular', 'warning', _(
+                'No se pudo calcular el plazo de transmisión: revise el calendario laboral y los festivos.'))
+        self.alertas = alertas
+        bloqueos = [a for a in alertas if a['level'] == 'danger']
+        if self.state in ('draft', 'ready'):
+            self.etapa = 'draft' if bloqueos else 'ready'
+
+    def _ne_validar_datos_recibo(self, slip):
+        """Datos mínimos del empleado/contrato para generar el documento (sin los chequeos de estado del recibo)."""
+        self.ensure_one()
+        if not slip.employee_id.identification_id:
+            raise UserError(_('El empleado %s no tiene número de identificación configurado.',
+                              slip.employee_id.name))
+        if not slip.contract_id:
+            raise UserError(_('El recibo %s no tiene contrato asociado.', slip.number or slip.name))
+        slip._ne_validar_cuenta_transferencia()
+        slip.employee_id._l10n_co_nombre_dian()
 
     # ──────────────────────────────────────────────────────────────────
     # Restricciones

@@ -459,6 +459,22 @@ los parámetros "% ..." de este módulo, este SÍ se ingresa como fracción): es
         <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
     </record>
 
+    <record id="rule_parameter_dias_plazo_transmision_ne" model="hr.rule.parameter">
+        <field name="name">Colombia: Plazo de Transmisión de Nómina Electrónica (días hábiles)</field>
+        <field name="code">l10n_co_ne_dias_plazo_transmision</field>
+        <field name="country_id" ref="base.co"/>
+        <field name="description" type="html"><p>Días hábiles del mes siguiente dentro de los cuales se transmite el documento
+de nómina electrónica del mes (Resolución DIAN 000013 de 2021, art. 8: los 10 primeros días hábiles). Día hábil: día con
+jornada en el calendario laboral y no festivo.</p>
+<h3 class="mt-5">Cómo ingresar el valor</h3>
+<p>Escriba el número entero de días. Valor vigente: <strong>10</strong>.</p></field>
+    </record>
+    <record id="rule_parameter_dias_plazo_transmision_ne_2024" model="hr.rule.parameter.value">
+        <field name="parameter_value">10</field>
+        <field name="rule_parameter_id" ref="rule_parameter_dias_plazo_transmision_ne"/>
+        <field name="date_from" eval="datetime(2024, 1, 1).date()"/>
+    </record>
+
     <record id="rule_parameter_dias_anio_comercial" model="hr.rule.parameter">
         <field name="name">Colombia: Días Año Comercial</field>
         <field name="code">l10n_co_dias_anio_comercial</field>
