@@ -89,3 +89,4 @@ from . import test_fecha_pago
 from . import test_documento_preparar
 from . import test_documento_xml
 from . import test_documento_generar
+from . import test_documento_generar_real
