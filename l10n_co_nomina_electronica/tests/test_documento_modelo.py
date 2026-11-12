@@ -131,6 +131,7 @@ class TestDocumentoModelo(TransactionCase):
         self._documento(3, is_adjustment=True, adjustment_type='1', adjustment_ref_cune=CUNE_A)
         self._documento(3, legacy=True)
         original.eliminado = True
+        original.flush_recordset()   # el UPDATE pendiente debe llegar a la base antes del INSERT del nuevo
         self._documento(3)  # el eliminado ya no cuenta
 
     def test_ajuste_exige_cune_de_referencia(self):
@@ -198,14 +199,16 @@ class TestDocumentoModelo(TransactionCase):
         return self._recibo(mes, **datos)
 
     def test_migracion_sin_filas(self):
-        self.env['l10n.co.ne.documento'].search([]).unlink()
-        self.assertFalse(self.env['l10n.co.ne.documento']._ne_migrar_legacy())
+        # no depende de la base: la base real ya tiene documentos legacy creados por la migracion .191
+        self.assertFalse(self.env['l10n.co.ne.documento']._ne_migrar_legacy(self.env['hr.payslip']))
+        borrador = self._recibo(4)   # sin historia: nada que migrar
+        self.assertFalse(self.env['l10n.co.ne.documento']._ne_migrar_legacy(borrador))
 
     def test_migracion_aceptado_uno_a_uno_e_idempotente(self):
         slip = self._legacy(3, 'accepted', l10n_co_ne_cune=CUNE_A, l10n_co_ne_consecutive='NE1',
                             l10n_co_ne_zip_key='Z1', l10n_co_ne_hab_set_id='SET1')
         borrador = self._recibo(4)   # sin historia: no se migra
-        creados = self.env['l10n.co.ne.documento']._ne_migrar_legacy()
+        creados = self.env['l10n.co.ne.documento']._ne_migrar_legacy(slip | borrador)
         doc = slip.l10n_co_ne_documento_id
         self.assertEqual(creados, doc)
         self.assertFalse(borrador.l10n_co_ne_documento_id)
@@ -222,7 +225,7 @@ class TestDocumentoModelo(TransactionCase):
                          ('accepted', CUNE_A, 'NE1'))
         self.assertEqual(slip.l10n_co_ne_documento_state, 'invoice_accepted')
         # idempotente
-        self.assertFalse(self.env['l10n.co.ne.documento']._ne_migrar_legacy())
+        self.assertFalse(self.env['l10n.co.ne.documento']._ne_migrar_legacy(slip | borrador))
         self.assertEqual(self.env['l10n.co.ne.documento'].search_count([('legacy', '=', True), ('cune', '=', CUNE_A)]), 1)
 
     def test_migracion_mapa_de_estados(self):
@@ -230,7 +233,7 @@ class TestDocumentoModelo(TransactionCase):
                     5: ('rejected', 'invoice_rejected'), 6: ('eliminated', 'eliminated')}
         recibos = {mes: self._legacy(mes, estado, l10n_co_ne_consecutive='NE%s' % mes)
                    for mes, (estado, _) in esperado.items()}
-        self.env['l10n.co.ne.documento']._ne_migrar_legacy()
+        self.env['l10n.co.ne.documento']._ne_migrar_legacy(self.env['hr.payslip'].concat(*recibos.values()))
         for mes, (_estado, estado_doc) in esperado.items():
             self.assertEqual(recibos[mes].l10n_co_ne_documento_id.state, estado_doc, 'mes %s' % mes)
         self.assertFalse(recibos[2].l10n_co_ne_documento_id.intento_ids)   # generado: sin intento
@@ -238,14 +241,14 @@ class TestDocumentoModelo(TransactionCase):
 
     def test_migracion_motivo_reparseado_de_la_respuesta_guardada(self):
         slip = self._legacy(3, 'rejected', l10n_co_ne_cune=CUNE_A, l10n_co_ne_dian_response=RESPUESTA_RECHAZO)
-        self.env['l10n.co.ne.documento']._ne_migrar_legacy()
+        self.env['l10n.co.ne.documento']._ne_migrar_legacy(slip)
         intento = slip.l10n_co_ne_documento_id.intento_ids
         self.assertIn('Regla: NIAE191a', intento.message)
         self.assertEqual(intento.message_json['status_code'], '99')
 
     def test_migracion_respuesta_ilegible_no_bloquea(self):
         slip = self._legacy(3, 'sent', l10n_co_ne_cune=CUNE_A, l10n_co_ne_dian_response='esto no es xml')
-        self.env['l10n.co.ne.documento']._ne_migrar_legacy()
+        self.env['l10n.co.ne.documento']._ne_migrar_legacy(slip)
         self.assertEqual(slip.l10n_co_ne_documento_id.intento_ids.message_json['status_code'], 'PARSE_ERROR')
 
     def test_migracion_nota_de_ajuste_apunta_a_su_original(self):
@@ -253,7 +256,7 @@ class TestDocumentoModelo(TransactionCase):
         ajuste = self._legacy(4, 'accepted', l10n_co_ne_cune=CUNE_B, l10n_co_ne_consecutive='NA1',
                               l10n_co_ne_is_adjustment=True, l10n_co_ne_adjustment_type='2',
                               l10n_co_ne_adjustment_ref_cune=CUNE_A)
-        self.env['l10n.co.ne.documento']._ne_migrar_legacy()
+        self.env['l10n.co.ne.documento']._ne_migrar_legacy(original | ajuste)
         doc_aj = ajuste.l10n_co_ne_documento_id
         self.assertEqual(doc_aj.parent_id, original.l10n_co_ne_documento_id)
         self.assertEqual(doc_aj.adjustment_type, '2')
@@ -262,7 +265,7 @@ class TestDocumentoModelo(TransactionCase):
     def test_migracion_compania_no_colombiana_no_se_toca(self):
         slip = self._legacy(3, 'accepted', l10n_co_ne_cune=CUNE_A)
         with patch.object(type(self.company), '_ne_es_colombia', lambda s: False):
-            self.assertFalse(self.env['l10n.co.ne.documento']._ne_migrar_legacy())
+            self.assertFalse(self.env['l10n.co.ne.documento']._ne_migrar_legacy(slip))
         self.assertFalse(slip.l10n_co_ne_documento_id)
 
     # ── Vistas ───────────────────────────────────────────────────────

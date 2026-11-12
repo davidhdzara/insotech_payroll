@@ -558,6 +558,26 @@ class L10nCoNeDocumento(models.Model):
         """Coherencia de sus recibos (la misma regla se valida del lado del recibo al enlazarlo)."""
         self.payslip_ids._check_documento_coherente()
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        """Un original activo por (compañía, empleado, mes): se comprueba ANTES del INSERT para dar el mensaje claro
+        (el índice parcial ``l10n_co_ne_documento_mes_unico`` queda como respaldo ante concurrencia)."""
+        vistos = set()
+        for vals in vals_list:
+            if vals.get('is_adjustment') or vals.get('legacy') or vals.get('eliminado') or not vals.get('period'):
+                continue
+            company = vals.get('company_id') or self.env.company.id
+            clave = (company, vals.get('employee_id'), fields.Date.to_date(vals['period']))
+            otro = self.search([
+                ('company_id', '=', company), ('employee_id', '=', clave[1]), ('period', '=', clave[2]),
+                ('is_adjustment', '=', False), ('legacy', '=', False), ('eliminado', '=', False)], limit=1)
+            if otro or clave in vistos:
+                raise ValidationError(_(
+                    'Ya existe un documento mensual activo para ese empleado y mes (%(otro)s). Solo puede haber uno por '
+                    'empleado y mes; para corregirlo cree una nota de ajuste.', otro=otro.display_name or clave[2]))
+            vistos.add(clave)
+        return super().create(vals_list)
+
     def unlink(self):
         for doc in self:
             if doc.legacy or doc.cune or doc.consecutive or doc.intento_ids:
@@ -570,16 +590,20 @@ class L10nCoNeDocumento(models.Model):
     # Migración: lo ya transmitido por recibo pasa a documentos legacy 1:1
     # ──────────────────────────────────────────────────────────────────
     @api.model
-    def _ne_migrar_legacy(self):
+    def _ne_migrar_legacy(self, recibos=None):
         """Crea un documento ``legacy`` por cada recibo colombiano con historia DIAN (estado distinto de borrador, o
         CUNE, consecutivo o intercambios). NO quita nada del recibo. Idempotente: el recibo que ya apunta a un documento
-        no se vuelve a migrar. Funciona con 0 filas. Devuelve los documentos creados."""
+        no se vuelve a migrar. Funciona con 0 filas. ``recibos`` limita la migración a esos recibos (las pruebas la
+        usan para no depender de los datos de la base); sin él migra todos los pendientes. Devuelve los documentos
+        creados."""
         Payslip = self.env['hr.payslip'].sudo().with_context(active_test=False)
-        recibos = Payslip.search([
+        dominio = [
             ('l10n_co_ne_documento_id', '=', False),
             '|', '|', '|', ('l10n_co_ne_state', '!=', 'draft'), ('l10n_co_ne_cune', '!=', False),
-            ('l10n_co_ne_consecutive', '!=', False), ('l10n_co_ne_exchange_ids', '!=', False),
-        ], order='id')
+            ('l10n_co_ne_consecutive', '!=', False), ('l10n_co_ne_exchange_ids', '!=', False)]
+        if recibos is not None:
+            dominio.append(('id', 'in', recibos.ids))
+        recibos = Payslip.search(dominio, order='id')
         recibos = recibos.filtered(lambda s: s.company_id._ne_es_colombia())
         Documento = self.sudo().with_context(mail_notrack=True, mail_create_nolog=True)
         creados = Documento
@@ -591,6 +615,8 @@ class L10nCoNeDocumento(models.Model):
                 por_cune[doc.cune] = doc
             self._ne_crear_intento_legacy(doc, slip)
             slip._write({'l10n_co_ne_documento_id': doc.id})
+        # _write no toca la caché: sin invalidar, el recibo seguiría mostrando el valor anterior en esta transacción.
+        recibos.invalidate_recordset(['l10n_co_ne_documento_id'])
         recibos.modified(['l10n_co_ne_documento_id'])
         # Las notas de ajuste migradas apuntan a su original por CUNE (el original puede ser de un lote anterior).
         for doc in creados.filtered(lambda d: d.is_adjustment and d.adjustment_ref_cune):
