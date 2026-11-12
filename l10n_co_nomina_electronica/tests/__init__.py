@@ -82,3 +82,4 @@ from . import test_documento_fusion_real
 from . import test_liquidacion_sln_ibc
 from . import test_redondeo_dias_xml
 from . import test_incapacidad_tramo_prorroga
+from . import test_tiempo_laborado_360
