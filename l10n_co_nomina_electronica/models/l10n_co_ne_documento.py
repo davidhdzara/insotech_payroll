@@ -7,6 +7,7 @@ transmitido (``legacy``, 1:1). Todavía no genera XML ni envía (etapas 3 y 4): 
 DIAN; sus campos de estado son ``etapa`` + ``state`` calculado del último intento (patrón de ``account.move`` +
 ``l10n_co_dian.document``)."""
 
+import base64
 import logging
 from datetime import datetime as _dt, time, timedelta
 
@@ -17,7 +18,8 @@ from markupsafe import Markup
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
 
-from ..services import dian_message, dian_utils, documento_merge, nomina_xml_builder
+from ..services import (
+    cune as cune_service, dian_message, dian_utils, documento_merge, ne_xml_utils, nomina_xml_builder, xml_signer)
 from ..services.soap_client import _parse_response
 
 _logger = logging.getLogger(__name__)
@@ -397,12 +399,16 @@ class L10nCoNeDocumento(models.Model):
             raise UserError(_('El documento "%s" no tiene recibos.', self.display_name))
         contrato = self.contract_id or recibos[-1].contract_id
         fechas = sorted({str(f) for slip in recibos for f in slip._ne_fechas_pago()})
+        datos_recibos = [slip._collect_payslip_data() for slip in recibos]
         try:
             datos = documento_merge.fusionar_documento(
-                [slip._collect_payslip_data() for slip in recibos], fechas, self._ne_periodo(contrato),
-                periodo_nomina='5')
+                datos_recibos, fechas, self._ne_periodo(contrato), periodo_nomina='5')
         except documento_merge.ErrorFusion as error:
             raise UserError(_('No se pueden fusionar los recibos del mes: %s', str(error)))
+        # §5.4: el CUNE depende de ValDev/ValDed/ValTol; un error de suma es un rechazo de la DIAN.
+        descuadres = documento_merge.conciliar_fusion(datos_recibos, datos)
+        if descuadres:
+            raise UserError(_('La fusión de los recibos no cuadra: %s', ' '.join(descuadres)))
         company = self.company_id
         numero = self.consecutive or consecutivo or ''
         prefijo = company.l10n_co_ne_payroll_prefix or ''
@@ -432,12 +438,81 @@ class L10nCoNeDocumento(models.Model):
             datos = self._collect_documento_data(consecutivo='PRE')
         except UserError as error:
             return [{'key': 'xml', 'level': 'danger', 'message': str(error)}]
+        dif_dev, dif_ded = documento_merge.diferencias_nodos(datos)
+        if dif_dev or dif_ded:
+            alertas.append({'key': 'totales_nodos', 'level': 'warning', 'message': _(
+                'Los totales no son la suma de los nodos del XML (devengados %(dev)s, deducciones %(ded)s de '
+                'diferencia): revise los conceptos antes de enviar.', dev=dif_dev, ded=dif_ded)})
         deducciones = datos.get('deducciones', {})
         if 'Salud' not in deducciones or 'FondoPension' not in deducciones:
             alertas.append({'key': 'sin_seguridad_social', 'level': 'warning', 'message': _(
                 'El documento queda sin Salud o sin FondoPension (por ejemplo, un mes solo con prima): revíselo '
                 'antes de enviarlo.')})
         return alertas
+
+    # ──────────────────────────────────────────────────────────────────
+    # Generar y firmar (etapa 3b): consecutivo, CUNE, firma y adjunto
+    # ──────────────────────────────────────────────────────────────────
+    def _ne_siguiente_consecutivo(self):
+        """Siguiente consecutivo oficial de la compañía (misma secuencia no_gap del ciclo por recibo). Sin secuencia
+        configurada es un error claro: no se inventa un número."""
+        self.ensure_one()
+        secuencia = self.company_id.l10n_co_ne_sequence_id
+        if not secuencia:
+            raise UserError(_(
+                'La compañía "%(compania)s" no tiene secuencia de nómina electrónica. Configúrela en Ajustes > '
+                'Nómina antes de generar el documento.', compania=self.company_id.name))
+        return secuencia.next_by_id()
+
+    def action_generar_xml(self):
+        """Genera el XML mensual firmado: revalida, toma consecutivo (después de una corrida en seco), arma el
+        XML fusionado, calcula el CUNE (depende de los totales fusionados), lo inserta, firma con XAdES-BES y
+        guarda el adjunto. El documento queda 'ready' con su consecutivo, CUNE y XML (sin estado 'generado',
+        doc 53 §18.6); un fallo después de tomar el número lo devuelve con el rollback (secuencia no_gap)."""
+        self.ensure_one()
+        if self.state not in ('draft', 'ready') or self.intento_ids:
+            raise UserError(_(
+                'El XML solo se genera para un documento en estado "Borrador" o "Listo" que no se haya enviado '
+                '(hoy: %s).', dict(self._fields['state'].selection).get(self.state)))
+        self._ne_validar()
+        bloqueos = [a['message'] for a in (self.alertas or []) if a['level'] == 'danger']
+        if bloqueos:
+            raise UserError(_('El documento tiene bloqueos: %s', ' '.join(bloqueos)))
+        company = self.company_id
+        prefijo = company.l10n_co_ne_payroll_prefix or 'NE'
+        if not self.consecutive or not self.consecutive.startswith(prefijo):
+            self._ne_xml_sin_firmar('%s1' % prefijo)   # corrida en seco: los errores de datos salen ANTES del número
+            self.consecutive = self._ne_siguiente_consecutivo()
+        datos = self._collect_documento_data()
+        xml_bytes = nomina_xml_builder.build_nomina_individual_v2(datos)
+        cune = self._ne_calcular_cune(datos)
+        xml_bytes = ne_xml_utils.insertar_cune_y_qr(xml_bytes, cune, company._ne_dian_qr_host())
+        llave, cert_pem, cert_der, cert_obj, cadena = xml_signer.load_from_certificate(company._get_ne_certificate())
+        firmado = xml_signer.sign_xml(
+            xml_bytes=xml_bytes, private_key=llave, cert_pem=cert_pem, cert_der=cert_der, cert_obj=cert_obj,
+            cert_chain=cadena)
+        nit = (company.vat or 'SIN_NIT').replace('-', '').strip()
+        self.cune = cune
+        self.xml_attachment_id = self.env['ir.attachment'].create({
+            'name': 'ne_%s_%s.xml' % (nit, self.consecutive), 'type': 'binary', 'datas': base64.b64encode(firmado),
+            'res_model': self._name, 'res_id': self.id, 'mimetype': 'application/xml'})
+        _logger.info('XML mensual generado para %s (CUNE: %s)', self.display_name, cune)
+        return True
+
+    def _ne_calcular_cune(self, datos):
+        """CUNE del documento mensual (Anexo §8.1.1.4): ValDev/ValDed/ValTol son los totales FUSIONADOS."""
+        self.ensure_one()
+        company = self.company_id
+        info = datos['informacion_general']
+        totales = datos['totales']
+        cune, _raw = cune_service.compute_cune(
+            num_ne=self.consecutive, fec_ne=info['FechaGen'], hor_ne=info['HoraGen'],
+            val_dev=totales['DevengadosTotal'], val_ded=totales['DeduccionesTotal'],
+            val_tol=totales['ComprobanteTotal'], nit_ne=dian_utils.clean_nit(company.vat),
+            doc_trab=self.employee_id.identification_id or '', cl_ne='102',
+            software_pin=company.l10n_co_ne_operation_mode_ids.software_pin or '',
+            tipo_amb=company.l10n_co_ne_environment or '2')
+        return cune
 
     # ──────────────────────────────────────────────────────────────────
     # Restricciones

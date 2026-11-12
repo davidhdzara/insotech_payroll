@@ -29,6 +29,7 @@ from odoo.exceptions import UserError, ValidationError
 from ..services import (
     cune as cune_service,
     dian_utils,
+    ne_xml_utils,
     nomina_xml_builder,
     soap_client,
     xml_signer,
@@ -1159,32 +1160,9 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
             pass
 
     def _ne_insert_cune_and_qr(self, xml_bytes, cune_value):
-        """Escribe CUNE/EncripCUNE en ``InformacionGeneral`` y la URL en ``CodigoQR``.
-
-        En las Notas de Ajuste ambos elementos viven dentro de ``<Reemplazar>`` (o
-        ``<Eliminar>``), no como hijos directos de la raiz: se buscan en todo el arbol. Si
-        no se encuentran el XML sale con ``CUNE=""`` y la DIAN rechaza con NIAE024.
-        """
-        company = self.company_id
-        tree = _etree.fromstring(xml_bytes)
-        ns = tree.nsmap.get(None, '')
-        info_gen = tree.find('.//{%s}InformacionGeneral' % ns)
-        if info_gen is not None:
-            info_gen.set('CUNE', cune_value)
-            info_gen.set('EncripCUNE', 'CUNE-SHA384')
-        # AUD-DIAN-34 (2026-09-14, consolidado 2026-10-05): el host del QR cambia segun el
-        # ambiente (Anexo Tecnico, seccion QRCode) -- unico punto, ver ResCompany.
-        # _ne_dian_qr_host() / dian_utils.get_qr_catalog_host().
-        qr_host = company._ne_dian_qr_host()
-        qr_url = 'https://%s/document/searchqr?documentkey=%s' % (qr_host, cune_value)
-        qr_el = tree.find('.//{%s}CodigoQR' % ns)
-        if qr_el is None and info_gen is not None:
-            parent = info_gen.getparent()
-            qr_el = _etree.Element('{%s}CodigoQR' % ns)
-            parent.insert(list(parent).index(info_gen) + 1, qr_el)
-        if qr_el is not None:
-            qr_el.text = qr_url
-        return _etree.tostring(tree, xml_declaration=True, encoding='UTF-8')
+        """Escribe CUNE/EncripCUNE y CodigoQR en el XML (ver ``ne_xml_utils.insertar_cune_y_qr``). El host del QR
+        cambia según el ambiente (Anexo Técnico, sección QRCode): único punto, ``ResCompany._ne_dian_qr_host()``."""
+        return ne_xml_utils.insertar_cune_y_qr(xml_bytes, cune_value, self.company_id._ne_dian_qr_host())
 
     def _ne_predecessor_values(self):
         """(NumeroPred, FechaGenPred) del documento que reemplaza esta nota de ajuste.

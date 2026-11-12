@@ -11,46 +11,17 @@ from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import documento_merge, dian_utils, nomina_xml_builder
 
+from .common_documento import DocumentoFixture
 from .test_documento_merge import _recibo as _datos_recibo
 
 
 @tagged('post_install', '-at_install')
-class TestDocumentoXml(TransactionCase):
+class TestDocumentoXml(DocumentoFixture, TransactionCase):
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].create({
-            'name': 'Compañía XML Documento', 'country_id': cls.env.ref('base.co').id,
-            'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U',
-            'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real',
-            'l10n_co_ne_fuente_fecha_pago': 'recibo', 'l10n_co_ne_payroll_prefix': 'NE'})
-        cls.structure_type = cls.env['hr.payroll.structure.type'].create({
-            'name': 'Estructura XML', 'country_id': cls.env.ref('base.co').id})
-        cls.struct = cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
-        cls.n = 0
-
-    def _documento(self, ingreso, retiro=None, mes=3, pagos=((15, 15), (31, 31))):
-        """Documento de ``mes`` de 2026 con un recibo por cada (dia de fin, dia de pago)."""
-        type(self).n += 1
-        empleado = self.env['hr.employee'].create({
-            'name': 'Empleado XML %s' % self.n, 'company_id': self.company.id, 'l10n_co_ne_worker_type': '01',
-            'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = self.env['hr.contract'].create({
-            'name': 'Contrato XML %s' % self.n, 'employee_id': empleado.id, 'company_id': self.company.id,
-            'structure_type_id': self.structure_type.id, 'l10n_co_ne_contract_type': '2',
-            'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
-            'wage': 3000000.0, 'date_start': ingreso, 'date_end': retiro, 'state': 'open'})
-        doc = self.env['l10n.co.ne.documento'].create({
-            'company_id': self.company.id, 'employee_id': empleado.id, 'contract_id': contrato.id,
-            'period': date(2026, mes, 1)})
-        for fin, pago in pagos:
-            slip = self.env['hr.payslip'].create({
-                'name': 'Recibo XML', 'employee_id': empleado.id, 'contract_id': contrato.id,
-                'company_id': self.company.id, 'struct_id': self.struct.id,
-                'date_from': date(2026, mes, 1 if fin <= 15 else 16), 'date_to': date(2026, mes, fin)})
-            slip.write({'state': 'paid', 'paid_date': date(2026, mes, pago), 'l10n_co_ne_documento_id': doc.id})
-        return doc
+        cls._fixture_documento('Compañía XML Documento')
 
     def _datos(self, doc, **patches):
         fabrica = patches.get('recibo', _datos_recibo)

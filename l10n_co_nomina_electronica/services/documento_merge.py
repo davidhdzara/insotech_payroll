@@ -231,3 +231,65 @@ def fusionar_documento(recibos, fechas_pagos, periodo, periodo_nomina='5'):
         'DevengadosTotal': _dinero(devengados), 'DeduccionesTotal': _dinero(deducciones),
         'ComprobanteTotal': _dinero(devengados - deducciones)}
     return documento
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Conciliación de totales contra los nodos (doc 53 §5.4)
+# ───────────────────────────────────────────────────────────────────────────
+# Claves con VALOR en dinero dentro de cada sección (lista explícita tomada del constructor del XML; un campo
+# nuevo no listado no se concilia). Los escalares (Dotacion, RetencionFuente...) son ellos mismos el valor.
+CLAVES_DINERO_DEVENGADOS = frozenset({
+    'SueldoTrabajado', 'AuxilioTransporte', 'ViaticoManuAlojS', 'ViaticoManuAlojNS', 'Pago', 'PagoNS', 'PagoS',
+    'PagoIntereses', 'PagoAlimentacionS', 'PagoAlimentacionNS', 'BonificacionS', 'BonificacionNS', 'AuxilioS',
+    'AuxilioNS', 'ConceptoS', 'ConceptoNS', 'Comision', 'PagoTercero', 'Anticipo', 'Dotacion', 'ApoyoSost',
+    'Teletrabajo', 'BonifRetiro', 'Indemnizacion', 'Reintegro'})
+CLAVES_DINERO_DEDUCCIONES = frozenset({
+    'Deduccion', 'DeduccionSP', 'DeduccionSub', 'OtraDeduccion', 'PagoTercero', 'Anticipo', 'SancionPublic',
+    'SancionPriv', 'PensionVoluntaria', 'RetencionFuente', 'AFC', 'Cooperativa', 'EmbargoFiscal',
+    'PlanComplementarios', 'Educacion', 'Reintegro', 'Deuda'})
+
+
+def suma_dinero(nodo, claves):
+    """Suma (Decimal) de todo valor en dinero (claves de ``claves``) dentro de un nodo anidado de dicts/listas."""
+    total = CERO
+    if isinstance(nodo, dict):
+        for clave, valor in nodo.items():
+            if isinstance(valor, (dict, list)):
+                total += suma_dinero(valor, claves)
+            elif clave in claves and valor not in (None, ''):
+                total += _dec(valor)
+    elif isinstance(nodo, list):
+        for item in nodo:
+            total += suma_dinero(item, claves)
+    return total
+
+
+def conciliar_fusion(recibos, documento):
+    """Errores (lista de textos; vacía = cuadra) de la fusión: (a) la suma de los nodos del documento es la suma de
+    los nodos de los recibos, sin pérdida ni duplicación; (b) los totales del documento son la suma de los de los
+    recibos y ComprobanteTotal = Devengados - Deducciones. Un error aquí cambiaría el CUNE (ValDev/ValDed/ValTol)."""
+    errores = []
+    for seccion, claves, total in (('devengados', CLAVES_DINERO_DEVENGADOS, 'DevengadosTotal'),
+                                   ('deducciones', CLAVES_DINERO_DEDUCCIONES, 'DeduccionesTotal')):
+        esperado = sum((suma_dinero(r.get(seccion, {}), claves) for r in recibos), CERO)
+        fusion = suma_dinero(documento.get(seccion, {}), claves)
+        if esperado != fusion:
+            errores.append('La suma de %s del documento (%s) no es la de los recibos (%s).' % (
+                seccion, _dinero(fusion), _dinero(esperado)))
+        totales = sum((_dec(r.get('%s_total' % seccion, 0)) for r in recibos), CERO)
+        if _dec(documento['totales'][total]) != totales.quantize(DOS, ROUND_HALF_UP):
+            errores.append('%s del documento (%s) no es la suma de los recibos (%s).' % (
+                total, documento['totales'][total], _dinero(totales)))
+    dev = _dec(documento['totales']['DevengadosTotal'])
+    ded = _dec(documento['totales']['DeduccionesTotal'])
+    if _dec(documento['totales']['ComprobanteTotal']) != dev - ded:
+        errores.append('ComprobanteTotal no es Devengados - Deducciones.')
+    return errores
+
+
+def diferencias_nodos(datos):
+    """(Dev nodos - DevengadosTotal, Ded nodos - DeduccionesTotal) de UN documento o recibo: si el total declarado no
+    es la suma de sus nodos en dinero, la DIAN valida los totales contra los nodos."""
+    dev = suma_dinero(datos.get('devengados', {}), CLAVES_DINERO_DEVENGADOS) - _dec(datos['totales']['DevengadosTotal'])
+    ded = suma_dinero(datos.get('deducciones', {}), CLAVES_DINERO_DEDUCCIONES) - _dec(datos['totales']['DeduccionesTotal'])
+    return dev, ded
