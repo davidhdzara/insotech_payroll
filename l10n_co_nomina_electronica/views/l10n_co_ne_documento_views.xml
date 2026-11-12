@@ -66,10 +66,8 @@
                                 <list string="Intentos de envío" create="0" delete="0" no_open="1">
                                     <field name="datetime"/>
                                     <field name="numero"/>
-                                    <field name="state" widget="badge"
-                                           decoration-info="state == 'invoice_pending'"
-                                           decoration-success="state == 'invoice_accepted'"
-                                           decoration-danger="state in ('invoice_rejected', 'invoice_sending_failed')"/>
+                                    <field name="state" widget="account_document_state"/>
+                                    <field name="message" column_invisible="True"/>
                                     <field name="test_environment" optional="show"/>
                                     <field name="certification_process" optional="show"/>
                                     <field name="identifier" optional="hide"/>
@@ -99,18 +97,13 @@
                 <field name="company_id" groups="base.group_multi_company"/>
                 <field name="employee_id"/>
                 <field name="period"/>
-                <field name="state" widget="badge"
-                       decoration-info="state in ('draft', 'ready', 'invoice_pending')"
-                       decoration-success="state == 'invoice_accepted'"
-                       decoration-warning="state in ('uncertain', 'invoice_sending_failed')"
-                       decoration-danger="state == 'invoice_rejected'"
-                       decoration-muted="state == 'eliminated'"/>
+                <field name="state" widget="account_document_state"/>
                 <field name="is_being_sent" string="En cola" optional="show"/>
                 <field name="fecha_limite" optional="show"/>
                 <field name="cune" optional="hide"/>
                 <field name="consecutive" optional="show"/>
                 <field name="alertas_texto" string="Alertas" optional="hide"/>
-                <field name="message" string="Motivo DIAN" optional="hide"/>
+                <field name="message" column_invisible="True"/>
                 <field name="legacy" optional="hide"/>
             </list>
         </field>
@@ -184,10 +177,8 @@
                         <list string="Intentos de envío" create="0" delete="0" no_open="1">
                             <field name="datetime"/>
                             <field name="numero"/>
-                            <field name="state" widget="badge"
-                                   decoration-info="state == 'invoice_pending'"
-                                   decoration-success="state == 'invoice_accepted'"
-                                   decoration-danger="state in ('invoice_rejected', 'invoice_sending_failed')"/>
+                            <field name="state" widget="account_document_state"/>
+                            <field name="message" column_invisible="True"/>
                             <field name="test_environment" optional="show"/>
                             <field name="certification_process" optional="show"/>
                         </list>

@@ -17,7 +17,7 @@ from markupsafe import Markup
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
 
-from ..services import dian_message
+from ..services import dian_message, dian_utils, documento_merge, nomina_xml_builder
 from ..services.soap_client import _parse_response
 
 _logger = logging.getLogger(__name__)
@@ -346,6 +346,7 @@ class L10nCoNeDocumento(models.Model):
         elif not self.fecha_limite and not self.legacy and not self.is_adjustment:
             alerta('plazo_sin_calcular', 'warning', _(
                 'No se pudo calcular el plazo de transmisión: revise el calendario laboral y los festivos.'))
+        alertas += self._ne_validar_xml()
         self.alertas = alertas
         bloqueos = [a for a in alertas if a['level'] == 'danger']
         if self.state in ('draft', 'ready'):
@@ -361,6 +362,82 @@ class L10nCoNeDocumento(models.Model):
             raise UserError(_('El recibo %s no tiene contrato asociado.', slip.number or slip.name))
         slip._ne_validar_cuenta_transferencia()
         slip.employee_id._l10n_co_nombre_dian()
+
+    # ──────────────────────────────────────────────────────────────────
+    # XML mensual: fusión de los recibos (doc 53 §5.3, §19; etapa 3)
+    # ──────────────────────────────────────────────────────────────────
+    def _ne_periodo(self, contrato):
+        """Bloque ``Periodo`` del documento mensual (D3): liquidación desde max(1.º del mes, ingreso) hasta el retiro
+        si el contrato terminó ese mes, o el fin de mes si sigue vigente. TiempoLaborado 360/30 con el día de
+        ingreso incluido (D19, Anexo §8.3.1)."""
+        self.ensure_one()
+        primero = self.period
+        ultimo = (primero.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        inicio = max(primero, contrato.date_start) if contrato.date_start else primero
+        fin = min(ultimo, contrato.date_end) if contrato.date_end else ultimo
+        ahora = _dt.now(pytz.timezone('America/Bogota'))
+        return {
+            'FechaIngreso': str(contrato.date_start) if contrato.date_start else '',
+            'FechaRetiro': str(contrato.date_end) if contrato.date_end else '',
+            'FechaLiquidacionInicio': str(inicio),
+            'FechaLiquidacionFin': str(fin),
+            'TiempoLaborado': str(dian_utils.compute_worked_time_360(contrato.date_start, fin, inclusive=True)),
+            'FechaGen': ahora.strftime('%Y-%m-%d'),
+        }
+
+    def _collect_documento_data(self, consecutivo=None):
+        """Diccionario del documento mensual para ``nomina_xml_builder``: los datos de cada recibo (código existente,
+        sin reescribir constructores) fusionados por ``documento_merge``. ``consecutivo`` provisional (con prefijo)
+        solo para armar la numeración cuando el documento aún no tiene el suyo; no gasta ninguno."""
+        self.ensure_one()
+        if self.is_adjustment:
+            raise UserError(_('La nota de ajuste del documento mensual se genera en la etapa de ajustes.'))
+        recibos = self.payslip_ids.sorted('date_to')
+        if not recibos:
+            raise UserError(_('El documento "%s" no tiene recibos.', self.display_name))
+        contrato = self.contract_id or recibos[-1].contract_id
+        fechas = sorted({str(f) for slip in recibos for f in slip._ne_fechas_pago()})
+        try:
+            datos = documento_merge.fusionar_documento(
+                [slip._collect_payslip_data() for slip in recibos], fechas, self._ne_periodo(contrato),
+                periodo_nomina='5')
+        except documento_merge.ErrorFusion as error:
+            raise UserError(_('No se pueden fusionar los recibos del mes: %s', str(error)))
+        company = self.company_id
+        numero = self.consecutive or consecutivo or ''
+        prefijo = company.l10n_co_ne_payroll_prefix or ''
+        modo = company.l10n_co_ne_operation_mode_ids
+        datos['numero_secuencia'] = dict(
+            datos.get('numero_secuencia', {}), Prefijo=prefijo, Numero=numero,
+            Consecutivo=numero[len(prefijo):] if prefijo and numero.startswith(prefijo) else numero)
+        datos['proveedor_xml'] = dict(
+            datos.get('proveedor_xml', {}),
+            SoftwareSC=dian_utils.compute_software_security_code(modo.software_id, modo.software_pin, numero)
+            if numero else '')
+        return datos
+
+    def _ne_xml_sin_firmar(self, consecutivo=None):
+        """XML mensual sin CUNE ni firma (para validar o previsualizar; no gasta consecutivo)."""
+        self.ensure_one()
+        return nomina_xml_builder.build_nomina_individual_v2(self._collect_documento_data(consecutivo))
+
+    def _ne_validar_xml(self):
+        """Alertas que dependen del XML (se llaman desde ``_ne_validar``): la fusión debe ser posible y, D4, un
+        documento sin Salud ni FondoPension solo avisa (la prima va siempre con la quincena; sin bloqueo)."""
+        self.ensure_one()
+        alertas = []
+        if not self.payslip_ids or self.is_adjustment:
+            return alertas
+        try:
+            datos = self._collect_documento_data(consecutivo='PRE')
+        except UserError as error:
+            return [{'key': 'xml', 'level': 'danger', 'message': str(error)}]
+        deducciones = datos.get('deducciones', {})
+        if 'Salud' not in deducciones or 'FondoPension' not in deducciones:
+            alertas.append({'key': 'sin_seguridad_social', 'level': 'warning', 'message': _(
+                'El documento queda sin Salud o sin FondoPension (por ejemplo, un mes solo con prima): revíselo '
+                'antes de enviarlo.')})
+        return alertas
 
     # ──────────────────────────────────────────────────────────────────
     # Restricciones

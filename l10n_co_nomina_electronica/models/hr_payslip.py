@@ -919,8 +919,9 @@ class HrPayslip(models.Model):
                 'FechaRetiro': str(contract.date_end) if contract.date_end else '',
                 'FechaLiquidacionInicio': str(self.date_from),
                 'FechaLiquidacionFin': str(self.date_to),
+                # Anexo §8.3.1: 360/30; el día de ingreso cuenta (D19, David 2026-11-11).
                 'TiempoLaborado': str(
-                    dian_utils.compute_worked_time(contract.date_start, self.date_to)
+                    dian_utils.compute_worked_time_360(contract.date_start, self.date_to, inclusive=True)
                 ),
                 'FechaGen': now.strftime('%Y-%m-%d'),
         }

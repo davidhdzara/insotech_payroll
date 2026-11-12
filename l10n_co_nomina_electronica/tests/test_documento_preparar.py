@@ -61,6 +61,9 @@ class TestDocumentoPreparar(TransactionCase):
         patcher = patch.object(type(self.env['l10n.co.ne.documento']), '_ne_validar_datos_recibo', lambda s, slip: None)
         patcher.start()
         self.addCleanup(patcher.stop)
+        patcher = patch.object(type(self.env['l10n.co.ne.documento']), '_ne_validar_xml', lambda s: [])
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _recibo(self, empleado, contrato, desde, hasta, pagado=None, estado='paid'):
         slip = self.env['hr.payslip'].create({
