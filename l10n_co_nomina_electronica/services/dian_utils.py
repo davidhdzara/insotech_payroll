@@ -430,6 +430,45 @@ def compute_worked_time(date_start, date_end) -> int:
     return (date_end - date_start).days
 
 
+def compute_worked_time_360(date_start, date_end, *, inclusive) -> int:
+    """TiempoLaborado según el Anexo Técnico de Nómina Electrónica §8.3.1.
+
+    Convención 1 año = 360 días y 1 mes = 30 días: años*360 + meses*30 + días,
+    con años/meses/días calendario completos entre las dos fechas. Mínimo 1
+    (regla NIE006: valor >= 1).
+
+    NO está conectada al XML todavía: ``compute_worked_time`` (días calendario)
+    sigue en uso hasta que David decida D19 (ver doc 53 §21.1).
+
+    Args:
+        date_start: Fecha de ingreso (date o 'YYYY-MM-DD').
+        date_end:   Fecha final del periodo (date o 'YYYY-MM-DD').
+        inclusive:  Obligatorio, sin valor por defecto (D19 pendiente). True
+            cuenta el día de ingreso (se suma 1 día a date_end antes de
+            calcular); False no lo cuenta.
+
+    Returns:
+        Entero >= 1. Retorna 0 si alguna fecha es None.
+
+    Examples:
+        >>> from datetime import date
+        >>> compute_worked_time_360(date(2024, 3, 1), date(2026, 3, 31), inclusive=False)
+        750
+    """
+    from dateutil.relativedelta import relativedelta
+
+    if not date_start or not date_end:
+        return 0
+    if isinstance(date_start, str):
+        date_start = _date_type.fromisoformat(date_start)
+    if isinstance(date_end, str):
+        date_end = _date_type.fromisoformat(date_end)
+    if inclusive:
+        date_end = date_end + relativedelta(days=1)
+    delta = relativedelta(date_end, date_start)
+    return max(1, delta.years * 360 + delta.months * 30 + delta.days)
+
+
 # =====================================================================
 # Código de seguridad del software (wrapper)
 # =====================================================================
