@@ -16,11 +16,11 @@ Dos niveles de prueba:
 import unittest
 
 from odoo.addons.l10n_co_nomina_electronica.services import dian_utils
-from odoo.tests.common import TransactionCase, tagged
+from odoo.tests.common import BaseCase, TransactionCase, tagged
 
 
 @tagged('post_install', '-at_install')
-class TestDianUtilsUrlsPure(unittest.TestCase):
+class TestDianUtilsUrlsPure(BaseCase):
     """(a)/(b) del criterio de aceptación, a nivel de la función pura."""
 
     def test_soap_endpoint_defaults_unchanged(self):
