@@ -431,31 +431,35 @@ def compute_worked_time(date_start, date_end) -> int:
 
 
 def compute_worked_time_360(date_start, date_end, *, inclusive) -> int:
-    """TiempoLaborado según el Anexo Técnico de Nómina Electrónica §8.3.1.
+    """TiempoLaborado según el Anexo Técnico de Nómina Electrónica §8.3.1 (p. 249).
 
-    Convención 1 año = 360 días y 1 mes = 30 días: años*360 + meses*30 + días,
-    con años/meses/días calendario completos entre las dos fechas. Mínimo 1
-    (regla NIE006: valor >= 1).
+    Convención 1 año = 360 días y 1 mes = 30 días, MISMA del mes comercial que usa la
+    nómina (HrPayslip._ne_dia_comercial): el último día real de cada mes (28/29-feb, 30 o
+    31) vale 30 y ningún día pasa de 30. Cuenta = años*360 + meses*30 + días comerciales.
+    Mínimo 1 (regla NIE006: valor >= 1).
 
-    NO está conectada al XML todavía: ``compute_worked_time`` (días calendario)
-    sigue en uso hasta que David decida D19 (ver doc 53 §21.1).
+    USO PREVISTO: ``inclusive=True``. Decisión de David (D19, 2026-11-11): el día de
+    ingreso SÍ cuenta (el empleado no pierde ni un día), igual que ``_ne_dias_bajo_contrato``
+    (ingreso el 10 de un mes de 31 días: 10..30 = 21 días). ``inclusive`` sigue siendo
+    obligatorio, sin valor por defecto.
+
+    NO está conectada al XML todavía: ``compute_worked_time`` (días calendario) sigue en
+    uso hasta cerrar D3/D6/D10/D14 (doc 53 §21.1).
 
     Args:
         date_start: Fecha de ingreso (date o 'YYYY-MM-DD').
         date_end:   Fecha final del periodo (date o 'YYYY-MM-DD').
-        inclusive:  Obligatorio, sin valor por defecto (D19 pendiente). True
-            cuenta el día de ingreso (se suma 1 día a date_end antes de
-            calcular); False no lo cuenta.
+        inclusive:  True cuenta ambos extremos; False no cuenta el día de ingreso.
 
     Returns:
         Entero >= 1. Retorna 0 si alguna fecha es None.
 
     Examples:
         >>> from datetime import date
-        >>> compute_worked_time_360(date(2024, 3, 1), date(2026, 3, 31), inclusive=False)
-        750
+        >>> compute_worked_time_360(date(2018, 1, 1), date(2023, 4, 18), inclusive=True)
+        1908
     """
-    from dateutil.relativedelta import relativedelta
+    import calendar
 
     if not date_start or not date_end:
         return 0
@@ -463,10 +467,17 @@ def compute_worked_time_360(date_start, date_end, *, inclusive) -> int:
         date_start = _date_type.fromisoformat(date_start)
     if isinstance(date_end, str):
         date_end = _date_type.fromisoformat(date_end)
+
+    def comercial(d):
+        ultimo = calendar.monthrange(d.year, d.month)[1]
+        return 30 if d.day == ultimo else min(d.day, 30)
+
+    dias = ((date_end.year - date_start.year) * 360
+            + (date_end.month - date_start.month) * 30
+            + comercial(date_end) - comercial(date_start))
     if inclusive:
-        date_end = date_end + relativedelta(days=1)
-    delta = relativedelta(date_end, date_start)
-    return max(1, delta.years * 360 + delta.months * 30 + delta.days)
+        dias += 1
+    return max(1, dias)
 
 
 # =====================================================================
