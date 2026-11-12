@@ -78,6 +78,7 @@ from . import test_constantes_184
 from . import test_ajustes_compania_mexicana
 from . import test_documento_mixin_carga
 from . import test_documento_merge
+from . import test_documento_fusion_real
 from . import test_liquidacion_sln_ibc
 from . import test_redondeo_dias_xml
 from . import test_incapacidad_tramo_prorroga
