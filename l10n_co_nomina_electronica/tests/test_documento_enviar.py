@@ -50,6 +50,9 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
         cls.secuencia = cls.env['ir.sequence'].create({
             'name': 'Secuencia NE enviar', 'prefix': 'NE', 'padding': 8, 'number_next': 15,
             'implementation': 'no_gap', 'company_id': cls.company.id})
+        # Al crear una compañía colombiana el módulo le crea su PROPIA secuencia (relleno 10, desde 1): la prueba
+        # usa la suya, como ``test_documento_generar``.
+        cls.company.l10n_co_ne_sequence_id = cls.secuencia
 
     def setUp(self):
         super().setUp()
@@ -140,8 +143,8 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
         self.assertEqual(self.doc.state, 'invoice_accepted')
 
     def test_nota_de_ajuste_no_se_envia_aqui(self):
-        self.doc.is_adjustment = True
-        self.doc.adjustment_ref_cune = 'x' * 96
+        # is_adjustment exige el CUNE de referencia en la MISMA escritura (constraint del documento)
+        self.doc.write({'is_adjustment': True, 'adjustment_ref_cune': 'x' * 96})
         self.assertIn('ajuste', self._no_envia())
 
     def test_documento_migrado_legacy_no_se_envia(self):
@@ -229,6 +232,7 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
         self._enviar(CONEXION)
         self._enviar(PENDIENTE)                                         # desde "Envío fallido" se puede
         self.assertEqual(self.doc.state, 'invoice_pending')
+        self.soap.reset_mock()                                          # lo anterior ya llamó a la DIAN dos veces
         self.assertIn('ya fue enviado', self._no_envia())               # desde "Pendiente" no
 
     # ── la llamada a la DIAN ─────────────────────────────────────────
