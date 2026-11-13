@@ -49,7 +49,7 @@ class TestNotaAjusteCrear(DocumentoFixture, TransactionCase):
     # ── Precondiciones ───────────────────────────────────────────────
     def test_origen_no_aceptado_da_error(self):
         for estado in ('invoice_pending', 'invoice_sending_failed'):
-            doc = self._documento(date(2024, 3, 1), mes=4)
+            doc = self._documento(date(2024, 3, 1), mes=4, pagos=((15, 15), (30, 30)))
             self._intento(doc, estado, datetime(2026, 5, 2))
             with self.assertRaises(UserError, msg=estado):
                 doc.action_crear_ajuste('1')
@@ -58,7 +58,7 @@ class TestNotaAjusteCrear(DocumentoFixture, TransactionCase):
             sin_enviar.action_crear_ajuste('1')
 
     def test_origen_rechazado_no_lleva_nota(self):
-        doc = self._documento(date(2024, 3, 1), mes=4)
+        doc = self._documento(date(2024, 3, 1), mes=4, pagos=((15, 15), (30, 30)))
         doc.cune = 'b' * 96
         self._intento(doc, 'invoice_rejected', datetime(2026, 5, 2))
         with self.assertRaisesRegex(UserError, 'rechazado'):
