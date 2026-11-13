@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Part of InSoTech. See LICENSE file for full copyright and licensing details.
 
-"""Interpretación de las respuestas de la DIAN (parte A: helpers puros).
+"""Interpretación de las respuestas de la DIAN (parte A: helpers; parte B: veredicto neutral).
 
 Python puro, SIN dependencias de Odoo (convención de ``services/``). Estos 4 helpers vivían en
 ``models/l10n_co_ne_documento_mixin.py`` y no leen ningún campo del recibo; se extraen aquí para que
@@ -13,6 +13,8 @@ El mixin conserva sus 4 nombres (``_ne_response_text``, ``_ne_cune_candidates``,
 ``_ne_number_candidates``, ``_ne_is_set_level_status``) como envoltorios delgados que llaman aquí:
 el comportamiento del recibo no cambia.
 """
+
+from typing import NamedTuple, Optional
 
 from . import soap_client
 
@@ -95,3 +97,153 @@ def es_respuesta_de_set(response):
     if str(response.get('IsValid', '')).lower() == 'true':
         return False
     return not response.get('XmlDocumentKey') and not response.get('ApplicationResponse')
+
+
+# =====================================================================
+# Parte B: veredicto NEUTRAL de una respuesta (doc 53 §23.13, decisión (d) de Tech Lead)
+# =====================================================================
+#
+# Esta función dice QUÉ respondió la DIAN, sin asumir nada de ningún modelo: cada modelo traduce el
+# veredicto a su propio vocabulario de estados (el recibo, a ``l10n_co_ne_state``; el documento
+# mensual, al estado de su intento). Por eso NO conoce ``accepted``/``rejected``/``invoice_*``.
+# TODAVÍA NO LA USA NADIE: el recibo sigue con su regla actual (commit 10, atado a la respuesta de
+# David) y el documento la adopta al implementar enviar/reconsultar (commits 4 y 5 de §23.14).
+
+ACEPTADO = 'aceptado'
+RECHAZADO = 'rechazado'
+PENDIENTE = 'pendiente'
+ERROR_TRANSPORTE = 'error_transporte'
+NIVEL_SET = 'nivel_set'
+
+CONTEXTO_ENVIO = 'envio'
+CONTEXTO_CONSULTA = 'consulta'
+
+DIAGNOSTICO_IDENTIFICACION = 'identificacion'
+DIAGNOSTICO_CORREO = 'correo'
+DIAGNOSTICO_CUENTA = 'cuenta'
+DIAGNOSTICO_SALARIO = 'salario'
+
+
+class ResultadoDian(NamedTuple):
+    """Veredicto neutral de una respuesta de la DIAN."""
+    veredicto: str                      # ACEPTADO | RECHAZADO | PENDIENTE | ERROR_TRANSPORTE | NIVEL_SET
+    mensaje: str                        # StatusDescription / StatusMessage, o el detalle de errores
+    errores: tuple                      # ErrorMessages (o (ErrorMessage,)); () si no hay
+    zip_key: str                        # ZipKey si viene, '' si no
+    diagnostico: Optional[str]          # clave de diagnostico() solo si veredicto == RECHAZADO
+
+
+def es_rechazo(response):
+    """True si la respuesta trae evidencia de RECHAZO de la DIAN: ``StatusCode == '99'`` o la lista
+    ``ErrorMessages`` con contenido.
+
+    AUD-DIAN-34 (2026-10-04): el Anexo Técnico no trae una tabla exhaustiva de StatusCode de
+    GetStatusZip, solo el ejemplo real de rechazo (IsValid=false, StatusCode=99, con ErrorMessage
+    poblado de reglas NIE/ZB). No se supone ningún otro código como rechazo: un estado pendiente o
+    incompleto NO es un rechazo.
+    """
+    return str(response.get('StatusCode', '')).strip() == '99' or bool(response.get('ErrorMessages'))
+
+
+def _es_error_de_transporte(response):
+    """True si la respuesta NO trae un veredicto interpretable de la DIAN (falló el transporte o la
+    infraestructura): nunca debe tratarse como rechazo del documento.
+
+    Casos (``soap_client._send`` los arma así):
+    - ``TransportError`` o ``StatusCode == 'CONNECTION_ERROR'`` (``requests.RequestException``).
+    - Falla SOAP (``SOAPFault`` / ``FaultDetails``).
+    - ``HttpStatus`` >= 500.
+    - Cualquier ``HttpStatus`` >= 400 SIN ``IsValid``: un HTTP 4xx no es un veredicto sobre el
+      documento (decisión de Tech Lead). ``soap_client`` rellena ``StatusCode`` con el código HTTP
+      cuando la DIAN no lo trae, así que ``StatusCode`` solo no basta para distinguirlo.
+    - Ni ``IsValid`` ni ``StatusCode``: no hay veredicto.
+    """
+    if response.get('TransportError'):
+        return True
+    codigo = str(response.get('StatusCode', '')).strip()
+    if codigo == 'CONNECTION_ERROR':
+        return True
+    if response.get('SOAPFault') or response.get('FaultDetails'):
+        return True
+    try:
+        http = int(response.get('HttpStatus') or 0)
+    except (TypeError, ValueError):
+        http = 0
+    if http >= 500:
+        return True
+    tiene_is_valid = 'IsValid' in response
+    if http >= 400 and not tiene_is_valid:
+        return True
+    return not tiene_is_valid and not codigo
+
+
+def _errores(response):
+    lista = response.get('ErrorMessages')
+    if lista:
+        return tuple(str(e) for e in lista)
+    unico = response.get('ErrorMessage')
+    return (str(unico),) if unico else ()
+
+
+def diagnosticar(detalle):
+    """Clasificación por palabras clave del detalle de un rechazo: solo la CLAVE; los textos y los
+    enlaces (que dependen del empleado o del contrato) los pone cada modelo.
+
+    Misma regla y mismo orden que el diagnóstico del chatter del recibo: la primera coincidencia
+    gana. Se conserva tal cual, incluida la palabra ``documento`` (cae en identificación para casi
+    cualquier mensaje que la contenga) y ``identificacion`` sin tilde: defecto menor registrado en
+    §23.13, no se corrige aquí.
+
+    Returns:
+        ``'identificacion'`` | ``'correo'`` | ``'cuenta'`` | ``'salario'`` | ``None``.
+    """
+    texto = (detalle or '').lower()
+    if 'nit' in texto or 'documento' in texto or 'identificacion' in texto:
+        return DIAGNOSTICO_IDENTIFICACION
+    if 'correo' in texto or 'email' in texto:
+        return DIAGNOSTICO_CORREO
+    if 'cuenta' in texto or 'banco' in texto or 'metodo' in texto:
+        return DIAGNOSTICO_CUENTA
+    if 'salario' in texto or 'ibc' in texto or 'minimo' in texto:
+        return DIAGNOSTICO_SALARIO
+    return None
+
+
+def interpretar_respuesta(response, *, contexto):
+    """Veredicto neutral de una respuesta de la DIAN (``SendNominaSync`` o ``GetStatusZip``).
+
+    Args:
+        response: dict de ``soap_client`` (o un resultado individual de ``DianResponses``).
+        contexto: ``'envio'`` o ``'consulta'`` (otro valor -> ``ValueError``). Solo ``'consulta'``
+            reconoce la respuesta de nivel SET.
+
+    Orden de evaluación (§23.13):
+      1. ``error_transporte``: no hay veredicto DIAN interpretable (ver ``_es_error_de_transporte``).
+      2. ``nivel_set``: solo ``consulta`` y ``es_respuesta_de_set``.
+      3. ``aceptado``: ``IsValid`` en minúsculas es ``'true'`` ('true', 'True' y 'TRUE' son lo mismo;
+         cambio intencional frente al ``== 'true'`` exacto del envío por recibo, en dirección segura).
+      4. ``rechazado``: no válido y ``es_rechazo``.
+      5. ``pendiente``: cualquier otro caso (p. ej. "Batch en proceso de validación").
+
+    Nunca devuelve ``rechazado`` para algo que la DIAN no procesó.
+    """
+    if contexto not in (CONTEXTO_ENVIO, CONTEXTO_CONSULTA):
+        raise ValueError('contexto debe ser %r o %r, no %r' % (
+            CONTEXTO_ENVIO, CONTEXTO_CONSULTA, contexto))
+    errores = _errores(response)
+    mensaje = (response.get('StatusDescription') or response.get('StatusMessage')
+               or '; '.join(errores))
+    zip_key = str(response.get('ZipKey') or '')
+
+    def resultado(veredicto, diagnostico=None):
+        return ResultadoDian(veredicto, mensaje, errores, zip_key, diagnostico)
+
+    if _es_error_de_transporte(response):
+        return resultado(ERROR_TRANSPORTE)
+    if contexto == CONTEXTO_CONSULTA and es_respuesta_de_set(response):
+        return resultado(NIVEL_SET)
+    if str(response.get('IsValid', '')).lower() == 'true':
+        return resultado(ACEPTADO)
+    if es_rechazo(response):
+        return resultado(RECHAZADO, diagnosticar('; '.join(errores)))
+    return resultado(PENDIENTE)
