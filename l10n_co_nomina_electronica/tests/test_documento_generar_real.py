@@ -41,10 +41,14 @@ class TestDocumentoGenerarReal(TransactionCase):
                 'name': 'Ciudad Prueba', 'country_id': pais.id, 'state_id': estado.id, 'zipcode': '11001'})
         cls.company = env['res.company'].create({
             'name': 'Empresa Generar Real', 'country_id': pais.id, 'vat': '900123456-8',
-            'street': 'Calle 1 # 2-3', 'state_id': estado.id, 'city_id': ciudad.id,
+            'street': 'Calle 1 # 2-3', 'state_id': estado.id,
             'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN',
             'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U',
             'l10n_co_ne_fuente_fecha_pago': 'recibo', 'l10n_co_ne_payroll_prefix': 'NE'})
+        # El municipio de la compañía NO es un campo de res.company: el XML lo lee de su partner
+        # (``company.partner_id.city_id``, hr_payslip._collect_payslip_data).
+        cls.company.partner_id.write({
+            'country_id': pais.id, 'state_id': estado.id, 'city_id': ciudad.id, 'street': 'Calle 1 # 2-3'})
         env['l10n.co.ne.operation_mode'].create({
             'company_id': cls.company.id, 'software_id': 'SOFT-REAL', 'software_pin': 'PIN-REAL', 'test_set_id': 'TS'})
         cls.company.l10n_co_ne_environment = '2'
