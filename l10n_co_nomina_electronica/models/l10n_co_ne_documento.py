@@ -184,8 +184,8 @@ class L10nCoNeDocumento(models.Model):
         return self.contract_id.resource_calendar_id or self.company_id.resource_calendar_id
 
     def _ne_dias_habiles(self, desde, hasta):
-        """Fechas hábiles de [desde, hasta]: con jornada en el calendario y sin festivo (compute_leaves nativo: los
-        festivos globales de la compañía). El sábado cuenta si la jornada lo incluye (D10)."""
+        """Fechas hábiles de [desde, hasta]: con jornada en el calendario y sin festivo (festivos globales de la
+        compañía del documento). El sábado cuenta si la jornada lo incluye (D10)."""
         self.ensure_one()
         calendario = self._ne_calendario()
         if not calendario:
@@ -193,8 +193,12 @@ class L10nCoNeDocumento(models.Model):
         zona = pytz.timezone(calendario.tz or self.env.user.tz or 'UTC')
         inicio = zona.localize(_dt.combine(desde, time.min))
         fin = zona.localize(_dt.combine(hasta, time.max))
+        # Sin ``resources``, el nativo NO filtra los festivos por compañía (su filtro solo corre cuando
+        # hay un recurso): los festivos globales de otra compañía restarían días hábiles de ESTE plazo.
+        # Se limita explícitamente a los de la compañía del documento (o sin compañía).
+        dominio_festivos = [('time_type', '=', 'leave'), ('company_id', 'in', [self.company_id.id, False])]
         intervalos = calendario.with_company(self.company_id)._work_intervals_batch(
-            inicio, fin, compute_leaves=True)[False]
+            inicio, fin, domain=dominio_festivos, compute_leaves=True)[False]
         return {a.astimezone(zona).date() for a, _b, _rec in intervalos}
 
     def _ne_calcular_fecha_limite(self):

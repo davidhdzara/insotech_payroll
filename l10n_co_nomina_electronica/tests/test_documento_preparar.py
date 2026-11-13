@@ -208,6 +208,18 @@ class TestDocumentoPreparar(TransactionCase):
         # sin el 2 de abril: 1,3,6,7,8,9,10,13,14,15 -> el 10.º es el 15
         self.assertEqual(doc.fecha_limite, date(2026, 4, 15))
 
+    def test_festivo_de_otra_compania_no_cambia_el_plazo(self):
+        """El nativo no filtra los festivos globales por compañía cuando no hay recurso: la de otra compañía
+        (p. ej. Jueves y Viernes Santo cargados en la compañía real de staging) no puede restar días hábiles de
+        ESTE plazo. Con lun-vie y sin festivos propios, el 10.º día hábil de abril 2026 sigue siendo el 14."""
+        a1, a2, _b1 = self._marzo()
+        otra = self.env['res.company'].create({'name': 'Otra compañía con festivos', 'country_id': self.env.ref('base.co').id})
+        self.env['resource.calendar.leaves'].create({
+            'name': 'Festivo global de otra compañía', 'company_id': otra.id, 'calendar_id': False,
+            'resource_id': False, 'date_from': datetime(2026, 4, 2, 5, 0), 'date_to': datetime(2026, 4, 3, 4, 59, 59)})
+        doc = self._preparar(a1 | a2)['documentos']
+        self.assertEqual(doc.fecha_limite, date(2026, 4, 14))
+
     def test_legacy_y_ajuste_no_tienen_plazo(self):
         legacy = self.env['l10n.co.ne.documento'].create({
             'company_id': self.company.id, 'employee_id': self.emp_a.id, 'period': date(2026, 3, 1), 'legacy': True})
