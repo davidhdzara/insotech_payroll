@@ -50,16 +50,9 @@ class HrPayslipSend(models.TransientModel):
              'al webservice de la DIAN para su aprobación oficial.',
     )
     checkbox_send_mail = fields.Boolean(
-        string='Enviar por Correo al Empleado',
-        compute='_compute_checkbox_send_mail',
-        store=True,
-        readonly=False,
-        help='Si está marcado, se generará el PDF del comprobante y se enviará '
-             'por correo electrónico al empleado utilizando la plantilla seleccionada.',
-    )
-    enable_send_mail = fields.Boolean(
-        string='Permite Envío de Correo',
-        compute='_compute_enable_send_mail',
+        string='Enviar colilla por correo',
+        help='Si está marcado, se envía la colilla (PDF) de cada recibo confirmado al correo del contacto de trabajo '
+             'del empleado, por la cola de correo. Es independiente del estado ante la DIAN.',
     )
     mail_template_id = fields.Many2one(
         comodel_name='mail.template',
@@ -77,27 +70,16 @@ class HrPayslipSend(models.TransientModel):
         for rec in self:
             rec.mode = 'multi' if len(rec.payslip_ids) > 1 else 'single'
 
-    @api.depends('payslip_ids')
-    def _compute_enable_send_mail(self):
-        for rec in self:
-            # Habilitar correo si al menos una nómina pertenece a un empleado con correo de trabajo
-            rec.enable_send_mail = any(p.employee_id.work_email for p in rec.payslip_ids)
-
-    @api.depends('enable_send_mail')
-    def _compute_checkbox_send_mail(self):
-        for rec in self:
-            rec.checkbox_send_mail = rec.enable_send_mail
-
     @api.model
     def default_get(self, fields_list):
-        res = super(HrPayslipSend, self).default_get(fields_list)
+        res = super().default_get(fields_list)
         active_ids = self._context.get('active_ids')
         active_model = self._context.get('active_model')
 
         if active_model == 'hr.payslip' and active_ids:
             res['payslip_ids'] = [(6, 0, active_ids)]
-            # Buscar una plantilla por defecto para hr.payslip
-            template = self.env['mail.template'].search([('model', '=', 'hr.payslip')], limit=1)
+            # Plantilla nativa por xmlid (nunca "la primera"); si falta, queda vacía y el envío da un error claro.
+            template = self.env.ref(self.env['hr.payslip'].NE_MAIL_TEMPLATE_XMLID, raise_if_not_found=False)
             if template:
                 res['mail_template_id'] = template.id
         return res
@@ -105,63 +87,59 @@ class HrPayslipSend(models.TransientModel):
     # ──────────────────────────────────────────────────────────────────
     # Botón Principal: Ejecutar Procesamiento
     # ──────────────────────────────────────────────────────────────────
+    def _ne_aviso_resultado(self, resumen, problemas, avisos):
+        """Notificación nativa con el resultado: nada se traga en silencio (los problemas se listan)."""
+        lineas = [resumen] + [_('Problema: %s', p) for p in problemas] + [_('Aviso: %s', a) for a in avisos]
+        return {
+            'type': 'ir.actions.client', 'tag': 'display_notification',
+            'params': {'title': _('Enviar y Procesar'), 'message': '\n'.join(lineas),
+                       'type': 'warning' if problemas else 'success', 'sticky': bool(problemas),
+                       'next': {'type': 'ir.actions.act_window_close'}}}
+
     def action_send_and_print(self):
-        """Firma, transmite y envía las nóminas en lote o individualmente."""
+        """Transmite por recibo (ciclo de habilitación) y envía la colilla por correo; ambos independientes."""
         self.ensure_one()
         if not self.payslip_ids:
             raise UserError(_('No hay nóminas cargadas para procesar en el asistente.'))
-
-        # Validación en procesamiento masivo: obligar a elegir plantilla de correo si está activo
-        if self.mode == 'multi' and self.checkbox_send_mail and not self.mail_template_id:
-            raise UserError(_(
-                'Debe seleccionar una Plantilla de Correo para poder realizar el envío '
-                'masivo de comprobantes de pago.'
-            ))
-
-        _logger.info(
-            'Iniciando procesamiento de envío para %d nominas (DIAN: %s, Email: %s)',
-            len(self.payslip_ids), self.checkbox_send_dian, self.checkbox_send_mail
-        )
+        template = False
+        if self.checkbox_send_mail:
+            template = self.mail_template_id or self.env['hr.payslip']._ne_plantilla_colilla()
+        problemas, avisos = [], []
+        transmitidos = enviados = 0
 
         for payslip in self.payslip_ids:
-            # 1. Enviar a la DIAN (XML + SOAP) - Solo si requiere transmisión
+            nombre = payslip.number or payslip.name
+            # 1. Ciclo DIAN por recibo (habilitación). Un recibo que va en un documento mensual se transmite desde él.
             if self.checkbox_send_dian and payslip.l10n_co_ne_state in ('draft', 'generated', 'rejected'):
-                try:
-                    # Generar XML primero si está en borrador
-                    if payslip.l10n_co_ne_state == 'draft':
-                        payslip.action_generate_ne_xml()
-                    
-                    payslip.action_send_ne_dian()
-                except Exception as e:
-                    _logger.error(
-                        'Fallo en transmision DIAN para nomina %s: %s',
-                        payslip.number or payslip.name, str(e)
-                    )
-                    # Registramos el fallo en el chatter pero continuamos con el lote
-                    payslip.message_post(
-                        body=_('❌ <b>Error de transmisión automatizada:</b> %s') % str(e),
-                        message_type='comment'
-                    )
-
-            # 2. Enviar por Correo Electrónico (PDF adjunto) - Solo si está Aceptado por la DIAN
-            if self.checkbox_send_mail and payslip.employee_id.work_email:
-                if payslip.l10n_co_ne_state == 'accepted':
-                    try:
-                        payslip.action_send_payslip_email(self.mail_template_id)
-                    except Exception as e:
-                        _logger.error(
-                            'Fallo en envio de correo para nomina %s: %s',
-                            payslip.number or payslip.name, str(e)
-                        )
-                        payslip.message_post(
-                            body=_('⚠️ <b>Fallo al enviar correo al empleado:</b> %s') % str(e),
-                            message_type='comment'
-                        )
+                doc = payslip.l10n_co_ne_documento_id
+                if doc and not doc.legacy:
+                    avisos.append(_('%(recibo)s: se transmite desde el documento mensual "%(doc)s".',
+                                    recibo=nombre, doc=doc.display_name))
                 else:
-                    _logger.warning(
-                        'No se envia correo para la nomina %s porque no ha sido aceptada por la DIAN (Estado actual: %s).',
-                        payslip.number or payslip.name, payslip.l10n_co_ne_state
-                    )
+                    try:
+                        if payslip.l10n_co_ne_state == 'draft':
+                            payslip.action_generate_ne_xml()
+                        payslip.action_send_ne_dian()
+                        transmitidos += 1
+                    except Exception as error:   # el lote sigue: el error se lista y queda en el chatter
+                        _logger.error('Fallo en transmision DIAN para nomina %s: %s', nombre, error)
+                        problemas.append(_('%(recibo)s: no se transmitió (%(error)s).', recibo=nombre, error=error))
+                        payslip.message_post(
+                            body=_('Error de transmisión automatizada: %s', error), message_type='comment')
+            # 2. Colilla por correo: por recibo confirmado, sin depender del estado DIAN.
+            if self.checkbox_send_mail:
+                if payslip.message_ids.filtered(lambda m: m.body and 'Colilla enviada por correo' in str(m.body)):
+                    avisos.append(_('%s: ya se había enviado la colilla por correo antes.', nombre))
+                try:
+                    with self.env.cr.savepoint():
+                        payslip.action_send_payslip_email(template)
+                    enviados += 1
+                except Exception as error:
+                    _logger.error('Fallo en envio de correo para nomina %s: %s', nombre, error)
+                    problemas.append(_('%(recibo)s: no se envió la colilla (%(error)s).', recibo=nombre, error=error))
+                    payslip.message_post(
+                        body=_('Fallo al enviar la colilla por correo: %s', error), message_type='comment')
 
-        return {'type': 'ir.actions.act_window_close'}
-
+        resumen = _('Recibos: %(total)s. Transmitidos por recibo: %(t)s. Colillas encoladas para envío: %(e)s.',
+                    total=len(self.payslip_ids), t=transmitidos, e=enviados)
+        return self._ne_aviso_resultado(resumen, problemas, avisos)

@@ -98,4 +98,5 @@ from . import test_nota_ajuste
 from . import test_nota_ajuste_crear
 from . import test_nota_ajuste_enviar
 from . import test_documento_cune
+from . import test_payslip_send_correo
 from . import test_migracion_vistas_211
