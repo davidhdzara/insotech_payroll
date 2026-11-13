@@ -17,49 +17,49 @@
                         string="Enviar y Procesar"
                         type="action"
                         class="oe_highlight"
-                        invisible="country_code != 'CO' or l10n_co_ne_state not in ('draft', 'generated', 'uncertain', 'rejected') or state != 'done'"
+                        invisible="country_code != 'CO' or (l10n_co_ne_documento_id and l10n_co_ne_state == 'draft') or l10n_co_ne_state not in ('draft', 'generated', 'uncertain', 'rejected') or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_generate_ne_xml"
                         string="Generar XML"
                         type="object"
                         class="btn-primary"
-                        invisible="country_code != 'CO' or l10n_co_ne_state != 'draft' or state != 'done'"
+                        invisible="country_code != 'CO' or (l10n_co_ne_documento_id and l10n_co_ne_state == 'draft') or l10n_co_ne_state != 'draft' or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_regenerate_ne_xml"
                         string="Regenerar XML"
                         type="object"
-                        invisible="country_code != 'CO' or l10n_co_ne_state not in ('generated', 'rejected', 'uncertain') or state != 'done'"
+                        invisible="country_code != 'CO' or (l10n_co_ne_documento_id and l10n_co_ne_state == 'draft') or l10n_co_ne_state not in ('generated', 'rejected', 'uncertain') or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_send_ne_dian"
                         string="Enviar a DIAN"
                         type="object"
                         class="btn-primary"
-                        invisible="country_code != 'CO' or l10n_co_ne_state != 'generated' or state != 'done'"
+                        invisible="country_code != 'CO' or (l10n_co_ne_documento_id and l10n_co_ne_state == 'draft') or l10n_co_ne_state != 'generated' or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_check_dian_status"
                         string="Consultar Estado"
                         type="object"
                         class="btn-secondary"
-                        invisible="country_code != 'CO' or l10n_co_ne_state not in ('sent', 'generated', 'rejected', 'uncertain') or state != 'done'"
+                        invisible="country_code != 'CO' or (l10n_co_ne_documento_id and l10n_co_ne_state == 'draft') or l10n_co_ne_state not in ('sent', 'generated', 'rejected', 'uncertain') or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_create_adjustment"
                         string="Nota de Ajuste"
                         type="object"
                         class="btn-secondary"
-                        invisible="country_code != 'CO' or l10n_co_ne_state != 'accepted' or state != 'done'"
+                        invisible="country_code != 'CO' or (l10n_co_ne_documento_id and l10n_co_ne_state == 'draft') or l10n_co_ne_state != 'accepted' or state != 'done'"
                         groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_create_elimination"
                         string="Eliminar Documento"
                         type="object"
                         class="btn-secondary"
-                        invisible="country_code != 'CO' or l10n_co_ne_state != 'accepted' or state != 'done' or l10n_co_ne_is_adjustment"
+                        invisible="country_code != 'CO' or (l10n_co_ne_documento_id and l10n_co_ne_state == 'draft') or l10n_co_ne_state != 'accepted' or state != 'done' or l10n_co_ne_is_adjustment"
                         groups="hr_payroll.group_hr_payroll_manager"/>
 
             </xpath>
 
             <!-- NE Status bar -->
             <xpath expr="//header" position="after">
-                <div class="oe_title" name="ne_statusbar" invisible="country_code != 'CO'">
+                <div class="oe_title" name="ne_statusbar" invisible="country_code != 'CO' or (l10n_co_ne_documento_id and l10n_co_ne_state == 'draft')">
                     <field name="l10n_co_ne_state"
                            widget="statusbar"
                            statusbar_visible="draft,generated,sent,uncertain,accepted"
@@ -102,18 +102,29 @@
             <xpath expr="//notebook" position="inside">
                 <page string="Nómina Electrónica" name="nomina_electronica"
                       invisible="country_code != 'CO'">
+                    <!-- Doc 53 §26: una sola pestaña DIAN. Un recibo muestra UN ciclo: el del documento mensual
+                         (este grupo) o el del recibo (los grupos siguientes), nunca los dos. -->
+                    <group string="Documento DIAN mensual"
+                           invisible="not l10n_co_ne_documento_id or l10n_co_ne_state != 'draft'">
+                        <field name="l10n_co_ne_documento_id" readonly="1"/>
+                        <field name="l10n_co_ne_documento_state" widget="account_document_state"/>
+                        <field name="l10n_co_ne_documento_message" invisible="not l10n_co_ne_documento_message"/>
+                    </group>
                     <group>
                         <group string="Datos de Transmisión">
                             <field name="l10n_co_ne_consecutive"
                                    string="Consecutivo NE"
-                                   readonly="1"/>
+                                   readonly="1"
+                                   invisible="l10n_co_ne_documento_id and l10n_co_ne_state == 'draft'"/>
                             <field name="l10n_co_ne_cune"
                                    string="CUNE"
-                                   readonly="1"/>
+                                   readonly="1"
+                                   invisible="l10n_co_ne_documento_id and l10n_co_ne_state == 'draft'"/>
                             <field name="l10n_co_ne_is_salarial"
                                    readonly="state != 'draft'"/>
                         </group>
-                        <group string="Estado DIAN">
+                        <group string="Estado DIAN"
+                           invisible="l10n_co_ne_documento_id and l10n_co_ne_state == 'draft'">
                             <field name="l10n_co_ne_state"
                                    string="Estado NE"
                                    readonly="1"
@@ -156,21 +167,24 @@
                                string="Tipo de Nota de Ajuste"
                                readonly="l10n_co_ne_state != 'draft'"/>
                     </group>
-                    <group string="Solicitud DIAN">
+                    <group string="Solicitud DIAN"
+                           invisible="l10n_co_ne_documento_id and l10n_co_ne_state == 'draft'">
                         <field name="l10n_co_ne_dian_request"
                                string="Solicitud DIAN"
                                readonly="1"
                                nolabel="1"
                                colspan="4"/>
                     </group>
-                    <group string="Respuesta DIAN">
+                    <group string="Respuesta DIAN"
+                           invisible="l10n_co_ne_documento_id and l10n_co_ne_state == 'draft'">
                         <field name="l10n_co_ne_dian_response"
                                string="Respuesta DIAN"
                                readonly="1"
                                nolabel="1"
                                colspan="4"/>
                     </group>
-                    <group string="Historial DIAN" groups="hr_payroll.group_hr_payroll_manager">
+                    <group string="Historial DIAN" groups="hr_payroll.group_hr_payroll_manager"
+                           invisible="l10n_co_ne_documento_id and l10n_co_ne_state == 'draft'">
                         <field name="l10n_co_ne_exchange_ids" readonly="1" nolabel="1">
                             <list create="0" delete="0">
                                 <field name="create_date"/>
@@ -198,8 +212,8 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='state']" position="after">
                 <field name="l10n_co_ne_state"
-                       string="Estado NE"
-                       optional="show"
+                       string="Estado NE (por recibo)"
+                       optional="hide"
                        widget="badge"
                        decoration-info="l10n_co_ne_state == 'draft'"
                        decoration-warning="l10n_co_ne_state in ('generated','sent','uncertain')"
@@ -223,15 +237,15 @@
         <field name="priority">99</field>
         <field name="arch" type="xml">
             <xpath expr="//search" position="inside">
-                <field name="l10n_co_ne_state" string="Estado NE"/>
+                <field name="l10n_co_ne_state" string="Estado NE (por recibo)"/>
                 <field name="l10n_co_ne_consecutive" string="Consecutivo NE"/>
                 <separator/>
-                <filter string="NE Borrador" name="ne_draft" domain="[('l10n_co_ne_state', '=', 'draft')]"/>
-                <filter string="NE Generado" name="ne_generated" domain="[('l10n_co_ne_state', '=', 'generated')]"/>
-                <filter string="NE Transmitido" name="ne_sent" domain="[('l10n_co_ne_state', '=', 'sent')]"/>
-                <filter string="NE Incierto" name="ne_uncertain" domain="[('l10n_co_ne_state', '=', 'uncertain')]"/>
-                <filter string="NE Aceptado" name="ne_accepted" domain="[('l10n_co_ne_state', '=', 'accepted')]"/>
-                <filter string="NE Rechazado" name="ne_rejected" domain="[('l10n_co_ne_state', '=', 'rejected')]"/>
+                <filter string="NE Borrador (por recibo)" name="ne_draft" domain="[('l10n_co_ne_state', '=', 'draft')]"/>
+                <filter string="NE Generado (por recibo)" name="ne_generated" domain="[('l10n_co_ne_state', '=', 'generated')]"/>
+                <filter string="NE Transmitido (por recibo)" name="ne_sent" domain="[('l10n_co_ne_state', '=', 'sent')]"/>
+                <filter string="NE Incierto (por recibo)" name="ne_uncertain" domain="[('l10n_co_ne_state', '=', 'uncertain')]"/>
+                <filter string="NE Aceptado (por recibo)" name="ne_accepted" domain="[('l10n_co_ne_state', '=', 'accepted')]"/>
+                <filter string="NE Rechazado (por recibo)" name="ne_rejected" domain="[('l10n_co_ne_state', '=', 'rejected')]"/>
                 <separator/>
                 <filter string="Es Nota de Ajuste" name="ne_is_adjustment" domain="[('l10n_co_ne_is_adjustment', '=', True)]"/>
                 <separator/>
@@ -239,7 +253,7 @@
                 <filter name="date_to_filter" string="Fecha Hasta" date="date_to"/>
             </xpath>
             <xpath expr="//group" position="inside">
-                <filter string="Estado NE" name="group_by_l10n_co_ne_state" context="{'group_by': 'l10n_co_ne_state'}"/>
+                <filter string="Estado NE (por recibo)" name="group_by_l10n_co_ne_state" context="{'group_by': 'l10n_co_ne_state'}"/>
                 <filter string="Es Nota de Ajuste" name="group_by_l10n_co_ne_is_adjustment" context="{'group_by': 'l10n_co_ne_is_adjustment'}"/>
             </xpath>
         </field>

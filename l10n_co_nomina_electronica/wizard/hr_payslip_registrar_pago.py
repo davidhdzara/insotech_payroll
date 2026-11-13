@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Part of InSoTech. See LICENSE file for full copyright and licensing details.
-"""Registrar pago (doc 53 §20.3, D18): marca recibos como pagados con una fecha real editable (desatraso masivo).
+"""Registrar fecha de pago (doc 53 §20.3, D18): marca recibos como pagados con una fecha real editable (desatraso masivo).
 
 Solo para compañías cuya fuente de la fecha de pago es 'recibo'. Reutiliza la acción nativa
 ``action_payslip_paid`` y luego fija la fecha elegida (el nativo pone hoy)."""
@@ -11,7 +11,7 @@ from odoo.exceptions import UserError
 
 class HrPayslipRegistrarPago(models.TransientModel):
     _name = 'hr.payslip.registrar.pago'
-    _description = 'Registrar pago de recibos de nómina'
+    _description = 'Registrar fecha de pago de recibos de nómina'
 
     payslip_ids = fields.Many2many('hr.payslip', string='Recibos', required=True)
     fecha = fields.Date(string='Fecha de pago', required=True, default=fields.Date.context_today,

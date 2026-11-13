@@ -117,8 +117,6 @@ class HrPayslip(models.Model):
         help='Documento mensual de nómina electrónica (uno por empleado y mes) que incluye este recibo.')
     l10n_co_ne_documento_state = fields.Selection(
         related='l10n_co_ne_documento_id.state', string='Estado DIAN del documento', store=True)
-    l10n_co_ne_intento_ids = fields.One2many(
-        related='l10n_co_ne_documento_id.intento_ids', string='Intentos DIAN', readonly=True)
     l10n_co_ne_documento_message = fields.Html(
         related='l10n_co_ne_documento_id.message', string='Motivo DIAN', readonly=True)
 
@@ -1342,7 +1340,7 @@ class HrPayslip(models.Model):
         """Fechas de pago del recibo (ordenadas y distintas): UNICO accesor del módulo (doc 53 §20.3).
 
         La fuente es un ajuste de la COMPAÑÍA, nunca por registro (Ajustes > Nómina, sin valor por defecto):
-        'recibo' -> la fecha de pago del recibo (acción Registrar pago); 'contabilidad' -> las fechas de los pagos
+        'recibo' -> la fecha de pago del recibo (acción Registrar fecha de pago); 'contabilidad' -> las fechas de los pagos
         conciliados del asiento del recibo. Sin fecha no se supone ninguna: error claro."""
         self.ensure_one()
         fuente = self.company_id.l10n_co_ne_fuente_fecha_pago
@@ -1354,7 +1352,7 @@ class HrPayslip(models.Model):
             if not self.paid_date:
                 raise UserError(_(
                     'El recibo "%(recibo)s" (%(empleado)s) no tiene fecha de pago. Regístrela con la acción '
-                    '"Registrar pago".', recibo=self.display_name, empleado=self.employee_id.display_name))
+                    '"Registrar fecha de pago".', recibo=self.display_name, empleado=self.employee_id.display_name))
             return [fields.Date.to_date(self.paid_date)]
         fechas = self._ne_fechas_pagos_contables()
         if not fechas:

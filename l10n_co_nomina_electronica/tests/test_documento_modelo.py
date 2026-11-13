@@ -7,8 +7,11 @@ import os
 from datetime import date, datetime
 from unittest.mock import patch
 
+from lxml import etree
+
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests.common import TransactionCase, tagged
+from odoo.tools.safe_eval import safe_eval
 
 CUNE_A = 'a' * 96
 CUNE_B = 'b' * 96
@@ -222,7 +225,6 @@ class TestDocumentoModelo(TransactionCase):
         self.assertFalse(slip.l10n_co_ne_documento_state)
         self._intento(doc, 'invoice_accepted', datetime(2026, 4, 1, 10, 0))
         self.assertEqual(slip.l10n_co_ne_documento_state, 'invoice_accepted')
-        self.assertEqual(slip.l10n_co_ne_intento_ids, doc.intento_ids)
 
     def test_borrar_solo_sin_historia(self):
         self._documento(3).unlink()
@@ -347,5 +349,46 @@ class TestDocumentoModelo(TransactionCase):
             self.assertTrue(vista['arch'], tipo)
         recibo = self.env['hr.payslip'].get_view(view_type='form')
         self.assertIn('l10n_co_ne_documento_state', recibo['arch'])
-        self.assertIn('edi_documents', recibo['arch'])
+
+    def test_recibo_tiene_una_sola_pestana_dian_con_el_grupo_del_documento(self):
+        """Doc 53 §26: una sola pestaña DIAN en el recibo ("Nómina Electrónica"), sin la pestaña "DIAN" aparte; el
+        documento mensual es un grupo de esa pestaña y el ciclo por recibo se oculta cuando el recibo tiene documento."""
+        arch = etree.fromstring(self.env['hr.payslip'].get_view(view_type='form')['arch'].encode())
+        self.assertEqual(len(arch.xpath("//page[@name='nomina_electronica']")), 1)
+        self.assertFalse(arch.xpath("//page[@name='edi_documents']"))
+        self.assertFalse(arch.xpath("//field[@name='l10n_co_ne_intento_ids']"))
+        grupo = arch.xpath("//page[@name='nomina_electronica']//group[@string='Documento DIAN mensual']")
+        self.assertEqual(len(grupo), 1)
+        self.assertEqual(grupo[0].xpath(".//field[@name='l10n_co_ne_documento_state']")[0].get('widget'),
+                         'account_document_state')
+        for titulo in ('Estado DIAN', 'Solicitud DIAN', 'Respuesta DIAN'):
+            oculto = arch.xpath("//page[@name='nomina_electronica']//group[@string='%s']" % titulo)[0].get('invisible')
+            self.assertIn('l10n_co_ne_documento_id', oculto, titulo)
+
+    def test_botones_del_ciclo_por_recibo_solo_se_ocultan_si_el_recibo_tiene_documento(self):
+        """Un recibo SIN documento (ciclo viejo) sigue viendo sus botones; con documento no legacy (ciclo del recibo
+        sin tocar, 'draft') se ocultan; un recibo con documento legacy (ya transmitido por recibo) los conserva."""
+        arch = etree.fromstring(self.env['hr.payslip'].get_view(view_type='form')['arch'].encode())
+        # (texto del botón, estado del recibo en el que se ve en el ciclo por recibo)
+        botones = (('Enviar y Procesar', 'draft'), ('Generar XML', 'draft'), ('Regenerar XML', 'generated'),
+                   ('Enviar a DIAN', 'generated'), ('Consultar Estado', 'sent'), ('Nota de Ajuste', 'accepted'),
+                   ('Eliminar Documento', 'accepted'))
+        for texto, estado in botones:
+            nodo = arch.xpath("//header/button[@string='%s']" % texto)
+            self.assertEqual(len(nodo), 1, texto)
+            condicion = nodo[0].get('invisible')
+
+            def oculto(documento, estado_recibo, _condicion=condicion):
+                return bool(safe_eval(_condicion, {
+                    'country_code': 'CO', 'state': 'done', 'l10n_co_ne_is_adjustment': False,
+                    'l10n_co_ne_documento_id': documento, 'l10n_co_ne_state': estado_recibo}))
+            self.assertFalse(oculto(False, estado), '%s: recibo sin documento debe verlo' % texto)
+            if estado == 'draft':
+                self.assertTrue(oculto(1, 'draft'), '%s: recibo con documento no debe verlo' % texto)
+            else:
+                self.assertFalse(oculto(1, estado), '%s: ciclo viejo ya transmitido lo conserva' % texto)
+
+    def test_menu_del_documento_cuelga_de_los_recibos(self):
+        menu = self.env.ref('l10n_co_nomina_electronica.menu_l10n_co_ne_documento')
+        self.assertEqual(menu.parent_id, self.env.ref('hr_payroll.menu_hr_payroll_payslips'))
         self.assertTrue(self.env.ref('l10n_co_nomina_electronica.menu_l10n_co_ne_documento'))

@@ -4,13 +4,13 @@
         <field name="name">hr.payslip.registrar.pago.form</field>
         <field name="model">hr.payslip.registrar.pago</field>
         <field name="arch" type="xml">
-            <form string="Registrar pago">
+            <form string="Registrar fecha de pago">
                 <group>
                     <field name="fecha"/>
                     <field name="payslip_ids" widget="many2many_tags" readonly="1"/>
                 </group>
                 <footer>
-                    <button string="Registrar pago" name="action_registrar_pago" type="object" class="btn-primary" data-hotkey="q"/>
+                    <button string="Registrar fecha de pago" name="action_registrar_pago" type="object" class="btn-primary" data-hotkey="q"/>
                     <button string="Descartar" class="btn-secondary" special="cancel" data-hotkey="x"/>
                 </footer>
             </form>
@@ -18,7 +18,7 @@
     </record>
 
     <record id="action_hr_payslip_registrar_pago" model="ir.actions.act_window">
-        <field name="name">Registrar pago</field>
+        <field name="name">Registrar fecha de pago</field>
         <field name="res_model">hr.payslip.registrar.pago</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
