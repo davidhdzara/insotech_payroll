@@ -20,6 +20,7 @@ class L10nCoNeExchange(models.Model):
         ('send_sync', 'Envío síncrono'),
         ('send_test_set', 'Envío set de pruebas'),
         ('get_status_zip', 'Consulta de estado'),
+        ('get_status', 'Consulta de estado por CUNE'),
     ], required=True, readonly=True)
     endpoint = fields.Char(required=True, readonly=True)
     zip_key = fields.Char(readonly=True, index=True)

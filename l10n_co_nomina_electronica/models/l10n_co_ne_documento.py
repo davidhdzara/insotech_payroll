@@ -1045,6 +1045,86 @@ class L10nCoNeDocumento(models.Model):
                 message_type='comment', subtype_xmlid='mail.mt_note')
         return resultado
 
+    def _ne_reconsultar_por_cune(self):
+        """Consulta a la DIAN el estado del documento por su CUNE (``GetStatus``, Anexo §9.8) y lo aplica (doc 53
+        §23.17, 7a / D-A). Sirve cuando se perdió el ZipKey (el proceso murió tras el envío y antes del commit).
+
+        El formato real de la respuesta es NO VERIFICADO hasta el piloto de producción: lo que no se pueda interpretar
+        con ``interpretar_respuesta``, una respuesta de otro documento (``XmlDocumentKey`` distinto del CUNE) o con
+        varios resultados NO cambia el estado y el documento SIGUE incierto: nunca se asume un veredicto.
+
+        - ``aceptado`` / ``rechazado``: actualiza el último intento pendiente o fallido de este CUNE; sin intento, crea
+          uno (identifier = CUNE, con la evidencia enlazada). Limpia ``incierto`` y aplica la eliminación.
+        - ``pendiente`` y ``error_transporte``: no cambian nada.
+        Siempre guarda la evidencia. Lanza UserError solo por precondiciones locales.
+        """
+        self.ensure_one()
+        if self.legacy:
+            raise UserError(_('El documento "%s" es un documento migrado del ciclo por recibo: se consulta por '
+                              'recibo.', self.display_name))
+        if self.eliminado:
+            raise UserError(_('El documento "%s" ya fue eliminado por una nota de ajuste.', self.display_name))
+        if not self.cune:
+            raise UserError(_('El documento "%s" no tiene CUNE: no se puede consultar por CUNE.', self.display_name))
+        ultimo = self._ultimo_intento()
+        if ultimo and ultimo.state in ('invoice_accepted', 'invoice_rejected') and ultimo.identifier == self.cune:
+            raise UserError(_('El último envío del documento "%(doc)s" ya tiene veredicto de la DIAN (%(estado)s).',
+                              doc=self.display_name,
+                              estado=dict(ultimo._fields['state'].selection).get(ultimo.state)))
+        self._ne_bloquear_en_habilitacion()
+        self.company_id._l10n_co_ne_validar_config()
+        company = self.company_id
+        llave, cert_pem, _der, _cert_obj, _cadena = xml_signer.load_from_certificate(company._get_ne_certificate())
+        endpoint = company._ne_dian_endpoint()
+        respuesta = soap_client.get_status(
+            track_id=self.cune, private_key=llave, cert_pem=cert_pem, endpoint=endpoint,
+            timeout=company._ne_config_int_param(
+                'l10n_co_nomina_electronica.soap_timeout_seconds', soap_client.SOAP_TIMEOUT))
+        resultado = dian_respuesta.interpretar_respuesta(respuesta, contexto=dian_respuesta.CONTEXTO_CONSULTA)
+        exchange = self.env['l10n.co.ne.exchange'].create_exchange(
+            company, 'get_status', endpoint, respuesta, self.payslip_ids, documento=self)
+        veredicto = resultado.veredicto
+        if veredicto in (dian_respuesta.ERROR_TRANSPORTE, dian_respuesta.PENDIENTE):
+            return resultado
+        if veredicto == dian_respuesta.NIVEL_SET:
+            self._ne_nota_una_vez(_(
+                'La DIAN respondió sobre el SET de pruebas, no sobre este documento: %s. No se cambia el estado.',
+                resultado.mensaje), 'respondió sobre el SET de pruebas')
+            return resultado
+        if len(respuesta.get('DianResponses') or []) > 1:
+            self._ne_nota_una_vez(_(
+                'La DIAN devolvió varios resultados para la consulta por CUNE: no se cambia el estado. Revise la '
+                'evidencia de la consulta.'), 'varios resultados para la consulta')
+            return resultado
+        cunes = dian_respuesta.candidatos_cune(respuesta)
+        if not cunes or self.cune not in cunes:
+            self._ne_nota_una_vez(_(
+                'La respuesta de la DIAN no identifica este documento (no coincide el CUNE): no se cambia el estado '
+                'y el documento sigue como estaba. Revise la evidencia de la consulta.'), 'no identifica este documento')
+            return resultado
+        estado = _ESTADO_INTENTO_POR_VEREDICTO[veredicto]
+        message_json = dian_message.build_message_json(respuesta)
+        if ultimo and ultimo.identifier == self.cune and ultimo.state in ('invoice_pending', 'invoice_sending_failed'):
+            vals = {'state': estado, 'message_json': message_json}
+            if respuesta.get('ZipKey') and not ultimo.zip_key:
+                vals['zip_key'] = respuesta['ZipKey']
+            ultimo.write(vals)
+        else:
+            self.env['l10n.co.ne.documento.intento'].create({
+                'documento_id': self.id, 'datetime': fields.Datetime.now(), 'state': estado,
+                'identifier': self.cune, 'numero': self.consecutive, 'zip_key': respuesta.get('ZipKey') or False,
+                'message_json': message_json, 'exchange_id': exchange.id or False,
+                'test_environment': company.l10n_co_ne_environment == '2',
+                'certification_process': bool(company.l10n_co_ne_certification_process)})
+        self._ne_aplicar_eliminacion()
+        if self.incierto:
+            self.incierto = False
+        self.message_post(
+            body=_('Consulta a la DIAN por CUNE: %s.', dict(self.env['l10n.co.ne.documento.intento']._fields[
+                'state'].selection).get(estado)),
+            message_type='comment', subtype_xmlid='mail.mt_note')
+        return resultado
+
     # ──────────────────────────────────────────────────────────────────
     # Restricciones
     # ──────────────────────────────────────────────────────────────────

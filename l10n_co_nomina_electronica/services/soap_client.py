@@ -71,6 +71,12 @@ SOAP_ACTION_GET_STATUS = (
     '/GetStatusZip'
 )
 
+# GetStatus (Anexo §9.8): consulta síncrona por CUNE. Distinta de la anterior, que es GetStatusZip (por ZipKey).
+SOAP_ACTION_GET_STATUS_CUNE = (
+    'http://wcf.dian.colombia/IWcfDianCustomerServices'
+    '/GetStatus'
+)
+
 # Namespace WCF DIAN
 WCF_NS = 'http://wcf.dian.colombia'
 
@@ -771,5 +777,42 @@ def get_status_zip(
 
     return _send(
         SOAP_ACTION_GET_STATUS, endpoint,
+        body_xml, cert_der, private_key, timeout=timeout,
+    )
+
+
+def get_status(
+    track_id: str,
+    private_key=None,
+    cert_pem: Optional[bytes] = None,
+    cert_der_b64: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    timeout: Optional[int] = None,
+) -> dict:
+    """Consulta el estado de un documento por su CUNE (``GetStatus``, Anexo §9.8; síncrona).
+
+    ``track_id`` es el CUNE del documento. El formato real de la respuesta contra la DIAN es NO VERIFICADO (solo el
+    ejemplo del Anexo): se confirma en el piloto de producción. Misma forma de retorno que ``get_status_zip``.
+    """
+    if not endpoint:
+        endpoint = DIAN_ENDPOINT_HAB
+
+    if cert_pem and not cert_der_b64:
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        cert_der = cert.public_bytes(serialization.Encoding.DER)
+    elif cert_der_b64:
+        cert_der = base64.b64decode(cert_der_b64)
+    else:
+        return {'StatusCode': 'ERROR',
+                'ErrorMessage': 'No se proporcionó certificado'}
+
+    body_xml = (
+        '<wcf:GetStatus xmlns:wcf="{ns}">'
+        '<wcf:trackId>{tid}</wcf:trackId>'
+        '</wcf:GetStatus>'
+    ).format(ns=WCF_NS, tid=track_id)
+
+    return _send(
+        SOAP_ACTION_GET_STATUS_CUNE, endpoint,
         body_xml, cert_der, private_key, timeout=timeout,
     )

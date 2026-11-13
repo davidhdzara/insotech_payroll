@@ -7,8 +7,9 @@ Resuelve el CUNE a la nómina que lo generó usando el historial de envíos
 (``l10n.co.ne.exchange.document``, que guarda ``cune`` y ``payslip_id`` por cada documento de
 cualquier envío) y reutiliza ``hr.payslip.action_check_dian_status()`` -- toda la lógica de
 emparejamiento y estado ya verificada. No transmite nada nuevo a la DIAN: la consulta sigue
-siendo por ZipKey (GetStatusZip). Un CUNE que no pasó por un envío de este sistema no se puede
-consultar aquí (la operación GetStatus por CUNE del Anexo, numeral 14.10, no está implementada).
+siendo por ZipKey (GetStatusZip) para un recibo. Un CUNE de un DOCUMENTO MENSUAL se consulta con GetStatus por CUNE
+(Anexo §9.8; ``l10n.co.ne.documento._ne_reconsultar_por_cune``, formato real NO VERIFICADO hasta el piloto). Un CUNE
+que no pasó por un envío de este sistema no se puede consultar aquí.
 """
 
 from odoo import fields, models, _
@@ -45,5 +46,14 @@ class L10nCoNeStatusCuneWizard(models.TransientModel):
 
     def action_check_status(self):
         self.ensure_one()
+        cune = (self.cune or '').strip()
+        # Un CUNE de un documento mensual se consulta con ``GetStatus`` por CUNE (doc 53 §23.17, 7a); el resto sigue
+        # el camino del recibo (GetStatusZip por ZipKey).
+        documento = self.env['l10n.co.ne.documento'].search([('cune', '=', cune)], limit=1)
+        if documento:
+            documento.company_id._ne_exigir_colombia()
+            documento._ne_reconsultar_por_cune()
+            return {'type': 'ir.actions.act_window', 'res_model': documento._name, 'res_id': documento.id,
+                    'view_mode': 'form', 'target': 'current'}
         payslip = self._resolve_payslip()
         return payslip.action_check_dian_status()
