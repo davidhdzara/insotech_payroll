@@ -114,6 +114,9 @@ class TestDocumentoXml(DocumentoFixture, TransactionCase):
         def solo_prima():
             datos = _datos_recibo()
             datos['deducciones'] = {}
+            # Totales COHERENTES con los nodos: sin nodos de deducción el total de deducciones es 0
+            # (si no, la conciliación de totales -- correctamente -- avisa 'totales_nodos').
+            datos['deducciones_total'] = 0.00
             return datos
         with patch.object(type(self.env['hr.payslip']), '_collect_payslip_data', lambda s: solo_prima()), \
                 patch.object(dian_utils, 'compute_software_security_code', lambda *a: 'SC'):
