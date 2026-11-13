@@ -5,7 +5,7 @@
 import base64
 import copy
 import hashlib
-from datetime import date
+from datetime import date, datetime
 from lxml import etree
 
 from odoo.exceptions import UserError
@@ -160,5 +160,86 @@ class TestDocumentoGenerar(DocumentoFixture, TransactionCase):
     def test_ya_enviado_no_se_regenera(self):
         self.env['l10n.co.ne.documento.intento'].create({
             'documento_id': self.doc.id, 'state': 'invoice_pending'})
+        with self.assertRaisesRegex(UserError, 'no se haya enviado'):
+            self.doc.action_generar_xml()
+
+    # ── D-a (doc 53 §23.15): un rechazo se corrige y se regenera en el MISMO documento ─────────────────
+    def _intento(self, estado, dt=datetime(2026, 4, 1, 10, 0), **vals):
+        datos = {'documento_id': self.doc.id, 'state': estado, 'datetime': dt}
+        datos.update(vals)
+        return self.env['l10n.co.ne.documento.intento'].create(datos)
+
+    def _generar_y_rechazar(self, dt=datetime(2026, 4, 1, 10, 0)):
+        """Genera el XML vigente y registra un intento RECHAZADO de ese XML (con su consecutivo y CUNE)."""
+        self.doc.action_generar_xml()
+        return self._intento('invoice_rejected', dt, identifier=self.doc.cune, numero=self.doc.consecutive,
+                             attachment_id=self.doc.xml_attachment_id.id)
+
+    def test_rechazado_vigente_sigue_en_rechazado(self):
+        self._generar_y_rechazar()
+        self.assertEqual(self.doc.state, 'invoice_rejected')
+
+    def test_regenerar_desde_rechazado_da_consecutivo_cune_y_xml_nuevos(self):
+        rechazado = self._generar_y_rechazar()
+        viejo = (self.doc.consecutive, self.doc.cune, self.doc.xml_attachment_id)
+        self.assertEqual(viejo[0], 'NE00000015')
+        self.doc.action_generar_xml()
+        self.assertEqual(self.doc.consecutive, 'NE00000016')            # el 15 viajó a la DIAN: no se reutiliza JAMÁS
+        self.assertNotEqual(self.doc.cune, viejo[1])
+        self.assertEqual(self.doc.cune, self._cune_esperado('NE00000016'))
+        self.assertNotEqual(self.doc.xml_attachment_id, viejo[2])
+        self.assertTrue(viejo[2].exists())                               # el XML rechazado queda como evidencia
+        self.assertEqual(rechazado.numero, 'NE00000015')                 # y el intento rechazado, intacto
+        self.assertEqual(rechazado.attachment_id, viejo[2])
+        self.assertEqual(self.doc.state, 'ready')                        # el XML vigente aún no se envió
+        self.assertEqual(self.secuencia.number_next_actual, 17)
+
+    def test_regenerar_otra_vez_antes_de_enviar_reutiliza_el_consecutivo_nuevo(self):
+        self._generar_y_rechazar()
+        self.doc.action_generar_xml()
+        self.doc.action_generar_xml()
+        self.assertEqual(self.doc.consecutive, 'NE00000016')            # el 16 aún no se envió: se reutiliza
+        self.assertEqual(self.secuencia.number_next_actual, 17)
+
+    def test_si_el_nuevo_tambien_se_rechaza_el_siguiente_es_otro_consecutivo(self):
+        self._generar_y_rechazar()
+        self.doc.action_generar_xml()                                    # NE16
+        self._intento('invoice_rejected', datetime(2026, 4, 2, 10, 0), identifier=self.doc.cune,
+                      numero=self.doc.consecutive)
+        self.assertEqual(self.doc.state, 'invoice_rejected')
+        self.doc.action_generar_xml()
+        self.assertEqual(self.doc.consecutive, 'NE00000017')
+        self.assertEqual(self.secuencia.number_next_actual, 18)
+
+    def test_aceptado_no_se_regenera(self):
+        self.doc.action_generar_xml()
+        self._intento('invoice_accepted', identifier=self.doc.cune, numero=self.doc.consecutive)
+        with self.assertRaisesRegex(UserError, 'no se haya enviado'):
+            self.doc.action_generar_xml()
+        self.assertEqual(self.doc.consecutive, 'NE00000015')
+
+    def test_rechazado_y_despues_aceptado_no_se_regenera(self):
+        self._generar_y_rechazar(datetime(2026, 4, 1, 10, 0))
+        self.doc.action_generar_xml()
+        self._intento('invoice_accepted', datetime(2026, 4, 2, 10, 0), identifier=self.doc.cune,
+                      numero=self.doc.consecutive)
+        self.assertEqual(self.doc.state, 'invoice_accepted')
+        with self.assertRaisesRegex(UserError, 'no se haya enviado'):
+            self.doc.action_generar_xml()
+
+    def test_pendiente_fallo_de_envio_incierto_y_eliminado_no_se_regeneran(self):
+        self.doc.action_generar_xml()
+        pendiente = self._intento('invoice_pending', identifier=self.doc.cune, numero=self.doc.consecutive)
+        with self.assertRaisesRegex(UserError, 'no se haya enviado'):
+            self.doc.action_generar_xml()
+        pendiente.state = 'invoice_sending_failed'                       # un fallo de envío se reintenta con el mismo XML
+        with self.assertRaisesRegex(UserError, 'no se haya enviado'):
+            self.doc.action_generar_xml()
+        pendiente.state = 'invoice_rejected'
+        self.doc.incierto = True
+        with self.assertRaisesRegex(UserError, 'no se haya enviado'):
+            self.doc.action_generar_xml()
+        self.doc.incierto = False
+        self.doc.eliminado = True
         with self.assertRaisesRegex(UserError, 'no se haya enviado'):
             self.doc.action_generar_xml()

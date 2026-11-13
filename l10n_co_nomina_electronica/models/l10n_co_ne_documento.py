@@ -143,7 +143,8 @@ class L10nCoNeDocumento(models.Model):
         self.ensure_one()
         return self.intento_ids.sorted(lambda i: (i.datetime or _dt.min, i.id), reverse=True)[:1]
 
-    @api.depends('intento_ids.state', 'intento_ids.datetime', 'etapa', 'eliminado', 'incierto')
+    @api.depends('intento_ids.state', 'intento_ids.datetime', 'intento_ids.identifier', 'cune', 'etapa',
+                 'eliminado', 'incierto')
     def _compute_state(self):
         for doc in self:
             if doc.eliminado:
@@ -152,7 +153,13 @@ class L10nCoNeDocumento(models.Model):
                 doc.state = 'uncertain'
             else:
                 ultimo = doc._ultimo_intento()
-                doc.state = ultimo.state if ultimo else doc.etapa
+                if ultimo.state == 'invoice_rejected' and ultimo.identifier != doc.cune:
+                    # El rechazo fue de un XML ANTERIOR: el documento se regeneró con consecutivo y CUNE nuevos
+                    # (doc 53 §23.15, D-a) y el XML vigente todavía no se envió: vuelve a 'Listo'. El intento
+                    # rechazado queda en el historial como evidencia.
+                    doc.state = doc.etapa
+                else:
+                    doc.state = ultimo.state if ultimo else doc.etapa
 
     @api.depends('intento_ids.message', 'intento_ids.datetime')
     def _compute_message(self):
@@ -474,17 +481,24 @@ class L10nCoNeDocumento(models.Model):
         guarda el adjunto. El documento queda 'ready' con su consecutivo, CUNE y XML (sin estado 'generado',
         doc 53 §18.6); un fallo después de tomar el número lo devuelve con el rollback (secuencia no_gap)."""
         self.ensure_one()
-        if self.state not in ('draft', 'ready') or self.intento_ids:
+        # Se genera si nunca se envió, o si TODOS los envíos anteriores fueron rechazados (D-a: se corrige y se
+        # regenera en el MISMO documento, con consecutivo y CUNE nuevos). Aceptado, pendiente, incierto, eliminado
+        # o con un fallo de envío (se reintenta con el mismo XML) no se regeneran.
+        solo_rechazos = all(i.state == 'invoice_rejected' for i in self.intento_ids)
+        if not (self.state in ('draft', 'ready', 'invoice_rejected') and solo_rechazos):
             raise UserError(_(
-                'El XML solo se genera para un documento en estado "Borrador" o "Listo" que no se haya enviado '
-                '(hoy: %s).', dict(self._fields['state'].selection).get(self.state)))
+                'El XML solo se genera para un documento en estado "Borrador", "Listo" o "Rechazado" que no se '
+                'haya enviado con éxito (hoy: %s).', dict(self._fields['state'].selection).get(self.state)))
         self._ne_validar()
         bloqueos = [a['message'] for a in (self.alertas or []) if a['level'] == 'danger']
         if bloqueos:
             raise UserError(_('El documento tiene bloqueos: %s', ' '.join(bloqueos)))
         company = self.company_id
         prefijo = company.l10n_co_ne_payroll_prefix or 'NE'
-        if not self.consecutive or not self.consecutive.startswith(prefijo):
+        # Un consecutivo que ya viajó a la DIAN en un intento rechazado NO se reutiliza jamás: la DIAN devuelve el
+        # veredicto viejo si se repite (doc 53 §23.15; memoria del equipo sobre consecutivos rechazados).
+        consecutivo_usado = bool(self.consecutive) and self.consecutive in self.intento_ids.mapped('numero')
+        if consecutivo_usado or not self.consecutive or not self.consecutive.startswith(prefijo):
             self._ne_xml_sin_firmar('%s1' % prefijo)   # corrida en seco: los errores de datos salen ANTES del número
             self.consecutive = self._ne_siguiente_consecutivo()
         datos = self._collect_documento_data()
