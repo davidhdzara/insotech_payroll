@@ -28,6 +28,7 @@ from odoo.exceptions import UserError, ValidationError
 
 from ..services import (
     cune as cune_service,
+    dian_respuesta,
     dian_utils,
     ne_xml_utils,
     nomina_xml_builder,
@@ -143,15 +144,9 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
     )
 
     def _ne_response_text(self, value):
-        # AUD-DIAN-34 (2026-10-04): este campo es un resumen para la vista
-        # del formulario, no evidencia -- la evidencia completa (sobre SOAP
-        # y ZIP de respuesta íntegros, sin truncar) vive en
-        # l10n.co.ne.exchange. Un SendTestSetAsync de 4 nóminas puede traer
-        # un ZIP base64 de varios MB; meterlo entero aquí infla el registro
-        # del payslip sin necesidad.
-        if isinstance(value, bytes):
-            value = value.decode('utf-8', errors='replace')
-        return (value or '')[:5000]
+        """Envoltorio: la implementación vive en ``services/dian_respuesta.texto_respuesta``
+        (doc 53 §23.12); se conserva el nombre para los llamadores y pruebas del recibo."""
+        return dian_respuesta.texto_respuesta(value)
 
     def _ne_store_exchange(self, operation, endpoint, response, manifest=None,
                            queried_zip_key=None, parent_exchange=None,
@@ -186,55 +181,18 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
 
     @staticmethod
     def _ne_cune_candidates(result):
-        """Extrae candidatos de CUNE de un resultado, sin confundirlos con IDs SOAP.
-
-        AUD-DIAN-34 (2026-10-04): evidencia real (GetStatusZip AUTORIZADO,
-        nómina SME-10) confirma que el CUNE del documento original viaja en
-        ``cac:DocumentResponse/cac:DocumentReference/cbc:UUID`` dentro del
-        ApplicationResponse -- ver ``soap_client.extract_document_cunes``.
-        """
-        candidates = set()
-        for key in ('XmlDocumentKey', 'CUNE', 'DocumentKey'):
-            value = result.get(key)
-            if value:
-                candidates.add(value.strip())
-        application = result.get('ApplicationResponse') or ''
-        if application:
-            candidates.update(soap_client.extract_document_cunes(application))
-        return candidates
+        """Envoltorio: ver ``services/dian_respuesta.candidatos_cune``."""
+        return dian_respuesta.candidatos_cune(result)
 
     @staticmethod
     def _ne_number_candidates(result):
-        """Extrae el NÚMERO de negocio del documento original (no es CUNE).
-
-        ``cac:DocumentResponse/cac:DocumentReference/cbc:ID`` -- solo se usa
-        como respaldo cuando DIAN no entrega CUNE (ver
-        ``soap_client.extract_document_numbers``).
-        """
-        application = result.get('ApplicationResponse') or ''
-        if not application:
-            return set()
-        return soap_client.extract_document_numbers(application)
+        """Envoltorio: ver ``services/dian_respuesta.candidatos_numero``."""
+        return dian_respuesta.candidatos_numero(result)
 
     @staticmethod
     def _ne_is_set_level_status(response):
-        """True si la respuesta de GetStatusZip es sobre el SET de pruebas completo, no
-        sobre el documento individual consultado.
-
-        H-012 (2026-10-06): evidencia real (NA0000000049, payslip 944, ZipKey 98e2fdc3) --
-        GetStatusZip respondió StatusCode="2", IsValid="false",
-        StatusDescription="Set de prueba con identificador e07c1748... se encuentra
-        Aceptado.", sin XmlDocumentKey ni ApplicationResponse (ningún dato que identifique
-        el documento). Esa combinación (StatusCode 2 + IsValid false + cero datos de
-        documento) es la FORMA de una respuesta de nivel set, no una hipótesis sobre por
-        qué la DIAN respondió así -- no se asume la causa (Tech Lead: "mi hipótesis no está
-        confirmada, el fix no debe depender de ella").
-        """
-        if str(response.get('StatusCode', '')).strip() != '2':
-            return False
-        if str(response.get('IsValid', '')).lower() == 'true':
-            return False
-        return not response.get('XmlDocumentKey') and not response.get('ApplicationResponse')
+        """Envoltorio: ver ``services/dian_respuesta.es_respuesta_de_set`` (H-012)."""
+        return dian_respuesta.es_respuesta_de_set(response)
 
     def _ne_match_dian_results(self, results, manifest):
         """Asocia resultados solo cuando la evidencia identifica un documento.

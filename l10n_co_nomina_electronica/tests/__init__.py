@@ -90,3 +90,4 @@ from . import test_documento_preparar
 from . import test_documento_xml
 from . import test_documento_generar
 from . import test_documento_generar_real
+from . import test_dian_respuesta
