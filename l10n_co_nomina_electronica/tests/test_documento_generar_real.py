@@ -113,7 +113,8 @@ class TestDocumentoGenerarReal(TransactionCase):
         self.assertEqual(len(doc), 1)
         bloqueos = [a['message'] for a in (doc.alertas or []) if a['level'] == 'danger']
         self.assertFalse(bloqueos, 'bloqueos del documento real: %s' % bloqueos)
-        self.assertEqual(doc.state, 'ready')
+        self.assertEqual(doc.etapa, 'ready')
+        self.assertFalse(doc.state)
         self.assertEqual(doc.payslip_ids, self.recibos)
 
         doc.action_generar_xml()

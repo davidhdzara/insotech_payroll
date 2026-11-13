@@ -287,7 +287,8 @@ class TestDocumentoNotaXml(DocumentoFixture, TransactionCase):
         info = xml.find('.//{%s}InformacionGeneral' % NS_AJUSTE)
         self.assertEqual(info.get('CUNE'), nota.cune)
         self.assertEqual(info.get('EncripCUNE'), 'CUNE-SHA384')
-        self.assertEqual(nota.state, 'ready')
+        self.assertEqual(nota.etapa, 'ready')
+        self.assertFalse(nota.state)
 
     def test_genera_la_nota_eliminar_con_el_cune_de_valores_fijos(self):
         nota = self._nota('2')
@@ -351,6 +352,15 @@ class TestDocumentoNotaXml(DocumentoFixture, TransactionCase):
         nota = self._nota('1')
         nota.action_generar_xml()
         self.assertEqual(nota.consecutive, 'NA00000007')
+
+    def test_un_padre_eliminado_no_admite_nota(self):
+        """Un eliminado conserva su último intento ACEPTADO: sin la guarda explícita se aceptaría como padre (§26b)."""
+        nota = self._nota('1')
+        self.padre.eliminado = True
+        self.assertEqual(self.padre.state, 'invoice_accepted')
+        with self.assertRaisesRegex(UserError, 'no eliminado'):
+            nota.action_generar_xml()
+        self.assertFalse(nota.consecutive)
 
     def test_la_nota_sin_padre_aceptado_no_se_genera(self):
         nota = self._nota('1')

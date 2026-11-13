@@ -2,6 +2,8 @@
 """Etapa 1b (doc 53 §3, §16.2, §18.6): modelo l10n.co.ne.documento + intento, enlace del recibo, reglas multiempresa y
 migracion legacy 1:1. Valores a mano."""
 
+import importlib.util
+import os
 from datetime import date, datetime
 from unittest.mock import patch
 
@@ -81,11 +83,12 @@ class TestDocumentoModelo(TransactionCase):
         return self.env['l10n.co.ne.documento.intento'].create(datos)
 
     # ── Estado ───────────────────────────────────────────────────────
-    def test_estado_sin_intentos_es_la_etapa(self):
+    def test_estado_sin_intentos_esta_vacio_y_la_etapa_dice_la_preparacion(self):
         doc = self._documento()
-        self.assertEqual(doc.state, 'draft')
+        self.assertFalse(doc.state)
+        self.assertEqual(doc.etapa, 'draft')
         doc.etapa = 'ready'
-        self.assertEqual(doc.state, 'ready')
+        self.assertFalse(doc.state)                       # Borrador/Listo viven en la etapa, no en el estado DIAN
 
     def test_estado_es_el_del_ultimo_intento(self):
         doc = self._documento()
@@ -97,13 +100,75 @@ class TestDocumentoModelo(TransactionCase):
         self._intento(doc, 'invoice_rejected', datetime(2026, 4, 1, 9, 0))
         self.assertEqual(doc.state, 'invoice_accepted')
 
-    def test_estado_incierto_y_eliminado_tienen_prioridad(self):
+    def test_incierto_y_eliminado_son_banderas_y_no_cambian_el_estado_dian(self):
         doc = self._documento()
         self._intento(doc, 'invoice_pending', datetime(2026, 4, 1, 10, 0))
         doc.incierto = True
-        self.assertEqual(doc.state, 'uncertain')
+        self.assertEqual(doc.state, 'invoice_pending')    # lo que la DIAN sabe de verdad
+        self._intento(doc, 'invoice_accepted', datetime(2026, 4, 1, 11, 0))
         doc.eliminado = True
-        self.assertEqual(doc.state, 'eliminated')
+        self.assertEqual(doc.state, 'invoice_accepted')
+
+    def test_los_estados_son_solo_los_cuatro_nativos(self):
+        self.assertEqual(
+            {valor for valor, _etiqueta in self.env['l10n.co.ne.documento']._fields['state'].selection},
+            {'invoice_sending_failed', 'invoice_pending', 'invoice_rejected', 'invoice_accepted'})
+
+    # ── Migración de estados (.210, doc 53 §26b) ─────────────────────
+    def _migracion_pre(self):
+        ruta = os.path.join(os.path.dirname(__file__), '..', 'migrations', '18.0.3.0.210', 'pre-migration.py')
+        spec = importlib.util.spec_from_file_location('pre_migracion_210', ruta)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        return modulo
+
+    def _guardar_estado_viejo(self, doc, valor):
+        self.env.flush_all()
+        self.env.cr.execute('UPDATE l10n_co_ne_documento SET state = %s WHERE id = %s', (valor, doc.id))
+        doc.invalidate_recordset(['state'])
+
+    def test_migracion_de_estados_deja_solo_los_nativos_y_recalcula(self):
+        incierto = self._documento(3, incierto=True)
+        self._intento(incierto, 'invoice_pending', datetime(2026, 4, 1, 10, 0))
+        eliminado = self._documento(4, eliminado=True)
+        self._intento(eliminado, 'invoice_accepted', datetime(2026, 4, 1, 10, 0))
+        listo = self._documento(5, etapa='ready')
+        borrador = self._documento(6)
+        aceptado = self._documento(7)
+        self._intento(aceptado, 'invoice_accepted', datetime(2026, 4, 1, 10, 0))
+        slip = self._recibo(3)
+        slip.l10n_co_ne_documento_id = incierto
+        for doc, viejo in ((incierto, 'uncertain'), (eliminado, 'eliminated'), (listo, 'ready'),
+                           (borrador, 'draft'), (aceptado, 'invoice_accepted')):
+            self._guardar_estado_viejo(doc, viejo)
+        self.env.cr.execute('UPDATE hr_payslip SET l10n_co_ne_documento_state = %s WHERE id = %s',
+                            ('uncertain', slip.id))
+        self._migracion_pre().migrate(self.env.cr, '18.0.3.0.209')
+        self.env.cr.execute('SELECT id, state FROM l10n_co_ne_documento WHERE id IN %s',
+                            ((incierto.id, eliminado.id, listo.id, borrador.id, aceptado.id),))
+        guardado = dict(self.env.cr.fetchall())
+        self.assertIsNone(guardado[incierto.id])                       # los 4 valores retirados quedan vacíos
+        self.assertIsNone(guardado[eliminado.id])
+        self.assertIsNone(guardado[listo.id])
+        self.assertIsNone(guardado[borrador.id])
+        self.assertEqual(guardado[aceptado.id], 'invoice_accepted')    # un valor nativo no se toca
+        self.env['l10n.co.ne.documento']._ne_recalcular_estado()
+        self.env.invalidate_all()
+        self.assertEqual((incierto.state, incierto.incierto), ('invoice_pending', True))
+        self.assertEqual((eliminado.state, eliminado.eliminado), ('invoice_accepted', True))
+        self.assertEqual((listo.state, listo.etapa), (False, 'ready'))
+        self.assertFalse(borrador.state)
+        self.assertEqual(aceptado.state, 'invoice_accepted')
+        self.assertEqual(slip.l10n_co_ne_documento_state, 'invoice_pending')   # el related del recibo se recalcula
+
+    def test_migracion_de_estados_es_idempotente_y_funciona_sin_filas(self):
+        self._migracion_pre().migrate(self.env.cr, '18.0.3.0.209')
+        self.env['l10n.co.ne.documento']._ne_recalcular_estado()
+        doc = self._documento(3)
+        self._intento(doc, 'invoice_pending', datetime(2026, 4, 1, 10, 0))
+        self.env['l10n.co.ne.documento']._ne_recalcular_estado()
+        self.env['l10n.co.ne.documento']._ne_recalcular_estado()
+        self.assertEqual(doc.state, 'invoice_pending')
 
     def test_nombre_y_cola(self):
         doc = self._documento()
@@ -154,7 +219,7 @@ class TestDocumentoModelo(TransactionCase):
         slip = self._recibo(3)
         slip.l10n_co_ne_documento_id = doc
         self.assertEqual(doc.payslip_ids, slip)
-        self.assertEqual(slip.l10n_co_ne_documento_state, 'draft')
+        self.assertFalse(slip.l10n_co_ne_documento_state)
         self._intento(doc, 'invoice_accepted', datetime(2026, 4, 1, 10, 0))
         self.assertEqual(slip.l10n_co_ne_documento_state, 'invoice_accepted')
         self.assertEqual(slip.l10n_co_ne_intento_ids, doc.intento_ids)
@@ -229,13 +294,20 @@ class TestDocumentoModelo(TransactionCase):
         self.assertEqual(self.env['l10n.co.ne.documento'].search_count([('legacy', '=', True), ('cune', '=', CUNE_A)]), 1)
 
     def test_migracion_mapa_de_estados(self):
-        esperado = {2: ('generated', 'ready'), 3: ('sent', 'invoice_pending'), 4: ('uncertain', 'uncertain'),
-                    5: ('rejected', 'invoice_rejected'), 6: ('eliminated', 'eliminated')}
-        recibos = {mes: self._legacy(mes, estado, l10n_co_ne_consecutive='NE%s' % mes)
-                   for mes, (estado, _) in esperado.items()}
+        # mes: (estado del recibo, estado DIAN del documento, etapa, incierto, eliminado)
+        esperado = {2: ('generated', False, 'ready', False, False),
+                    3: ('sent', 'invoice_pending', 'draft', False, False),
+                    4: ('uncertain', 'invoice_pending', 'draft', True, False),
+                    5: ('rejected', 'invoice_rejected', 'draft', False, False),
+                    6: ('eliminated', 'invoice_accepted', 'draft', False, True)}
+        recibos = {mes: self._legacy(mes, datos[0], l10n_co_ne_consecutive='NE%s' % mes)
+                   for mes, datos in esperado.items()}
         self.env['l10n.co.ne.documento']._ne_migrar_legacy(self.env['hr.payslip'].concat(*recibos.values()))
-        for mes, (_estado, estado_doc) in esperado.items():
-            self.assertEqual(recibos[mes].l10n_co_ne_documento_id.state, estado_doc, 'mes %s' % mes)
+        for mes, (_estado, estado_doc, etapa, incierto, eliminado) in esperado.items():
+            doc = recibos[mes].l10n_co_ne_documento_id
+            self.assertEqual(
+                (doc.state, doc.etapa, doc.incierto, doc.eliminado), (estado_doc, etapa, incierto, eliminado),
+                'mes %s' % mes)
         self.assertFalse(recibos[2].l10n_co_ne_documento_id.intento_ids)   # generado: sin intento
         self.assertEqual(len(recibos[3].l10n_co_ne_documento_id.intento_ids), 1)
 

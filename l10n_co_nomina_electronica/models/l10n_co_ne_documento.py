@@ -78,15 +78,14 @@ class L10nCoNeDocumento(models.Model):
     eliminado = fields.Boolean(string='Eliminado por nota de ajuste', copy=False)
     eliminado_por_id = fields.Many2one('l10n.co.ne.documento', string='Eliminado por', copy=False,
                                        ondelete='set null', check_company=True)
+    # Estado DIAN: SOLO los 4 valores nativos de l10n_co_dian (account.move.l10n_co_dian_state), calculado del último
+    # intento y VACÍO mientras no hay un envío del XML vigente. Borrador/Listo viven en ``etapa``; Incierto y
+    # Eliminado en sus banderas (doc 53 §26b).
     state = fields.Selection([
-        ('draft', 'Borrador'),
-        ('ready', 'Listo'),
         ('invoice_sending_failed', 'Envío fallido'),
         ('invoice_pending', 'Pendiente'),
         ('invoice_rejected', 'Rechazado'),
         ('invoice_accepted', 'Aceptado'),
-        ('uncertain', 'Envío incierto - requiere conciliación'),
-        ('eliminated', 'Eliminado por nota de ajuste'),
     ], string='Estado DIAN', compute='_compute_state', store=True, copy=False, index=True)
     intento_ids = fields.One2many('l10n.co.ne.documento.intento', 'documento_id', string='Intentos')
     message = fields.Html(string='Motivo', compute='_compute_message', sanitize=False)
@@ -154,23 +153,17 @@ class L10nCoNeDocumento(models.Model):
         self.ensure_one()
         return self.intento_ids.sorted(lambda i: (i.datetime or _dt.min, i.id), reverse=True)[:1]
 
-    @api.depends('intento_ids.state', 'intento_ids.datetime', 'intento_ids.identifier', 'cune', 'etapa',
-                 'eliminado', 'incierto')
+    @api.depends('intento_ids.state', 'intento_ids.datetime', 'intento_ids.identifier', 'cune')
     def _compute_state(self):
         for doc in self:
-            if doc.eliminado:
-                doc.state = 'eliminated'
-            elif doc.incierto:
-                doc.state = 'uncertain'
+            ultimo = doc._ultimo_intento()
+            if not ultimo or (ultimo.state == 'invoice_rejected' and ultimo.identifier != doc.cune):
+                # Sin envío, o el rechazo fue de un XML ANTERIOR: el documento se regeneró con consecutivo y CUNE
+                # nuevos (doc 53 §23.15, D-a) y el XML vigente todavía no se envió: sin estado DIAN. El intento
+                # rechazado queda en el historial como evidencia.
+                doc.state = False
             else:
-                ultimo = doc._ultimo_intento()
-                if ultimo.state == 'invoice_rejected' and ultimo.identifier != doc.cune:
-                    # El rechazo fue de un XML ANTERIOR: el documento se regeneró con consecutivo y CUNE nuevos
-                    # (doc 53 §23.15, D-a) y el XML vigente todavía no se envió: vuelve a 'Listo'. El intento
-                    # rechazado queda en el historial como evidencia.
-                    doc.state = doc.etapa
-                else:
-                    doc.state = ultimo.state if ultimo else doc.etapa
+                doc.state = ultimo.state
 
     @api.depends('intento_ids.message', 'intento_ids.datetime')
     def _compute_message(self):
@@ -279,14 +272,14 @@ class L10nCoNeDocumento(models.Model):
             grupos[clave] |= slip
         for (company, employee, period) in grupos:
             doc = self._ne_documento_del_grupo(company, employee, period)
-            if doc.state in ('draft', 'ready', 'invoice_sending_failed') and not doc.is_being_sent:
+            if doc.state in (False, 'invoice_sending_failed') and not doc.is_being_sent:
                 doc._ne_componer(self._ne_recibos_del_mes(company, employee, period))
             doc._ne_validar()
             resultado['documentos'] |= doc
         # Un recibo que cambió de mes (nueva fecha de pago) sale del documento donde estaba: ese documento se
         # recompone y revalida; si queda vacío y sin historia, se elimina.
         for previo in previos - resultado['documentos']:
-            if previo.legacy or previo.is_adjustment or previo.state not in ('draft', 'ready'):
+            if previo.legacy or previo.is_adjustment or previo.state:
                 continue
             previo._ne_componer(self._ne_recibos_del_mes(previo.company_id, previo.employee_id, previo.period))
             if previo.payslip_ids:
@@ -326,9 +319,9 @@ class L10nCoNeDocumento(models.Model):
         def alerta(key, level, message, **extra):
             alertas.append(dict({'key': key, 'level': level, 'message': message}, **extra))
 
-        if self.state in ('invoice_pending', 'uncertain'):
+        if self.state == 'invoice_pending':
             alerta('en_proceso', 'danger', _('El documento espera el veredicto de la DIAN: consulte su estado primero.'))
-        elif self.state == 'invoice_accepted':
+        elif self.state == 'invoice_accepted' and not self.eliminado:
             alerta('aceptado', 'danger', _(
                 'El documento ya fue aceptado por la DIAN: un cambio se corrige con una nota de ajuste.'))
         recibos_xml = self._ne_recibos_para_xml()
@@ -364,7 +357,7 @@ class L10nCoNeDocumento(models.Model):
                 confirmable=True)
         # Plazo de transmisión (D10): solo alerta, no bloquea.
         if self.fecha_limite and hoy > self.fecha_limite and self.state in (
-                'draft', 'ready', 'invoice_sending_failed'):
+                False, 'invoice_sending_failed'):
             alerta('plazo_vencido', 'warning', _(
                 'El plazo de transmisión venció el %(fecha)s (10 días hábiles del mes siguiente).',
                 fecha=self.fecha_limite))
@@ -374,7 +367,7 @@ class L10nCoNeDocumento(models.Model):
         alertas += self._ne_validar_xml()
         self.alertas = alertas
         bloqueos = [a for a in alertas if a['level'] == 'danger']
-        if self.state in ('draft', 'ready'):
+        if not self.state:
             self.etapa = 'draft' if bloqueos else 'ready'
 
     def _ne_validar_datos_recibo(self, slip):
@@ -416,10 +409,12 @@ class L10nCoNeDocumento(models.Model):
         padre = self.parent_id
         if not padre:
             raise UserError(_('La nota de ajuste "%s" no tiene documento original (padre).', self.display_name))
-        if padre.state != 'invoice_accepted':
+        if padre.state != 'invoice_accepted' or padre.eliminado:
+            # Un documento eliminado conserva su último intento aceptado: no es un padre válido (doc 53 §26b).
             raise UserError(_('La nota de ajuste "%(nota)s" solo se arma contra un documento aceptado por la DIAN '
-                              '(el original está: %(estado)s).', nota=self.display_name,
-                              estado=dict(padre._fields['state'].selection).get(padre.state)))
+                              'y no eliminado (el original está: %(estado)s).', nota=self.display_name,
+                              estado=_('Eliminado por nota de ajuste') if padre.eliminado else
+                              (dict(padre._fields['state'].selection).get(padre.state) or _('Sin enviar'))))
         if not (padre.consecutive and padre.cune):
             raise UserError(_('El documento original "%s" no tiene consecutivo o CUNE.', padre.display_name))
         if self.adjustment_ref_cune != padre.cune:
@@ -604,10 +599,11 @@ class L10nCoNeDocumento(models.Model):
         # regenera en el MISMO documento, con consecutivo y CUNE nuevos). Aceptado, pendiente, incierto, eliminado
         # o con un fallo de envío (se reintenta con el mismo XML) no se regeneran.
         solo_rechazos = all(i.state == 'invoice_rejected' for i in self.intento_ids)
-        if not (self.state in ('draft', 'ready', 'invoice_rejected') and solo_rechazos):
+        if self.incierto or self.eliminado or not (self.state in (False, 'invoice_rejected') and solo_rechazos):
             raise UserError(_(
                 'El XML solo se genera para un documento en estado "Borrador", "Listo" o "Rechazado" que no se '
-                'haya enviado con éxito (hoy: %s).', dict(self._fields['state'].selection).get(self.state)))
+                'haya enviado con éxito (hoy: %s).',
+                dict(self._fields['state'].selection).get(self.state) or dict(self._fields['etapa'].selection).get(self.etapa)))
         self._ne_validar()
         bloqueos = [a['message'] for a in (self.alertas or []) if a['level'] == 'danger']
         if bloqueos:
@@ -975,10 +971,27 @@ class L10nCoNeDocumento(models.Model):
                 [('cune', '=', doc.adjustment_ref_cune), ('id', '!=', doc.id)], limit=1)
             if original:
                 doc.parent_id = original
-                if doc.adjustment_type == '2' and doc.state == 'invoice_accepted':
+                if doc.adjustment_type == '2' and doc.state == 'invoice_accepted' and not doc.eliminado:
                     original.eliminado_por_id = doc
         _logger.info('Documentos legacy creados desde recibos ya transmitidos: %s', len(creados))
         return creados
+
+    @api.model
+    def _ne_recalcular_estado(self):
+        """Recalcula ``state`` (y su related almacenado en el recibo) desde el último intento (doc 53 §26b). Lo usa la
+        post-migración de .210: el campo almacenado tenía valores propios (borrador, listo, incierto, eliminado) que
+        la pre-migración dejó vacíos. Idempotente."""
+        docs = self.search([])
+        self.env.add_to_compute(self._fields['state'], docs)
+        self.env.flush_all()
+        self.env.cr.execute("""
+            UPDATE hr_payslip p SET l10n_co_ne_documento_state = d.state
+              FROM l10n_co_ne_documento d
+             WHERE p.l10n_co_ne_documento_id = d.id
+               AND p.l10n_co_ne_documento_state IS DISTINCT FROM d.state
+        """)
+        self.env['hr.payslip'].invalidate_model(['l10n_co_ne_documento_state'])
+        return docs
 
     @api.model
     def _ne_valores_legacy(self, slip):

@@ -9,20 +9,24 @@
         <field name="arch" type="xml">
             <form string="Documento DIAN mensual" duplicate="0">
                 <header>
-                    <field name="state" widget="statusbar"
-                           statusbar_visible="draft,ready,invoice_pending,invoice_accepted"/>
+                    <field name="etapa" widget="statusbar" statusbar_visible="draft,ready"/>
                 </header>
                 <sheet>
+                    <widget name="web_ribbon" title="Eliminado por nota de ajuste" bg_color="text-bg-danger"
+                            invisible="not eliminado"/>
+                    <widget name="web_ribbon" title="Envío incierto" bg_color="text-bg-warning"
+                            invisible="not incierto or eliminado"/>
                     <div class="oe_title">
                         <h1><field name="name"/></h1>
                     </div>
                     <group>
                         <group>
-                            <field name="company_id" groups="base.group_multi_company" readonly="legacy or state not in ('draft', 'ready')"/>
-                            <field name="employee_id" readonly="legacy or state not in ('draft', 'ready')"/>
-                            <field name="contract_id" readonly="legacy or state not in ('draft', 'ready')"/>
-                            <field name="period" readonly="legacy or state not in ('draft', 'ready')"/>
+                            <field name="company_id" groups="base.group_multi_company" readonly="legacy or state"/>
+                            <field name="employee_id" readonly="legacy or state"/>
+                            <field name="contract_id" readonly="legacy or state"/>
+                            <field name="period" readonly="legacy or state"/>
                             <field name="fecha_limite"/>
+                            <field name="state" widget="account_document_state" invisible="not state"/>
                         </group>
                         <group>
                             <field name="legacy"/>
@@ -92,12 +96,15 @@
         <field name="model">l10n.co.ne.documento</field>
         <field name="arch" type="xml">
             <list string="Documentos DIAN mensuales" decoration-info="is_being_sent"
-                  decoration-muted="state == 'eliminated'">
+                  decoration-muted="eliminado">
                 <field name="name"/>
                 <field name="company_id" groups="base.group_multi_company"/>
                 <field name="employee_id"/>
                 <field name="period"/>
+                <field name="etapa"/>
                 <field name="state" widget="account_document_state"/>
+                <field name="incierto" optional="show"/>
+                <field name="eliminado" optional="hide"/>
                 <field name="is_being_sent" string="En cola" optional="show"/>
                 <field name="fecha_limite" optional="show"/>
                 <field name="cune" optional="hide"/>
@@ -121,11 +128,12 @@
                 <field name="period"/>
                 <separator/>
                 <filter string="Por transmitir" name="por_transmitir"
-                        domain="[('state', 'in', ('draft', 'ready', 'invoice_sending_failed'))]"/>
+                        domain="[('state', 'in', (False, 'invoice_sending_failed')), ('eliminado', '=', False)]"/>
                 <filter string="Pendientes" name="pendientes" domain="[('state', '=', 'invoice_pending')]"/>
                 <filter string="Aceptados" name="aceptados" domain="[('state', '=', 'invoice_accepted')]"/>
                 <filter string="Rechazados" name="rechazados" domain="[('state', '=', 'invoice_rejected')]"/>
-                <filter string="Inciertos" name="inciertos" domain="[('state', '=', 'uncertain')]"/>
+                <filter string="Inciertos" name="inciertos" domain="[('incierto', '=', True)]"/>
+                <filter string="Eliminados" name="eliminados" domain="[('eliminado', '=', True)]"/>
                 <separator/>
                 <filter string="En cola" name="en_cola" domain="[('sending_data', '!=', False)]"/>
                 <filter string="Notas de ajuste" name="ajustes" domain="[('is_adjustment', '=', True)]"/>
@@ -166,11 +174,10 @@
                     <group>
                         <field name="l10n_co_ne_documento_id"/>
                         <field name="l10n_co_ne_documento_state" widget="badge"
-                               decoration-info="l10n_co_ne_documento_state in ('draft', 'ready', 'invoice_pending')"
+                               decoration-info="l10n_co_ne_documento_state == 'invoice_pending'"
                                decoration-success="l10n_co_ne_documento_state == 'invoice_accepted'"
-                               decoration-warning="l10n_co_ne_documento_state in ('uncertain', 'invoice_sending_failed')"
-                               decoration-danger="l10n_co_ne_documento_state == 'invoice_rejected'"
-                               decoration-muted="l10n_co_ne_documento_state == 'eliminated'"/>
+                               decoration-warning="l10n_co_ne_documento_state == 'invoice_sending_failed'"
+                               decoration-danger="l10n_co_ne_documento_state == 'invoice_rejected'"/>
                     </group>
                     <field name="l10n_co_ne_documento_message" invisible="not l10n_co_ne_documento_message"/>
                     <field name="l10n_co_ne_intento_ids" readonly="1">
@@ -196,11 +203,10 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='state']" position="after">
                 <field name="l10n_co_ne_documento_state" string="Estado DIAN" optional="show" widget="badge"
-                       decoration-info="l10n_co_ne_documento_state in ('draft', 'ready', 'invoice_pending')"
+                       decoration-info="l10n_co_ne_documento_state == 'invoice_pending'"
                        decoration-success="l10n_co_ne_documento_state == 'invoice_accepted'"
-                       decoration-warning="l10n_co_ne_documento_state in ('uncertain', 'invoice_sending_failed')"
-                       decoration-danger="l10n_co_ne_documento_state == 'invoice_rejected'"
-                       decoration-muted="l10n_co_ne_documento_state == 'eliminated'"/>
+                       decoration-warning="l10n_co_ne_documento_state == 'invoice_sending_failed'"
+                       decoration-danger="l10n_co_ne_documento_state == 'invoice_rejected'"/>
             </xpath>
         </field>
     </record>

@@ -136,7 +136,7 @@ class TestDocumentoPreparar(TransactionCase):
         a1, a2, _b1 = self._marzo()
         doc = self._preparar(a1 | a2)['documentos']
         self.assertEqual(doc.etapa, 'ready')
-        self.assertEqual(doc.state, 'ready')
+        self.assertFalse(doc.state)
         self.assertFalse([a for a in doc.alertas if a['level'] == 'danger'])
 
     def test_alerta_faltan_recibos_del_mes_es_confirmable(self):

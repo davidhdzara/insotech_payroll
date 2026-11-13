@@ -137,7 +137,8 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
         """Regenerado con consecutivo nuevo, el XML vigente no fue rechazado: vuelve a 'Listo' y se envía."""
         self._intento('invoice_rejected')
         self.doc.action_generar_xml()                      # NE00000016
-        self.assertEqual(self.doc.state, 'ready')
+        self.assertEqual(self.doc.etapa, 'ready')
+        self.assertFalse(self.doc.state)
         intento = self._enviar(ACEPTADA)
         self.assertEqual(intento.numero, 'NE00000016')
         self.assertEqual(self.doc.state, 'invoice_accepted')
@@ -404,12 +405,12 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
         intento.datetime = fields.Datetime.now() - timedelta(hours=2)
         self._consultar(PENDIENTE)
         self.assertTrue(self.doc.incierto)
-        self.assertEqual(self.doc.state, 'uncertain')
+        self.assertEqual(self.doc.state, 'invoice_pending')          # incierto = pendiente + bandera
 
     def test_un_veredicto_concilia_el_envio_incierto(self):
         self._pendiente()
         self.doc.incierto = True
-        self.assertEqual(self.doc.state, 'uncertain')
+        self.assertEqual(self.doc.state, 'invoice_pending')
         self._consultar(self._aceptada_de_este_documento())
         self.assertFalse(self.doc.incierto)
         self.assertEqual(self.doc.state, 'invoice_accepted')

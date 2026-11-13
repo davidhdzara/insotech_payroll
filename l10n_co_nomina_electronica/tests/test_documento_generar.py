@@ -109,11 +109,11 @@ class TestDocumentoGenerar(DocumentoFixture, TransactionCase):
         return hashlib.sha384(raw.encode()).hexdigest()
 
     def test_genera_con_consecutivo_cune_reproducible_y_adjunto(self):
-        self.assertEqual(self.doc.state, 'ready')
+        self.assertEqual(self.doc.etapa, 'ready')
         self.doc.action_generar_xml()
         self.assertEqual(self.doc.consecutive, 'NE00000015')
         self.assertEqual(self.doc.cune, self._cune_esperado())       # SHA-384 de la cadena armada a mano
-        self.assertEqual(self.doc.state, 'ready')                    # sin estado "generado" (§18.6)
+        self.assertFalse(self.doc.state)                             # sin estado "generado" (§18.6)
         xml = etree.fromstring(base64.b64decode(self.doc.xml_attachment_id.datas))
         info = xml.find('{%s}InformacionGeneral' % NS)
         self.assertEqual(info.get('CUNE'), self.doc.cune)
@@ -191,7 +191,8 @@ class TestDocumentoGenerar(DocumentoFixture, TransactionCase):
         self.assertTrue(viejo[2].exists())                               # el XML rechazado queda como evidencia
         self.assertEqual(rechazado.numero, 'NE00000015')                 # y el intento rechazado, intacto
         self.assertEqual(rechazado.attachment_id, viejo[2])
-        self.assertEqual(self.doc.state, 'ready')                        # el XML vigente aún no se envió
+        self.assertEqual(self.doc.etapa, 'ready')                        # el XML vigente aún no se envió
+        self.assertFalse(self.doc.state)
         self.assertEqual(self.secuencia.number_next_actual, 17)
 
     def test_regenerar_otra_vez_antes_de_enviar_reutiliza_el_consecutivo_nuevo(self):
