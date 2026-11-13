@@ -136,9 +136,12 @@ class TestDocumentoNotaXml(DocumentoFixture, TransactionCase):
         cls.secuencia = cls.env['ir.sequence'].create({
             'name': 'Secuencia NE nota', 'prefix': 'NE', 'padding': 8, 'number_next': 15,
             'implementation': 'no_gap', 'company_id': cls.company.id})
-        cls.secuencia_ajuste = cls.env['ir.sequence'].create({
-            'name': 'Secuencia NA nota', 'code': 'l10n_co_nomina.ajuste', 'prefix': 'NA', 'padding': 8,
-            'number_next': 7, 'implementation': 'no_gap', 'company_id': cls.company.id})
+        cls.company.l10n_co_ne_sequence_id = cls.secuencia           # la compañía ya trae una propia (relleno 10)
+        # La compañía también trae su secuencia de ajuste: se reutiliza y se ajusta (otra con el mismo código y la
+        # misma compañía dejaría la elección ambigua).
+        cls.secuencia_ajuste = cls.env['ir.sequence'].search([
+            ('code', '=', 'l10n_co_nomina.ajuste'), ('company_id', '=', cls.company.id)], limit=1)
+        cls.secuencia_ajuste.write({'prefix': 'NA', 'padding': 8, 'number_next': 7, 'implementation': 'no_gap'})
 
     def setUp(self):
         super().setUp()
