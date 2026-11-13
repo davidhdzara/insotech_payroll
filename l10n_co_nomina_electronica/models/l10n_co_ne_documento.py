@@ -433,7 +433,7 @@ class L10nCoNeDocumento(models.Model):
             raise UserError(_('La fusión de los recibos no cuadra: %s', ' '.join(descuadres)))
         company = self.company_id
         numero = self.consecutive or consecutivo or ''
-        prefijo = company.l10n_co_ne_payroll_prefix or ''
+        prefijo = self._ne_prefijo_nomina()
         modo = company.l10n_co_ne_operation_mode_ids
         datos['numero_secuencia'] = dict(
             datos.get('numero_secuencia', {}), Prefijo=prefijo, Numero=numero,
@@ -475,6 +475,17 @@ class L10nCoNeDocumento(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # Generar y firmar (etapa 3b): consecutivo, CUNE, firma y adjunto
     # ──────────────────────────────────────────────────────────────────
+    def _ne_prefijo_nomina(self):
+        """Prefijo de nómina electrónica de la compañía. Sin prefijo configurado es un error claro: no se inventa
+        uno (antes caía en 'NE' o en '' en silencio, igual que la secuencia sin configurar)."""
+        self.ensure_one()
+        prefijo = self.company_id.l10n_co_ne_payroll_prefix
+        if not prefijo or not prefijo.strip():
+            raise UserError(_(
+                'La compañía "%(compania)s" no tiene prefijo de nómina electrónica. Configúrelo en Ajustes > Nómina '
+                '(Prefijo Nómina) antes de generar el documento.', compania=self.company_id.name))
+        return prefijo
+
     def _ne_siguiente_consecutivo(self):
         """Siguiente consecutivo oficial de la compañía (misma secuencia no_gap del ciclo por recibo). Sin secuencia
         configurada es un error claro: no se inventa un número."""
@@ -505,7 +516,7 @@ class L10nCoNeDocumento(models.Model):
         if bloqueos:
             raise UserError(_('El documento tiene bloqueos: %s', ' '.join(bloqueos)))
         company = self.company_id
-        prefijo = company.l10n_co_ne_payroll_prefix or 'NE'
+        prefijo = self._ne_prefijo_nomina()
         # Un consecutivo que ya viajó a la DIAN en un intento rechazado NO se reutiliza jamás: la DIAN devuelve el
         # veredicto viejo si se repite (doc 53 §23.15; memoria del equipo sobre consecutivos rechazados).
         consecutivo_usado = bool(self.consecutive) and self.consecutive in self.intento_ids.mapped('numero')

@@ -243,3 +243,29 @@ class TestDocumentoGenerar(DocumentoFixture, TransactionCase):
         self.doc.eliminado = True
         with self.assertRaisesRegex(UserError, 'no se haya enviado'):
             self.doc.action_generar_xml()
+
+    # ── sin prefijo configurado: error claro, no un default silencioso ('NE' o '') ──────────────────────
+    def test_sin_prefijo_de_nomina_no_genera_y_nombra_la_compania(self):
+        self.company.l10n_co_ne_payroll_prefix = False
+        with self.assertRaises(UserError) as exc:
+            self.doc.action_generar_xml()
+        self.assertIn(self.company.name, str(exc.exception))
+        self.assertIn('prefijo', str(exc.exception).lower())
+        self.assertFalse(self.doc.consecutive)                                   # no se tomó número
+        self.assertEqual(self.secuencia.number_next_actual, 15)
+
+    def test_prefijo_en_blanco_tampoco_vale(self):
+        self.company.l10n_co_ne_payroll_prefix = '   '
+        with self.assertRaisesRegex(UserError, 'prefijo'):
+            self.doc.action_generar_xml()
+
+    def test_sin_prefijo_el_xml_sin_firmar_tampoco_se_arma(self):
+        self.company.l10n_co_ne_payroll_prefix = False
+        with self.assertRaisesRegex(UserError, 'prefijo'):
+            self.doc._ne_xml_sin_firmar('NE1')
+
+    def test_con_prefijo_configurado_el_xml_lo_usa(self):
+        datos = self.doc._collect_documento_data('NE00000015')
+        self.assertEqual(datos['numero_secuencia']['Prefijo'], 'NE')
+        self.assertEqual(datos['numero_secuencia']['Consecutivo'], '00000015')
+
