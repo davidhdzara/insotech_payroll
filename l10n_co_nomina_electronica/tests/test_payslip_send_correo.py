@@ -40,8 +40,8 @@ class TestPayslipSendCorreo(DocumentoFixture, TransactionCase):
         self._patch(type(self.env['hr.payslip']), 'NE_MAIL_TEMPLATE_XMLID',
                     'l10n_co_nomina_electronica.tpl_colilla_prueba')
         self._patch(type(self.env['ir.actions.report']), '_render_qweb_pdf', lambda s, *a, **k: (b'%PDF-1.4', 'pdf'))
-        doc = self._documento(date(2024, 3, 1))
-        self.recibos = doc.payslip_ids
+        self.doc = self._documento(date(2024, 3, 1))
+        self.recibos = self.doc.payslip_ids
         self.recibos.write({'l10n_co_ne_documento_id': False})
         self.slip = self.recibos[0]
         contacto = self.env['res.partner'].create({'name': 'Contacto trabajo', 'email': 'contacto@ejemplo.co'})
@@ -63,9 +63,21 @@ class TestPayslipSendCorreo(DocumentoFixture, TransactionCase):
         return accion['params']['message']
 
     def _correos(self, destino='contacto@ejemplo.co'):
-        return self.env['mail.mail'].search([('email_to', '=', destino)])
+        """Correos en cola de los recibos de la prueba cuyo destinatario es ``destino``. Se busca por modelo y recibo (no
+        por el literal de ``email_to``, que Odoo puede normalizar) y se compara el destinatario por ``email_to`` o por
+        ``recipient_ids``."""
+        correos = self.env['mail.mail'].search([('model', '=', 'hr.payslip'), ('res_id', 'in', self.recibos.ids)])
+        return correos.filtered(lambda m: destino in (m.email_to or '') or destino in m.recipient_ids.mapped('email'))
 
     # ── destinatario, cola y estado ──────────────────────────────────
+    def test_el_correo_creado_tiene_el_destinatario_y_queda_en_cola(self):
+        """Lectura directa del mail.mail que crea la plantilla (sin pasar por el asistente)."""
+        self.slip.action_send_payslip_email(self.nativa)
+        correos = self.env['mail.mail'].search([('model', '=', 'hr.payslip'), ('res_id', '=', self.slip.id)])
+        self.assertEqual(len(correos), 1, 'La plantilla no dejó ningún mail.mail para el recibo')
+        self.assertIn('contacto@ejemplo.co', (correos.email_to or '') + ' '.join(correos.recipient_ids.mapped('email')))
+        self.assertEqual(correos.state, 'outgoing')
+
     def test_destinatario_es_el_contacto_de_trabajo_y_sale_por_la_cola(self):
         self._ejecutar(self._asistente())
         correo = self._correos()
@@ -171,9 +183,7 @@ class TestPayslipSendCorreo(DocumentoFixture, TransactionCase):
         self.assertFalse(EMOJIS.search(cuerpos))
 
     def test_recibo_con_documento_no_se_transmite_por_recibo(self):
-        doc = self.env['l10n.co.ne.documento'].create({
-            'company_id': self.company.id, 'employee_id': self.slip.employee_id.id, 'period': date(2026, 3, 1)})
-        self.slip.l10n_co_ne_documento_id = doc
+        self.slip.l10n_co_ne_documento_id = self.doc      # el documento del mes ya existe (setUp)
         llamado = []
         self._patch(type(self.env['hr.payslip']), 'action_generate_ne_xml', lambda s: llamado.append(1))
         accion = self._ejecutar(self._asistente(checkbox_send_dian=True, checkbox_send_mail=False))

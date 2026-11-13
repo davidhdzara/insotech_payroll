@@ -769,8 +769,12 @@ class HrPayslip(models.Model):
             raise UserError(_('El empleado %s no tiene correo en su contacto de trabajo.', self.employee_id.name))
         template = template or self._ne_plantilla_colilla()
         adjunto = self._ne_pdf_colilla()
-        template.send_mail(self.id, force_send=False, email_values={
+        mail_id = template.send_mail(self.id, force_send=False, email_values={
             'email_to': correo, 'attachment_ids': [(6, 0, adjunto.ids)]})
+        correo_en_cola = self.env['mail.mail'].sudo().browse(mail_id).exists()
+        if not correo_en_cola:
+            raise UserError(_('La plantilla "%(plantilla)s" no generó el correo de la colilla del recibo "%(recibo)s".',
+                              plantilla=template.display_name, recibo=self.display_name))
         self.message_post(
             body=_('Colilla enviada por correo a %(correo)s con la plantilla "%(plantilla)s".',
                    correo=correo, plantilla=template.display_name),
