@@ -415,8 +415,10 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
         self.assertEqual(self.doc.state, 'invoice_accepted')
 
     def test_desde_un_fallo_de_envio_con_zip_key_pasa_a_pendiente(self):
-        fallido = self._intento('invoice_sending_failed', zip_key='z9', identifier=self.doc.cune,
-                                numero=self.doc.consecutive)
+        # Envío reciente: con la fecha por defecto (2026-04-01) ya pasaron las horas de reconsulta y el documento
+        # quedaría 'incierto' (otro comportamiento, cubierto aparte).
+        fallido = self._intento('invoice_sending_failed', fields.Datetime.now() - timedelta(hours=1), zip_key='z9',
+                                identifier=self.doc.cune, numero=self.doc.consecutive)
         self._consultar(dict(PENDIENTE, ZipKey='z9'))
         self.assertEqual(fallido.state, 'invoice_pending')
         self.assertEqual(self.doc.state, 'invoice_pending')
