@@ -363,7 +363,8 @@ class TestDocumentoNotaXml(DocumentoFixture, TransactionCase):
     def test_validar_una_nota_reemplazar_no_da_bloqueos_ni_avisos_de_totales(self):
         nota = self._nota('1')
         nota._ne_validar()
-        claves = {a['key'] for a in nota.alertas}
+        # Sin alertas el campo Json vacío se lee False (no []): el resto del código usa `alertas or []`.
+        claves = {a['key'] for a in nota.alertas or []}
         self.assertNotIn('sin_recibos', claves)
         self.assertNotIn('totales_nodos', claves)
         self.assertEqual(nota.etapa, 'ready')
@@ -371,7 +372,8 @@ class TestDocumentoNotaXml(DocumentoFixture, TransactionCase):
     def test_validar_una_nota_eliminar_no_pide_salud_ni_concilia_totales(self):
         nota = self._nota('2')
         nota._ne_validar()
-        claves = {a['key'] for a in nota.alertas}
+        # Sin alertas el campo Json vacío se lee False (no []): el resto del código usa `alertas or []`.
+        claves = {a['key'] for a in nota.alertas or []}
         self.assertNotIn('sin_seguridad_social', claves)
         self.assertNotIn('totales_nodos', claves)
         self.assertEqual(nota.etapa, 'ready')
