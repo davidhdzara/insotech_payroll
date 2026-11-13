@@ -59,12 +59,23 @@ class L10nCoNeExchange(models.Model):
 
     def create_exchange(self, company, operation, endpoint, response, payslips,
                         manifest=None, queried_zip_key=None, parent_exchange=None,
-                        unidentified_count=0):
-        """Crea evidencia completa sin registrar payloads en el log."""
+                        unidentified_count=0, *, documento=None):
+        """Crea evidencia completa sin registrar payloads en el log.
+
+        ``documento`` (solo por nombre, doc 53 §23.2/§23.15): el envío es de un documento mensual. No lleva
+        ``manifest`` (``exchange.document`` exige UN recibo y el documento agrupa varios: el intento del documento
+        guarda archivo y sha256); ``payslips`` son los recibos del documento y la evidencia se enlaza al documento
+        por ``documento.exchange_ids``. Sin ``documento`` el comportamiento es el de siempre.
+        """
         request = response.get('RawRequest', b'')
         answer = response.get('RawResponse', b'')
         if any(payslip.company_id != company for payslip in payslips):
             raise AccessError(_('Una evidencia DIAN no puede mezclar compañías.'))
+        if documento:
+            if manifest:
+                raise ValueError('Una evidencia de un documento mensual no lleva manifiesto de recibos.')
+            if documento.company_id != company:
+                raise AccessError(_('Una evidencia DIAN no puede mezclar compañías.'))
         record = self.sudo().create({
             'company_id': company.id,
             'operation': operation,
@@ -95,6 +106,8 @@ class L10nCoNeExchange(models.Model):
                     'sha256': hashlib.sha256(xml).hexdigest(),
                 }, sort_keys=True),
             })
+        if documento:
+            documento.write({'exchange_ids': [(4, record.id)]})
         return record
 
 

@@ -8,6 +8,7 @@ DIAN; sus campos de estado son ``etapa`` + ``state`` calculado del último inten
 ``l10n_co_dian.document``)."""
 
 import base64
+import hashlib
 import logging
 from datetime import datetime as _dt, time, timedelta
 
@@ -19,7 +20,8 @@ from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
 
 from ..services import (
-    cune as cune_service, dian_message, dian_utils, documento_merge, ne_xml_utils, nomina_xml_builder, xml_signer)
+    cune as cune_service, dian_message, dian_respuesta, dian_utils, documento_merge, ne_xml_utils, nomina_xml_builder,
+    soap_client, xml_signer)
 from ..services.soap_client import _parse_response
 
 _logger = logging.getLogger(__name__)
@@ -37,6 +39,15 @@ _MAPA_ESTADO_LEGACY = {
     'eliminated': ('draft', 'invoice_accepted'),
 }
 _OPERACIONES_ENVIO = ('send_sync', 'send_test_set')
+
+# Veredicto neutral del servicio (dian_respuesta) -> estado del intento del documento (doc 53 §23.13). Un fallo de
+# transporte NUNCA es rechazo.
+_ESTADO_INTENTO_POR_VEREDICTO = {
+    dian_respuesta.ACEPTADO: 'invoice_accepted',
+    dian_respuesta.RECHAZADO: 'invoice_rejected',
+    dian_respuesta.PENDIENTE: 'invoice_pending',
+    dian_respuesta.ERROR_TRANSPORTE: 'invoice_sending_failed',
+}
 
 
 class L10nCoNeDocumento(models.Model):
@@ -531,6 +542,94 @@ class L10nCoNeDocumento(models.Model):
             software_pin=company.l10n_co_ne_operation_mode_ids.software_pin or '',
             tipo_amb=company.l10n_co_ne_environment or '2')
         return cune
+
+    # ──────────────────────────────────────────────────────────────────
+    # Enviar a la DIAN (doc 53 §23.12 3.1, §23.15)
+    # ──────────────────────────────────────────────────────────────────
+    def _ne_precondiciones_envio(self):
+        """UserError local, ANTES de tocar la DIAN: sin intento, sin consecutivo gastado."""
+        self.ensure_one()
+        nombre_estado = dict(self._fields['state'].selection).get(self.state)
+        if self.legacy:
+            raise UserError(_(
+                'El documento "%s" es un documento migrado del ciclo por recibo: se reporta por recibo.',
+                self.display_name))
+        if self.is_adjustment:
+            raise UserError(_('Las notas de ajuste se envían en la etapa de ajustes, no desde aquí.'))
+        if self.eliminado:
+            raise UserError(_('El documento "%s" ya fue eliminado por una nota de ajuste.', self.display_name))
+        if self.incierto:
+            raise UserError(_('El documento "%s" tiene un envío incierto: consulte su estado primero.',
+                              self.display_name))
+        if self.state in ('invoice_pending', 'invoice_accepted'):
+            raise UserError(_('El documento "%(doc)s" ya fue enviado a la DIAN (estado: %(estado)s).',
+                              doc=self.display_name, estado=nombre_estado))
+        if self.state == 'invoice_rejected':
+            raise UserError(_(
+                'La DIAN rechazó el XML vigente del documento "%s". Corrija los datos y genere el XML otra vez '
+                '(toma un consecutivo nuevo): el mismo XML no se reenvía.', self.display_name))
+        if self.etapa != 'ready' or not (self.cune and self.consecutive and self.xml_attachment_id):
+            raise UserError(_('Genere el XML del documento "%s" antes de enviarlo.', self.display_name))
+        company = self.company_id
+        if company.l10n_co_ne_environment == '2' or company.l10n_co_ne_certification_process:
+            raise UserError(_(
+                'La compañía "%s" está en habilitación (ambiente de pruebas o proceso de certificación): en '
+                'habilitación el envío es por recibo hasta que el documento mensual pase a habilitación. El '
+                'documento mensual solo se transmite en Producción.', company.name))
+        company._l10n_co_ne_validar_config()
+
+    def _ne_enviar_uno(self):
+        """Envía UN documento a la DIAN y registra el resultado en un intento nuevo.
+
+        No lanza por lo que responda o por lo que falle en la DIAN (queda en el intento: un fallo de conexión
+        es "Envío fallido", reintentable con el MISMO consecutivo, CUNE y XML, nunca rechazo). Lanza UserError solo
+        por precondiciones locales, antes de llamar. El ``state`` del documento se recalcula solo.
+
+        Returns:
+            ``l10n.co.ne.documento.intento`` creado.
+        """
+        self.ensure_one()
+        self._ne_precondiciones_envio()
+        company = self.company_id
+        xml = base64.b64decode(self.xml_attachment_id.datas)
+        nit = (company.vat or 'SIN_NIT').replace('-', '').strip()
+        filename = 'ne_%s_%s.xml' % (nit, self.consecutive)
+        exchange = self.env['l10n.co.ne.exchange']
+        if company.l10n_co_ne_demo_mode:
+            # Modo Demo: validación local, sin transmitir (mismo criterio que el ciclo por recibo).
+            estado, zip_key = 'invoice_accepted', ''
+            message_json = {
+                'is_valid': True, 'status_code': '00', 'detail': '', 'errors': [], 'transport': False, 'fault': [],
+                'status': _('Validado localmente en Modo Demo (sin transmisión real a la DIAN).')}
+        else:
+            llave, cert_pem, _der, _cert_obj, _cadena = xml_signer.load_from_certificate(company._get_ne_certificate())
+            endpoint = company._ne_dian_endpoint()
+            respuesta = soap_client.send_nomina_sync(
+                xml_bytes=xml, filename=filename, private_key=llave, cert_pem=cert_pem, endpoint=endpoint,
+                timeout=company._ne_config_int_param(
+                    'l10n_co_nomina_electronica.soap_timeout_seconds', soap_client.SOAP_TIMEOUT))
+            resultado = dian_respuesta.interpretar_respuesta(respuesta, contexto=dian_respuesta.CONTEXTO_ENVIO)
+            estado = _ESTADO_INTENTO_POR_VEREDICTO[resultado.veredicto]
+            zip_key = resultado.zip_key
+            message_json = dian_message.build_message_json(respuesta)
+            exchange = self.env['l10n.co.ne.exchange'].create_exchange(
+                company, 'send_sync', endpoint, respuesta, self.payslip_ids, documento=self)
+        intento = self.env['l10n.co.ne.documento.intento'].create({
+            'documento_id': self.id, 'datetime': fields.Datetime.now(), 'state': estado,
+            'identifier': self.cune, 'zip_key': zip_key or False, 'numero': self.consecutive,
+            'file_name': filename, 'sha256': hashlib.sha256(xml).hexdigest(),
+            'attachment_id': self.xml_attachment_id.id, 'message_json': message_json,
+            'test_environment': company.l10n_co_ne_environment == '2',
+            'certification_process': bool(company.l10n_co_ne_certification_process),
+            'exchange_id': exchange.id or False})
+        vals = {'sending_data': False}
+        if zip_key:
+            vals['zip_key'] = zip_key
+        self.write(vals)
+        self.message_post(
+            body=_('Envío a la DIAN: %s.', dict(intento._fields['state'].selection).get(estado)),
+            message_type='comment', subtype_xmlid='mail.mt_note')
+        return intento
 
     # ──────────────────────────────────────────────────────────────────
     # Restricciones
