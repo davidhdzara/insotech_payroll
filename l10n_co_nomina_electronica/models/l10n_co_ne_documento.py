@@ -827,10 +827,16 @@ class L10nCoNeDocumento(models.Model):
             raise UserError(_(
                 'El documento "%s" es un documento migrado del ciclo por recibo: se reporta por recibo.',
                 self.display_name))
-        if self.is_adjustment:
-            raise UserError(_('Las notas de ajuste se envían en la etapa de ajustes, no desde aquí.'))
         if self.eliminado:
             raise UserError(_('El documento "%s" ya fue eliminado por una nota de ajuste.', self.display_name))
+        if self.is_adjustment:
+            # La nota solo se envía contra el ÚLTIMO documento aceptado de su cadena, vigente y no eliminado (§23.16).
+            padre = self.parent_id
+            if not padre or padre.state != 'invoice_accepted' or padre.eliminado \
+                    or padre != padre._ne_ultimo_aceptado():
+                raise UserError(_(
+                    'La nota de ajuste "%s" ya no cuelga del último documento aceptado de su cadena (o este fue '
+                    'eliminado): no se envía. Cree una nota nueva.', self.display_name))
         if self.incierto:
             raise UserError(_('El documento "%s" tiene un envío incierto: consulte su estado primero.',
                               self.display_name))
@@ -905,10 +911,22 @@ class L10nCoNeDocumento(models.Model):
         if zip_key:
             vals['zip_key'] = zip_key
         self.write(vals)
+        self._ne_aplicar_eliminacion()
         self.message_post(
             body=_('Envío a la DIAN: %s.', dict(intento._fields['state'].selection).get(estado)),
             message_type='comment', subtype_xmlid='mail.mt_note')
         return intento
+
+    def _ne_aplicar_eliminacion(self):
+        """Una nota Eliminar ACEPTADA marca a su padre como eliminado (``eliminado_por_id`` = la nota). Rechazada o
+        pendiente no cambia nada; una Reemplazar aceptada deja al padre como histórico (§23.16, 6c)."""
+        for nota in self:
+            if nota.is_adjustment and nota.adjustment_type == '2' and nota.state == 'invoice_accepted' \
+                    and nota.parent_id and not nota.parent_id.eliminado:
+                nota.parent_id.write({'eliminado': True, 'eliminado_por_id': nota.id})
+                nota.parent_id.message_post(
+                    body=_('Eliminado por la nota de ajuste "%s".', nota.display_name),
+                    message_type='comment', subtype_xmlid='mail.mt_note')
 
     # ──────────────────────────────────────────────────────────────────
     # Reconsultar el estado en la DIAN (doc 53 §23.12 3.2, §23.3)
@@ -1003,6 +1021,7 @@ class L10nCoNeDocumento(models.Model):
         message_json = dian_message.build_message_json(respuesta)
         if veredicto in (dian_respuesta.ACEPTADO, dian_respuesta.RECHAZADO):
             intento.write({'state': _ESTADO_INTENTO_POR_VEREDICTO[veredicto], 'message_json': message_json})
+            self._ne_aplicar_eliminacion()
             if self.incierto:
                 self.incierto = False                    # el veredicto concilió el envío incierto
             self.message_post(
