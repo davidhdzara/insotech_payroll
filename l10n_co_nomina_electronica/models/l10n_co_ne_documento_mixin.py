@@ -30,6 +30,7 @@ from ..services import (
     cune as cune_service,
     dian_respuesta,
     dian_utils,
+    nota_ajuste,
     ne_xml_utils,
     nomina_xml_builder,
     soap_client,
@@ -1142,52 +1143,24 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
             return '', ''
         fecha = ''
         if pred.l10n_co_ne_xml_attachment_id:
-            root = _etree.fromstring(base64.b64decode(pred.l10n_co_ne_xml_attachment_id.datas))
-            info = root.find('.//{*}InformacionGeneral')
-            if info is not None:
-                fecha = info.get('FechaGen', '')
+            fecha = nota_ajuste.fecha_gen_de_xml(base64.b64decode(pred.l10n_co_ne_xml_attachment_id.datas))
         return pred.l10n_co_ne_consecutive or '', fecha
 
     def _ne_eliminar(self, data):
-        """Sección <Eliminar> de la nota de ajuste (H-001, Anexo Técnico 5.5.8 TipoNota=2).
-
-        Solo lleva lo que el XSD admite dentro de <Eliminar>: predecesor, secuencia, lugar de
-        generación, proveedor, QR, información general, notas y empleador. NO lleva periodo,
-        trabajador, pago, devengados, deducciones ni totales. Sin CodigoTrabajador en la
-        secuencia (el XSD de Eliminar no lo admite)."""
+        """Envoltorio: la sección <Eliminar> se arma en ``services/nota_ajuste.eliminar_desde`` (H-001; doc 53
+        §23.16, D-3)."""
         numero_pred, fecha_gen_pred = self._ne_predecessor_values()
-        numero_secuencia = {
-            k: v for k, v in data['numero_secuencia'].items() if k != 'CodigoTrabajador'}
-        return {
-            'predecesor': {
-                'NumeroPred': numero_pred,
-                'CUNEPred': self.l10n_co_ne_adjustment_ref_cune or '',
-                'FechaGenPred': fecha_gen_pred,
-            },
-            'numero_secuencia': numero_secuencia,
-            'lugar_generacion': data['lugar_generacion'],
-            'proveedor_xml': data['proveedor_xml'],
-            'informacion_general': data['informacion_general'],
-            'empleador': data['empleador'],
-        }
+        return nota_ajuste.eliminar_desde(data, nota_ajuste.predecesor(
+            numero_pred, self.l10n_co_ne_adjustment_ref_cune or '', fecha_gen_pred))
 
     def _ne_cune_valores(self, payslip_data):
-        """Valores variables del CUNE (ValDev, ValDed, ValTol, DocEmp), numeral 8.1.1.4 del Anexo.
-
-        Nómina individual y nota de ajuste Reemplazar: los totales y el documento del trabajador
-        del propio documento. Nota de ajuste Eliminar (H-001): el Anexo fija valores literales
-        -- ValDev=0.00, ValDed=0.00, ValTol=0.00 y DocEmp=0 -- porque ese documento no lleva
-        totales ni trabajador. El resto (NumNIAE, FecNIAE, HorNIAE, NitNIAE, TipoXML, TipAmb)
-        sale igual que en los otros documentos."""
+        """Envoltorio: valores variables del CUNE (ValDev, ValDed, ValTol, DocEmp, numeral 8.1.1.4 del Anexo) en
+        ``services/nota_ajuste.cune_valores``; Eliminar lleva los valores fijos del Anexo (H-001)."""
         self.ensure_one()
-        if self.l10n_co_ne_is_adjustment and self.l10n_co_ne_adjustment_type == '2':
-            return {'val_dev': '0.00', 'val_ded': '0.00', 'val_tol': '0.00', 'doc_trab': '0'}
-        return {
-            'val_dev': payslip_data['totales']['DevengadosTotal'],
-            'val_ded': payslip_data['totales']['DeduccionesTotal'],
-            'val_tol': payslip_data['totales']['ComprobanteTotal'],
-            'doc_trab': self.employee_id.identification_id or '',
-        }
+        es_eliminar = bool(self.l10n_co_ne_is_adjustment and self.l10n_co_ne_adjustment_type == '2')
+        # Eliminar no lee los totales (el Anexo fija ceros): un dato sin ``totales`` no debe fallar para ese tipo.
+        totales = {} if es_eliminar else payslip_data['totales']
+        return nota_ajuste.cune_valores(es_eliminar, totales, self.employee_id.identification_id or '')
 
     def _ne_marcar_original_eliminado(self):
         """H-001: cuando una nota de ajuste tipo Eliminar queda 'accepted', el documento
@@ -1212,30 +1185,11 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
                     nota=note.l10n_co_ne_consecutive or note.name))
 
     def _ne_reemplazar(self, data):
-        """Sección <Reemplazar> de la nota de ajuste, reutilizando ``data``."""
+        """Envoltorio: la sección <Reemplazar> se arma en ``services/nota_ajuste.reemplazar_desde`` (doc 53 §23.16,
+        D-3)."""
         numero_pred, fecha_gen_pred = self._ne_predecessor_values()
-        return {
-            'predecesor': {
-                'NumeroPred': numero_pred,
-                'CUNEPred': self.l10n_co_ne_adjustment_ref_cune or '',
-                'FechaGenPred': fecha_gen_pred,
-            },
-            # Include all the same sections
-            'periodo': data['periodo'],
-            'numero_secuencia': data['numero_secuencia'],
-            'lugar_generacion': data['lugar_generacion'],
-            'proveedor_xml': data['proveedor_xml'],
-            'informacion_general': data['informacion_general'],
-            'empleador': data['empleador'],
-            'trabajador': data['trabajador'],
-            'pago': data['pago'],
-            'fechas_pagos': data['fechas_pagos'],
-            'devengados': data['devengados'],
-            'deducciones': data['deducciones'],
-            'devengados_total': data['devengados_total'],
-            'deducciones_total': data['deducciones_total'],
-            'comprobante_total': data['comprobante_total'],
-        }
+        return nota_ajuste.reemplazar_desde(data, nota_ajuste.predecesor(
+            numero_pred, self.l10n_co_ne_adjustment_ref_cune or '', fecha_gen_pred))
 
     def _validate_ne_prerequisites(self):
         """Valida que la nómina cumpla los prerequisitos para generar XML."""

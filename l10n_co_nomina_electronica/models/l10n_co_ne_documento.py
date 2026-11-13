@@ -21,7 +21,7 @@ from odoo.exceptions import UserError, ValidationError
 
 from ..services import (
     cune as cune_service, dian_message, dian_respuesta, dian_utils, documento_merge, ne_xml_utils, nomina_xml_builder,
-    soap_client, xml_signer)
+    nota_ajuste, soap_client, xml_signer)
 from ..services.soap_client import _parse_response
 
 _logger = logging.getLogger(__name__)
@@ -331,14 +331,15 @@ class L10nCoNeDocumento(models.Model):
         elif self.state == 'invoice_accepted':
             alerta('aceptado', 'danger', _(
                 'El documento ya fue aceptado por la DIAN: un cambio se corrige con una nota de ajuste.'))
-        if not self.payslip_ids:
+        recibos_xml = self._ne_recibos_para_xml()
+        if not recibos_xml:
             alerta('sin_recibos', 'danger', _('El documento no tiene recibos pagados en el mes.'))
         # Datos incompletos: los mismos prerrequisitos del ciclo por recibo, sin sus chequeos de estado.
         try:
             self.company_id._l10n_co_ne_validar_config()
         except UserError as error:
             alerta('compania', 'danger', str(error))
-        for slip in self.payslip_ids:
+        for slip in recibos_xml:
             try:
                 self._ne_validar_datos_recibo(slip)
             except UserError as error:
@@ -348,7 +349,7 @@ class L10nCoNeDocumento(models.Model):
         faltan = self.env['hr.payslip'].search([
             ('company_id', '=', self.company_id.id), ('employee_id', '=', self.employee_id.id),
             ('credit_note', '=', False), ('state', '!=', 'cancel'),
-            ('date_to', '>=', self.period), ('date_to', '<=', fin), ('id', 'not in', self.payslip_ids.ids)])
+            ('date_to', '>=', self.period), ('date_to', '<=', fin), ('id', 'not in', recibos_xml.ids)])
         if faltan:
             alerta('faltan_recibos', 'warning', _(
                 'Hay recibos del mes que no están en el documento (sin pagar, pagados en otro mes o sin fecha de pago): %(recibos)s.',
@@ -357,7 +358,7 @@ class L10nCoNeDocumento(models.Model):
         hoy = fields.Date.context_today(self)
         liquidacion = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion',
                                    raise_if_not_found=False)
-        if hoy <= fin and not self.payslip_ids.filtered(lambda s: s.struct_id == liquidacion):
+        if hoy <= fin and not recibos_xml.filtered(lambda s: s.struct_id == liquidacion):
             alerta('mes_en_curso', 'warning', _(
                 'El mes del documento no ha terminado y el empleado no tiene liquidación final pagada en él.'),
                 confirmable=True)
@@ -390,6 +391,52 @@ class L10nCoNeDocumento(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # XML mensual: fusión de los recibos (doc 53 §5.3, §19; etapa 3)
     # ──────────────────────────────────────────────────────────────────
+    def _ne_recibos_para_xml(self):
+        """Recibos con los que se arma el XML (doc 53 §23.16, D-1 opción A).
+
+        Un original: sus ``payslip_ids``. Una nota de ajuste NO reenlaza recibos: se derivan de la cadena (el
+        documento padre y los de arriba, subiendo por ``parent_id``) más los propios, y solo cuentan los PAGADOS (un
+        recibo cancelado del original sale solo). El M2O recibo → documento queda en el original."""
+        self.ensure_one()
+        if not self.is_adjustment:
+            return self.payslip_ids
+        recibos = self.payslip_ids
+        vistos = {self.id}
+        padre = self.parent_id
+        while padre and padre.id not in vistos:
+            vistos.add(padre.id)
+            recibos |= padre.payslip_ids
+            padre = padre.parent_id
+        return recibos.filtered(lambda slip: slip.state in ('done', 'paid'))
+
+    def _ne_predecesor(self):
+        """Bloque ``predecesor`` de una nota de ajuste: número, CUNE y fecha de emisión del documento padre (NIAE190 y
+        NIAE192). Sin padre aceptado, sin su XML o sin su ``FechaGen`` es un error claro, nunca un valor vacío."""
+        self.ensure_one()
+        padre = self.parent_id
+        if not padre:
+            raise UserError(_('La nota de ajuste "%s" no tiene documento original (padre).', self.display_name))
+        if padre.state != 'invoice_accepted':
+            raise UserError(_('La nota de ajuste "%(nota)s" solo se arma contra un documento aceptado por la DIAN '
+                              '(el original está: %(estado)s).', nota=self.display_name,
+                              estado=dict(padre._fields['state'].selection).get(padre.state)))
+        if not (padre.consecutive and padre.cune):
+            raise UserError(_('El documento original "%s" no tiene consecutivo o CUNE.', padre.display_name))
+        if self.adjustment_ref_cune != padre.cune:
+            raise UserError(_('El CUNE de referencia de la nota "%s" no es el del documento original.',
+                              self.display_name))
+        if not padre.xml_attachment_id:
+            raise UserError(_('Falta el XML del documento original "%s": no se puede leer su fecha de emisión.',
+                              padre.display_name))
+        try:
+            fecha = nota_ajuste.fecha_gen_de_xml(base64.b64decode(padre.xml_attachment_id.datas))
+        except Exception:   # XML ilegible: error claro, no un valor vacío
+            fecha = ''
+        if not fecha:
+            raise UserError(_('No se pudo leer la fecha de emisión (FechaGen) del XML del documento original "%s".',
+                              padre.display_name))
+        return nota_ajuste.predecesor(padre.consecutive, padre.cune, fecha)
+
     def _ne_periodo(self, contrato):
         """Bloque ``Periodo`` del documento mensual (D3): liquidación desde max(1.º del mes, ingreso) hasta el retiro
         si el contrato terminó ese mes, o el fin de mes si sigue vigente. TiempoLaborado 360/30 con el día de
@@ -414,9 +461,8 @@ class L10nCoNeDocumento(models.Model):
         sin reescribir constructores) fusionados por ``documento_merge``. ``consecutivo`` provisional (con prefijo)
         solo para armar la numeración cuando el documento aún no tiene el suyo; no gasta ninguno."""
         self.ensure_one()
-        if self.is_adjustment:
-            raise UserError(_('La nota de ajuste del documento mensual se genera en la etapa de ajustes.'))
-        recibos = self.payslip_ids.sorted('date_to')
+        predecesor = self._ne_predecesor() if self.is_adjustment else None   # sin padre aceptado: error claro
+        recibos = self._ne_recibos_para_xml().sorted('date_to')
         if not recibos:
             raise UserError(_('El documento "%s" no tiene recibos.', self.display_name))
         contrato = self.contract_id or recibos[-1].contract_id
@@ -433,7 +479,7 @@ class L10nCoNeDocumento(models.Model):
             raise UserError(_('La fusión de los recibos no cuadra: %s', ' '.join(descuadres)))
         company = self.company_id
         numero = self.consecutive or consecutivo or ''
-        prefijo = self._ne_prefijo_nomina()
+        prefijo = self._ne_prefijo()
         modo = company.l10n_co_ne_operation_mode_ids
         datos['numero_secuencia'] = dict(
             datos.get('numero_secuencia', {}), Prefijo=prefijo, Numero=numero,
@@ -442,24 +488,44 @@ class L10nCoNeDocumento(models.Model):
             datos.get('proveedor_xml', {}),
             SoftwareSC=dian_utils.compute_software_security_code(modo.software_id, modo.software_pin, numero)
             if numero else '')
+        if self.is_adjustment:
+            # Nota de ajuste (Anexo §5.5.8): TipoXML 103, ``novedad`` con el CUNE de referencia y la sección
+            # <Reemplazar> o <Eliminar> armada por el servicio (sin duplicar el código del recibo).
+            datos['informacion_general'] = dict(datos.get('informacion_general', {}), TipoXML='103')
+            datos['novedad'] = {'CUNENov': self.adjustment_ref_cune, 'value': True}
+            if self.adjustment_type == '2':
+                datos['tipo_nota'] = '2'
+                datos['eliminar'] = nota_ajuste.eliminar_desde(datos, predecesor)
+            else:
+                datos['tipo_nota'] = '1'
+                datos['reemplazar'] = nota_ajuste.reemplazar_desde(datos, predecesor)
         return datos
+
+    def _ne_construir_xml(self, datos):
+        """XML del documento: nota de ajuste o nómina individual (ambos sin CUNE ni firma)."""
+        self.ensure_one()
+        if self.is_adjustment:
+            return nomina_xml_builder.build_nota_ajuste_v2(datos)
+        return nomina_xml_builder.build_nomina_individual_v2(datos)
 
     def _ne_xml_sin_firmar(self, consecutivo=None):
         """XML mensual sin CUNE ni firma (para validar o previsualizar; no gasta consecutivo)."""
         self.ensure_one()
-        return nomina_xml_builder.build_nomina_individual_v2(self._collect_documento_data(consecutivo))
+        return self._ne_construir_xml(self._collect_documento_data(consecutivo))
 
     def _ne_validar_xml(self):
         """Alertas que dependen del XML (se llaman desde ``_ne_validar``): la fusión debe ser posible y, D4, un
         documento sin Salud ni FondoPension solo avisa (la prima va siempre con la quincena; sin bloqueo)."""
         self.ensure_one()
         alertas = []
-        if not self.payslip_ids or self.is_adjustment:
+        if not self._ne_recibos_para_xml():
             return alertas
         try:
             datos = self._collect_documento_data(consecutivo='PRE')
         except UserError as error:
             return [{'key': 'xml', 'level': 'danger', 'message': str(error)}]
+        if self.is_adjustment and self.adjustment_type == '2':
+            return alertas   # <Eliminar> no lleva totales ni deducciones: no hay nada que conciliar
         dif_dev, dif_ded = documento_merge.diferencias_nodos(datos)
         if dif_dev or dif_ded:
             alertas.append({'key': 'totales_nodos', 'level': 'warning', 'message': _(
@@ -486,10 +552,41 @@ class L10nCoNeDocumento(models.Model):
                 '(Prefijo Nómina) antes de generar el documento.', compania=self.company_id.name))
         return prefijo
 
+    def _ne_prefijo_ajuste(self):
+        """Prefijo de las notas de ajuste de la compañía. Sin prefijo es un error claro (el 'NA' del recibo cae en
+        silencio: no se copia)."""
+        self.ensure_one()
+        prefijo = self.company_id.l10n_co_ne_adjust_prefix
+        if not prefijo or not prefijo.strip():
+            raise UserError(_(
+                'La compañía "%(compania)s" no tiene prefijo de notas de ajuste. Configúrelo en Ajustes > Nómina '
+                '(Prefijo Nota de Ajuste) antes de generar la nota.', compania=self.company_id.name))
+        return prefijo
+
+    def _ne_prefijo(self):
+        """Prefijo del consecutivo de ESTE documento: el de ajuste para una nota, el de nómina para un original."""
+        self.ensure_one()
+        return self._ne_prefijo_ajuste() if self.is_adjustment else self._ne_prefijo_nomina()
+
+    def _ne_siguiente_consecutivo_ajuste(self):
+        """Siguiente consecutivo de la secuencia de ajuste (código ``l10n_co_nomina.ajuste``): primero la de la
+        compañía y, si no, la sin compañía. Sin secuencia es un error claro: no hay fallback silencioso."""
+        self.ensure_one()
+        secuencia = self.env['ir.sequence'].search([
+            ('code', '=', 'l10n_co_nomina.ajuste'), '|', ('company_id', '=', self.company_id.id),
+            ('company_id', '=', False)], order='company_id', limit=1)   # la de la compañía primero (NULL al final)
+        if not secuencia:
+            raise UserError(_(
+                'La compañía "%(compania)s" no tiene secuencia de notas de ajuste de nómina electrónica (código '
+                'l10n_co_nomina.ajuste). Configúrela antes de generar la nota.', compania=self.company_id.name))
+        return secuencia.next_by_id()
+
     def _ne_siguiente_consecutivo(self):
         """Siguiente consecutivo oficial de la compañía (misma secuencia no_gap del ciclo por recibo). Sin secuencia
         configurada es un error claro: no se inventa un número."""
         self.ensure_one()
+        if self.is_adjustment:
+            return self._ne_siguiente_consecutivo_ajuste()
         secuencia = self.company_id.l10n_co_ne_sequence_id
         if not secuencia:
             raise UserError(_(
@@ -516,7 +613,7 @@ class L10nCoNeDocumento(models.Model):
         if bloqueos:
             raise UserError(_('El documento tiene bloqueos: %s', ' '.join(bloqueos)))
         company = self.company_id
-        prefijo = self._ne_prefijo_nomina()
+        prefijo = self._ne_prefijo()
         # Un consecutivo que ya viajó a la DIAN en un intento rechazado NO se reutiliza jamás: la DIAN devuelve el
         # veredicto viejo si se repite (doc 53 §23.15; memoria del equipo sobre consecutivos rechazados).
         consecutivo_usado = bool(self.consecutive) and self.consecutive in self.intento_ids.mapped('numero')
@@ -524,7 +621,7 @@ class L10nCoNeDocumento(models.Model):
             self._ne_xml_sin_firmar('%s1' % prefijo)   # corrida en seco: los errores de datos salen ANTES del número
             self.consecutive = self._ne_siguiente_consecutivo()
         datos = self._collect_documento_data()
-        xml_bytes = nomina_xml_builder.build_nomina_individual_v2(datos)
+        xml_bytes = self._ne_construir_xml(datos)
         cune = self._ne_calcular_cune(datos)
         xml_bytes = ne_xml_utils.insertar_cune_y_qr(xml_bytes, cune, company._ne_dian_qr_host())
         llave, cert_pem, cert_der, cert_obj, cadena = xml_signer.load_from_certificate(company._get_ne_certificate())
@@ -545,11 +642,15 @@ class L10nCoNeDocumento(models.Model):
         company = self.company_id
         info = datos['informacion_general']
         totales = datos['totales']
+        # Nota Eliminar: el Anexo §8.1.1.4 fija ValDev=ValDed=ValTol=0.00 y DocEmp=0 (no lee los totales).
+        es_eliminar = bool(self.is_adjustment and self.adjustment_type == '2')
+        valores = nota_ajuste.cune_valores(
+            es_eliminar, {} if es_eliminar else totales, self.employee_id.identification_id or '')
         cune, _raw = cune_service.compute_cune(
             num_ne=self.consecutive, fec_ne=info['FechaGen'], hor_ne=info['HoraGen'],
-            val_dev=totales['DevengadosTotal'], val_ded=totales['DeduccionesTotal'],
-            val_tol=totales['ComprobanteTotal'], nit_ne=dian_utils.clean_nit(company.vat),
-            doc_trab=self.employee_id.identification_id or '', cl_ne='102',
+            val_dev=valores['val_dev'], val_ded=valores['val_ded'],
+            val_tol=valores['val_tol'], nit_ne=dian_utils.clean_nit(company.vat),
+            doc_trab=valores['doc_trab'], cl_ne='103' if self.is_adjustment else '102',
             software_pin=company.l10n_co_ne_operation_mode_ids.software_pin or '',
             tipo_amb=company.l10n_co_ne_environment or '2')
         return cune
