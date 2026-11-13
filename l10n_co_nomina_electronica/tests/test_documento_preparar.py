@@ -214,6 +214,9 @@ class TestDocumentoPreparar(TransactionCase):
         ESTE plazo. Con lun-vie y sin festivos propios, el 10.º día hábil de abril 2026 sigue siendo el 14."""
         a1, a2, _b1 = self._marzo()
         otra = self.env['res.company'].create({'name': 'Otra compañía con festivos', 'country_id': self.env.ref('base.co').id})
+        # El nativo impide dos festivos globales que se crucen DENTRO de la misma compañía: se parte de una compañía
+        # sin festivos propios para que el único sea el de la prueba.
+        self.env['resource.calendar.leaves'].search([('company_id', '=', otra.id), ('resource_id', '=', False)]).unlink()
         self.env['resource.calendar.leaves'].create({
             'name': 'Festivo global de otra compañía', 'company_id': otra.id, 'calendar_id': False,
             'resource_id': False, 'date_from': datetime(2026, 4, 2, 5, 0), 'date_to': datetime(2026, 4, 3, 4, 59, 59)})

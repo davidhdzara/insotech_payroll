@@ -52,25 +52,28 @@ class TestCompanyValidarConfig(TransactionCase):
         self._con_certificado(_Certificado())
         self.company._l10n_co_ne_validar_config()
 
-    def test_falta_software_id(self):
-        self._con_certificado(_Certificado())
-        self.modo.software_id = False
+    # ``software_id`` y ``software_pin`` son ``required=True`` (NOT NULL en la base): un modo de operación existente
+    # nunca los tiene vacíos, así que "falta solo el ID" o "falta solo el PIN" no se puede provocar; lo alcanzable es
+    # que NO haya modo de operación (faltan los dos) o que falte el certificado.
+    def test_falta_solo_el_certificado(self):
+        self._con_certificado(False)
+        with self.assertRaises(UserError) as exc:
+            self.company._l10n_co_ne_validar_config()
+        mensaje = str(exc.exception)
+        self.assertIn('Certificado Digital', mensaje)
+        self.assertNotIn('ID Software Nómina', mensaje)
+        self.assertNotIn('PIN Software Nómina', mensaje)
+        self.assertIn(self.company.name, mensaje)
+
+    def test_sin_modo_y_sin_certificado_se_listan_juntos(self):
+        self._con_certificado(False)
+        self.modo.unlink()
         with self.assertRaises(UserError) as exc:
             self.company._l10n_co_ne_validar_config()
         mensaje = str(exc.exception)
         self.assertIn('ID Software Nómina', mensaje)
-        self.assertNotIn('PIN Software Nómina', mensaje)
-        self.assertIn(self.company.name, mensaje)
-
-    def test_falta_pin_y_certificado_se_listan_juntos(self):
-        self._con_certificado(False)
-        self.modo.software_pin = False
-        with self.assertRaises(UserError) as exc:
-            self.company._l10n_co_ne_validar_config()
-        mensaje = str(exc.exception)
         self.assertIn('PIN Software Nómina', mensaje)
         self.assertIn('Certificado Digital', mensaje)
-        self.assertNotIn('ID Software Nómina', mensaje)
 
     def test_sin_modo_de_operacion_faltan_id_y_pin(self):
         self._con_certificado(_Certificado())
