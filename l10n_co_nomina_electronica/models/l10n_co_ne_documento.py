@@ -68,6 +68,9 @@ class L10nCoNeDocumento(models.Model):
     period = fields.Date(string='Mes', required=True, index=True,
                          help='Primer día del mes del documento (mes de la primera fecha de pago de sus recibos).')
     payslip_ids = fields.One2many('hr.payslip', 'l10n_co_ne_documento_id', string='Recibos incluidos')
+    recibo_xml_ids = fields.Many2many('hr.payslip', string='Recibos del XML', compute='_compute_recibo_xml_ids',
+                                      help='Recibos con los que se arma el XML: los propios y, en una nota de ajuste, '
+                                           'los de la cadena de documentos (doc 53 §23.16, D-1).')
 
     etapa = fields.Selection([('draft', 'Borrador'), ('ready', 'Listo')], string='Etapa', default='draft',
                              required=True, copy=False,
@@ -147,6 +150,11 @@ class L10nCoNeDocumento(models.Model):
             mes = doc.period.strftime('%Y-%m') if doc.period else ''
             base = '%s %s' % (doc.employee_id.name or '', mes)
             doc.name = ('%s %s' % (_('Ajuste'), base) if doc.is_adjustment else base).strip()
+
+    @api.depends('payslip_ids', 'payslip_ids.state', 'is_adjustment', 'parent_id')
+    def _compute_recibo_xml_ids(self):
+        for doc in self:
+            doc.recibo_xml_ids = doc._ne_recibos_para_xml()
 
     def _ultimo_intento(self):
         """Último intento (como el nativo: ``.sorted()[:1]``); el orden es por fecha y luego id."""
@@ -274,12 +282,30 @@ class L10nCoNeDocumento(models.Model):
             doc = self._ne_documento_del_grupo(company, employee, period)
             if doc.state in (False, 'invoice_sending_failed') and not doc.is_being_sent:
                 doc._ne_componer(self._ne_recibos_del_mes(company, employee, period))
+            else:
+                # Documento ya transmitido (D-5): los recibos nuevos del mes se adoptan en la nota abierta, nunca en el
+                # documento aceptado; sin nota abierta queda la alerta persistente ``recibo_tardio``.
+                nota = doc._ne_nota_abierta()
+                if nota:
+                    mes = self._ne_recibos_del_mes(company, employee, period)
+                    nota._ne_componer_adoptados(mes.filtered(
+                        lambda s: not s.l10n_co_ne_documento_id or s.l10n_co_ne_documento_id == nota))
+                    nota._ne_validar()
+                    resultado['documentos'] |= nota
             doc._ne_validar()
             resultado['documentos'] |= doc
         # Un recibo que cambió de mes (nueva fecha de pago) sale del documento donde estaba: ese documento se
         # recompone y revalida; si queda vacío y sin historia, se elimina.
         for previo in previos - resultado['documentos']:
-            if previo.legacy or previo.is_adjustment or previo.state:
+            if previo.is_adjustment and not previo.legacy:
+                # D-M: un recibo adoptado cuya fecha de pago pasó a otro mes sale de la nota abierta; una nota ya
+                # enviada no se toca (``_ne_validar`` deja la alerta persistente ``recibo_otro_mes``).
+                if not previo.state and not previo.is_being_sent:
+                    previo._ne_componer_adoptados(
+                        previo.payslip_ids & self._ne_recibos_del_mes(previo.company_id, previo.employee_id, previo.period))
+                previo._ne_validar()
+                continue
+            if previo.legacy or previo.state:
                 continue
             previo._ne_componer(self._ne_recibos_del_mes(previo.company_id, previo.employee_id, previo.period))
             if previo.payslip_ids:
@@ -310,6 +336,126 @@ class L10nCoNeDocumento(models.Model):
         if self.etapa == 'ready':
             self.etapa = 'draft'   # cambió la composición: se revalida
 
+    # ──────────────────────────────────────────────────────────────────
+    # Cadena de notas de ajuste (doc 53 §23.16, precisión (e)): original → notas, por ``parent_id`` (sin parent_path)
+    # ──────────────────────────────────────────────────────────────────
+    def _ne_cadena(self):
+        """Documento original y todas las notas que cuelgan de él (directa o indirectamente), con guarda de ciclos."""
+        self.ensure_one()
+        raiz = self
+        vistos = {self.id}
+        while raiz.parent_id and raiz.parent_id.id not in vistos:
+            raiz = raiz.parent_id
+            vistos.add(raiz.id)
+        cadena = raiz
+        frontera = raiz
+        while frontera:
+            hijos = self.search([('parent_id', 'in', frontera.ids)]) - cadena
+            cadena |= hijos
+            frontera = hijos
+        return cadena
+
+    def _ne_ultimo_aceptado(self):
+        """Último documento ACEPTADO de la cadena (D9): el de intento aceptado más reciente que no esté eliminado ni
+        sea una nota Eliminar. Si no hay notas aceptadas, es el original."""
+        self.ensure_one()
+
+        def fecha(doc):
+            aceptados = doc.intento_ids.filtered(lambda i: i.state == 'invoice_accepted')
+            return (max((i.datetime or _dt.min) for i in aceptados) if aceptados else _dt.min, doc.id)
+
+        candidatos = self._ne_cadena().filtered(
+            lambda d: d.state == 'invoice_accepted' and not d.eliminado
+            and not (d.is_adjustment and d.adjustment_type == '2'))
+        return candidatos.sorted(fecha)[-1:]
+
+    def _ne_nota_en_curso(self):
+        """Notas de la cadena que todavía no terminaron: cualquiera cuyo estado DIAN no sea 'aceptado' (borrador,
+        listo, envío fallido, pendiente, incierta o rechazada sin regenerar)."""
+        self.ensure_one()
+        return self._ne_cadena().filtered(lambda d: d.is_adjustment and d.state != 'invoice_accepted')
+
+    def _ne_nota_abierta(self):
+        """Nota de la cadena que aún se puede componer: sin enviar (o con envío fallido) y fuera de la cola."""
+        self.ensure_one()
+        return self._ne_nota_en_curso().filtered(
+            lambda d: d.state in (False, 'invoice_sending_failed') and not d.is_being_sent and not d.incierto)[:1]
+
+    def _ne_componer_adoptados(self, recibos):
+        """Deja exactamente ``recibos`` como los recibos propios (adoptados) de la nota. NO toca el contrato (lo hereda de
+        la cadena): una nota sin recibos propios no lo pierde (precisión (a))."""
+        self.ensure_one()
+        sueltos = self.payslip_ids - recibos
+        if sueltos:
+            sueltos.write({'l10n_co_ne_documento_id': False})
+        nuevos = recibos - self.payslip_ids
+        if nuevos:
+            nuevos.write({'l10n_co_ne_documento_id': self.id})
+        if (sueltos or nuevos) and self.etapa == 'ready':
+            self.etapa = 'draft'   # cambió la composición: se revalida
+
+    def action_crear_ajuste(self, tipo, error_conocido_el=None):
+        """Crea la nota de ajuste en borrador sobre este documento aceptado (doc 53 §23.16). ``tipo``: '1' Reemplazar o
+        '2' Eliminar. No llama a la DIAN, no genera XML ni gasta consecutivo."""
+        self.ensure_one()
+        if self.legacy:
+            raise UserError(_('El documento "%s" se migró del ciclo por recibo: se ajusta por recibo, no por documento.',
+                              self.display_name))
+        if tipo not in ('1', '2'):
+            raise UserError(_('Tipo de nota de ajuste inválido: debe ser "1" (Reemplazar) o "2" (Eliminar).'))
+        hoy = fields.Date.context_today(self)
+        fecha = fields.Date.to_date(error_conocido_el) if error_conocido_el else hoy
+        if fecha > hoy:
+            raise UserError(_('La fecha en que se conoció el error no puede ser futura (%s).', fecha))
+        if self.is_adjustment:
+            raise UserError(_('"%s" es una nota de ajuste: la nota se crea desde el documento original.',
+                              self.display_name))
+        if self.eliminado:
+            raise UserError(_('El documento "%s" ya fue eliminado por una nota de ajuste.', self.display_name))
+        if self.state == 'invoice_rejected':
+            raise UserError(_('El documento "%s" fue rechazado: se corrige y se regenera, no lleva nota de ajuste.',
+                              self.display_name))
+        if self.state != 'invoice_accepted':
+            raise UserError(_('Solo se crean notas de ajuste para documentos aceptados por la DIAN; "%s" no lo está.',
+                              self.display_name))
+        cadena = self._ne_cadena()
+        if tipo == '2' and cadena.filtered(lambda d: d.is_adjustment and d.state == 'invoice_accepted'):
+            raise UserError(_('El documento "%s" ya tiene notas de ajuste aceptadas: por ahora no se crea una nota '
+                              'Eliminar sobre ellas (pendiente de definición normativa).', self.display_name))
+        en_curso = self._ne_nota_en_curso()
+        if en_curso:
+            raise UserError(_('Ya hay una nota de ajuste en curso para este documento: "%s". Termínela antes de crear '
+                              'otra.', en_curso[:1].display_name))
+        padre = self._ne_ultimo_aceptado()
+        nota = self.create({
+            'company_id': self.company_id.id, 'employee_id': self.employee_id.id, 'period': self.period,
+            'contract_id': self.contract_id.id, 'is_adjustment': True, 'adjustment_type': tipo,
+            'parent_id': padre.id, 'adjustment_ref_cune': padre.cune, 'error_conocido_el': fecha, 'etapa': 'draft'})
+        if tipo == '1':
+            nota._ne_componer_adoptados(
+                self._ne_recibos_del_mes(self.company_id, self.employee_id, self.period).filtered(
+                    lambda s: not s.l10n_co_ne_documento_id))
+        return nota
+
+    def _ne_abrir_nota(self, tipo):
+        nota = self.action_crear_ajuste(tipo)
+        return {'type': 'ir.actions.act_window', 'res_model': self._name, 'res_id': nota.id, 'view_mode': 'form',
+                'target': 'current'}
+
+    def action_crear_nota_reemplazar(self):
+        return self._ne_abrir_nota('1')
+
+    def action_crear_nota_eliminar(self):
+        return self._ne_abrir_nota('2')
+
+    @api.constrains('error_conocido_el')
+    def _check_error_conocido_el(self):
+        hoy = fields.Date.context_today(self)
+        for doc in self:
+            if doc.error_conocido_el and doc.error_conocido_el > hoy:
+                raise ValidationError(_('La fecha en que se conoció el error no puede ser futura (%s).',
+                                        doc.error_conocido_el))
+
     def _ne_validar(self):
         """Calcula las alertas (persistidas en ``alertas``) y pasa a 'ready' si no hay bloqueos. Alertas de esta
         etapa; las del XML (conciliación de totales, Salud/FondoPension) llegan con la etapa 3."""
@@ -337,6 +483,25 @@ class L10nCoNeDocumento(models.Model):
                 self._ne_validar_datos_recibo(slip)
             except UserError as error:
                 alerta('datos_%s' % slip.id, 'danger', str(error))
+        # Recibos propios cuya fecha de pago ya no cae en el mes del documento (cambio posterior a la transmisión).
+        if not self.legacy:
+            for slip in self.payslip_ids:
+                try:
+                    otro_mes = slip._ne_fecha_pago().replace(day=1) != self.period
+                except UserError:
+                    otro_mes = True
+                if otro_mes:
+                    alerta('recibo_otro_mes_%s' % slip.id, 'warning', _(
+                        'La fecha de pago del recibo %(recibo)s ya no cae en el mes del documento.',
+                        recibo=slip.display_name))
+        # Recibo pagado en el mes que no está en ningún documento y el original ya se transmitió (D-5): pide una nota.
+        if self.state and not self.is_adjustment and not self.legacy and not self.eliminado:
+            tardios = self._ne_recibos_del_mes(self.company_id, self.employee_id, self.period).filtered(
+                lambda s: not s.l10n_co_ne_documento_id)
+            if tardios:
+                alerta('recibo_tardio', 'warning', _(
+                    'Hay recibos pagados del mes que no están en ningún documento: %(recibos)s. Cree una nota de '
+                    'ajuste Reemplazar para incluirlos.', recibos=', '.join(tardios.mapped('display_name'))))
         # Recibos del mes que NO entraron (sin fecha de pago, en borrador...): ¿falta una quincena?
         fin = (self.period.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
         faltan = self.env['hr.payslip'].search([
@@ -931,6 +1096,8 @@ class L10nCoNeDocumento(models.Model):
                 raise UserError(_(
                     'El documento "%(doc)s" ya tiene historia ante la DIAN (CUNE, consecutivo o intentos) y no se '
                     'puede borrar. Si hay un error, cree una nota de ajuste.', doc=doc.display_name))
+        # Una nota en borrador suelta primero los recibos que adoptó (el M2O del recibo es ``restrict``).
+        self.filtered('is_adjustment').payslip_ids.write({'l10n_co_ne_documento_id': False})
         return super().unlink()
 
     # ──────────────────────────────────────────────────────────────────

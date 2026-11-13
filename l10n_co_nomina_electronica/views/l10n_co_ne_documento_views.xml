@@ -9,6 +9,13 @@
         <field name="arch" type="xml">
             <form string="Documento DIAN mensual" duplicate="0">
                 <header>
+                    <button name="action_crear_nota_reemplazar" type="object" string="Nota de Ajuste"
+                            invisible="state != 'invoice_accepted' or eliminado or legacy or is_adjustment"
+                            groups="hr_payroll.group_hr_payroll_manager"/>
+                    <button name="action_crear_nota_eliminar" type="object" string="Eliminar Documento"
+                            invisible="state != 'invoice_accepted' or eliminado or legacy or is_adjustment"
+                            confirm="Se creará una nota de ajuste de tipo Eliminar en borrador. ¿Continuar?"
+                            groups="hr_payroll.group_hr_payroll_manager"/>
                     <field name="etapa" widget="statusbar" statusbar_visible="draft,ready"/>
                 </header>
                 <sheet>
@@ -35,14 +42,14 @@
                             <field name="adjustment_type" string="Tipo de Nota de Ajuste" invisible="not is_adjustment"/>
                             <field name="adjustment_ref_cune" string="CUNE Nómina Original" invisible="not is_adjustment"/>
                             <field name="parent_id" invisible="not parent_id"/>
-                            <field name="error_conocido_el" invisible="not is_adjustment"/>
+                            <field name="error_conocido_el" invisible="not is_adjustment" readonly="state"/>
                         </group>
                     </group>
                     <field name="alertas_texto" invisible="not alertas"/>
                     <field name="alertas" invisible="1"/>
                     <notebook>
                         <page string="Recibos" name="recibos">
-                            <field name="payslip_ids" readonly="1">
+                            <field name="recibo_xml_ids" readonly="1">
                                 <list string="Recibos incluidos">
                                     <field name="number"/>
                                     <field name="employee_id"/>
