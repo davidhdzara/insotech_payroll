@@ -45,7 +45,10 @@ class TestPayslipSendCorreo(DocumentoFixture, TransactionCase):
         self.recibos.write({'l10n_co_ne_documento_id': False})
         self.slip = self.recibos[0]
         contacto = self.env['res.partner'].create({'name': 'Contacto trabajo', 'email': 'contacto@ejemplo.co'})
-        self.slip.employee_id.write({'work_contact_id': contacto.id, 'work_email': 'otro@ejemplo.co'})
+        # En Odoo 18 work_email ES el email del contacto de trabajo (related con inverse): no son dos datos distintos.
+        # Escribir un work_email distinto junto con el contacto pisaba el correo del contacto (causa de reg_ak).
+        self.slip.employee_id.write({'work_contact_id': contacto.id})
+        self.assertEqual(self.slip.employee_id.work_contact_id.email, 'contacto@ejemplo.co')
 
     def _asistente(self, recibos=None, **vals):
         datos = {'payslip_ids': [(6, 0, (recibos or self.slip).ids)], 'checkbox_send_dian': False,
@@ -83,7 +86,6 @@ class TestPayslipSendCorreo(DocumentoFixture, TransactionCase):
         correo = self._correos()
         self.assertEqual(len(correo), 1)
         self.assertEqual(correo.state, 'outgoing')                  # cola nativa, sin force_send
-        self.assertFalse(self._correos('otro@ejemplo.co'))           # no work_email
 
     def test_defecto_correo_condicionado_al_estado_dian(self):
         """El recibo NO está aceptado por la DIAN (ciclo por recibo en borrador): la colilla sale igual."""
