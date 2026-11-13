@@ -63,3 +63,24 @@ class TestVistasPorPais(TransactionCase):
                       'l10n_co_alcanza_prestaciones', 'l10n_co_alcanza_indemnizacion'):
             self.assertIn("l10n_co_company_country_code != 'CO'", self._invisible(
                 asignacion, "//field[@name='%s']" % campo), campo)
+
+    # ── Grupos de los menús propios = acceso del modelo (corrección de permisos de menús) ──
+    def _grupos_del_menu(self, xmlid):
+        return set(self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).groups_id.get_external_id().values())
+
+    def test_menus_pila_y_retefuente_tienen_el_grupo_de_su_modelo(self):
+        # Generar PILA Completo: el asistente solo da acceso al gerente de nómina.
+        self.assertEqual(self._grupos_del_menu('menu_l10n_co_hr_pila_wizard_v2'),
+                         {'hr_payroll.group_hr_payroll_manager'})
+        # Planillas PILA y Retención en la Fuente: lectura para nómina (usuario), CRUD para el gerente.
+        self.assertEqual(self._grupos_del_menu('menu_l10n_co_pila_planilla'), {'hr_payroll.group_hr_payroll_user'})
+        self.assertEqual(self._grupos_del_menu('l10n_co_retefuente_menu'), {'hr_payroll.group_hr_payroll_user'})
+
+    def test_un_usuario_de_nomina_sin_gerente_no_ve_generar_pila_completo(self):
+        usuario = self.env['res.users'].create({
+            'name': 'Usuario nómina sin gerente', 'login': 'usuario_nomina_sin_gerente',
+            'groups_id': [(6, 0, [self.env.ref('base.group_user').id,
+                                  self.env.ref('hr_payroll.group_hr_payroll_user').id])]})
+        self.assertFalse(usuario.has_group('hr_payroll.group_hr_payroll_manager'))
+        menu = self.env.ref('l10n_co_nomina_electronica.menu_l10n_co_hr_pila_wizard_v2')
+        self.assertNotIn(menu.id, self.env['ir.ui.menu'].with_user(usuario)._visible_menu_ids())

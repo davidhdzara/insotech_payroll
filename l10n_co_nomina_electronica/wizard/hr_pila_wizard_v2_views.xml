@@ -222,6 +222,7 @@
               name="Generar PILA Completo"
               parent="menu_l10n_co_nomina_reportes"
               action="action_l10n_co_hr_pila_wizard_v2"
-              sequence="21"/>
+              sequence="21"
+              groups="hr_payroll.group_hr_payroll_manager"/>
 
 </odoo>

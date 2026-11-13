@@ -67,5 +67,6 @@
               name="Planillas PILA"
               parent="menu_l10n_co_nomina_reportes"
               action="action_l10n_co_pila_planilla"
-              sequence="22"/>
+              sequence="22"
+              groups="hr_payroll.group_hr_payroll_user"/>
 </odoo>
