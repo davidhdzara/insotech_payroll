@@ -581,13 +581,19 @@ class L10nCoNeDocumento(models.Model):
                 '(toma un consecutivo nuevo): el mismo XML no se reenvía.', self.display_name))
         if self.etapa != 'ready' or not (self.cune and self.consecutive and self.xml_attachment_id):
             raise UserError(_('Genere el XML del documento "%s" antes de enviarlo.', self.display_name))
+        self._ne_bloquear_en_habilitacion()
+        self.company_id._l10n_co_ne_validar_config()
+
+    def _ne_bloquear_en_habilitacion(self):
+        """El documento mensual solo habla con la DIAN en Producción hasta la etapa 5 (D-b): una compañía en ambiente
+        de pruebas o con el proceso de certificación activo se atiende por recibo."""
+        self.ensure_one()
         company = self.company_id
         if company.l10n_co_ne_environment == '2' or company.l10n_co_ne_certification_process:
             raise UserError(_(
                 'La compañía "%s" está en habilitación (ambiente de pruebas o proceso de certificación): en '
-                'habilitación el envío es por recibo hasta que el documento mensual pase a habilitación. El '
-                'documento mensual solo se transmite en Producción.', company.name))
-        company._l10n_co_ne_validar_config()
+                'habilitación el ciclo es por recibo hasta que el documento mensual pase a habilitación. El '
+                'documento mensual solo se transmite y se consulta en Producción.', company.name))
 
     def _ne_enviar_uno(self):
         """Envía UN documento a la DIAN y registra el resultado en un intento nuevo.
@@ -641,6 +647,122 @@ class L10nCoNeDocumento(models.Model):
             body=_('Envío a la DIAN: %s.', dict(intento._fields['state'].selection).get(estado)),
             message_type='comment', subtype_xmlid='mail.mt_note')
         return intento
+
+    # ──────────────────────────────────────────────────────────────────
+    # Reconsultar el estado en la DIAN (doc 53 §23.12 3.2, §23.3)
+    # ──────────────────────────────────────────────────────────────────
+    def _ne_precondiciones_consulta(self):
+        """UserError local, ANTES de tocar la DIAN. Devuelve el intento que se consulta (el último)."""
+        self.ensure_one()
+        if self.legacy:
+            raise UserError(_('El documento "%s" es un documento migrado del ciclo por recibo: se consulta por '
+                              'recibo.', self.display_name))
+        if self.eliminado:
+            raise UserError(_('El documento "%s" ya fue eliminado por una nota de ajuste.', self.display_name))
+        intento = self._ultimo_intento()
+        if not intento:
+            raise UserError(_('El documento "%s" no se ha enviado a la DIAN: no hay nada que consultar.',
+                              self.display_name))
+        if intento.state in ('invoice_accepted', 'invoice_rejected'):
+            raise UserError(_('El último envío del documento "%(doc)s" ya tiene veredicto de la DIAN (%(estado)s).',
+                              doc=self.display_name,
+                              estado=dict(intento._fields['state'].selection).get(intento.state)))
+        if not intento.zip_key:
+            raise UserError(_('El último envío del documento "%s" no tiene ZipKey: no se puede consultar su estado.',
+                              self.display_name))
+        self._ne_bloquear_en_habilitacion()
+        self.company_id._l10n_co_ne_validar_config()
+        return intento
+
+    def _ne_respuesta_es_de_este_documento(self, respuesta, intento):
+        """Un ZIP = un documento. Si la respuesta trae un identificador (CUNE; si no, número), debe ser el de este
+        envío; sin identificadores se identifica por el ZipKey consultado."""
+        cunes = dian_respuesta.candidatos_cune(respuesta)
+        if cunes:
+            return intento.identifier in cunes
+        numeros = dian_respuesta.candidatos_numero(respuesta)
+        if numeros:
+            return intento.numero in numeros
+        return True
+
+    def _ne_nota_una_vez(self, texto, clave):
+        """Aviso en el chatter sin repetirlo en cada consulta (el cron reconsulta cada pocos minutos). ``clave`` es
+        una frase fija del aviso, sin comillas ni símbolos HTML (el cuerpo se guarda escapado)."""
+        self.ensure_one()
+        if not self.message_ids.filtered(lambda m: m.body and clave in str(m.body)):
+            self.message_post(body=texto, message_type='comment', subtype_xmlid='mail.mt_note')
+
+    def _ne_reconsultar(self):
+        """Consulta a la DIAN el estado del último envío (``GetStatusZip`` por su ZipKey) y lo aplica.
+
+        - ``aceptado`` / ``rechazado``: actualiza el MISMO intento (no crea otro) y limpia ``incierto``.
+        - ``pendiente``: el intento sigue pendiente; pasadas ``recheck_max_hours`` desde el envío, el documento queda
+          ``incierto`` (sale de la reconsulta automática y se concilia a mano).
+        - ``nivel_set``: la DIAN respondió sobre el SET de pruebas, no sobre este documento: no resuelve nada.
+        - ``error_transporte``: no cambia el estado.
+        - Respuesta de otro documento (CUNE distinto) o con varios resultados: no cambia el estado y avisa.
+        Siempre guarda la evidencia de la consulta (inmutable). Lanza UserError solo por precondiciones locales.
+
+        Returns:
+            ``dian_respuesta.ResultadoDian`` de la consulta.
+        """
+        self.ensure_one()
+        intento = self._ne_precondiciones_consulta()
+        company = self.company_id
+        llave, cert_pem, _der, _cert_obj, _cadena = xml_signer.load_from_certificate(company._get_ne_certificate())
+        endpoint = company._ne_dian_endpoint()
+        respuesta = soap_client.get_status_zip(
+            track_id=intento.zip_key, private_key=llave, cert_pem=cert_pem, endpoint=endpoint,
+            timeout=company._ne_config_int_param(
+                'l10n_co_nomina_electronica.soap_timeout_seconds', soap_client.SOAP_TIMEOUT))
+        resultado = dian_respuesta.interpretar_respuesta(respuesta, contexto=dian_respuesta.CONTEXTO_CONSULTA)
+        self.env['l10n.co.ne.exchange'].create_exchange(
+            company, 'get_status_zip', endpoint, respuesta, self.payslip_ids, queried_zip_key=intento.zip_key,
+            parent_exchange=intento.exchange_id, documento=self)
+        veredicto = resultado.veredicto
+        if veredicto == dian_respuesta.ERROR_TRANSPORTE:
+            return resultado
+        if veredicto == dian_respuesta.NIVEL_SET:
+            self._ne_nota_una_vez(_(
+                'La DIAN respondió sobre el SET de pruebas, no sobre este documento: %s. No se cambia el estado.',
+                resultado.mensaje), 'respondió sobre el SET de pruebas')
+            return resultado
+        if len(respuesta.get('DianResponses') or []) > 1:
+            self._ne_nota_una_vez(_(
+                'La DIAN devolvió varios resultados para un envío de un solo documento: no se cambia el estado. '
+                'Revise la evidencia de la consulta.'), 'varios resultados para un envío')
+            return resultado
+        if veredicto in (dian_respuesta.ACEPTADO, dian_respuesta.RECHAZADO) \
+                and not self._ne_respuesta_es_de_este_documento(respuesta, intento):
+            self._ne_nota_una_vez(_(
+                'La respuesta de la DIAN corresponde a otro documento (no coincide el CUNE del envío): no se cambia '
+                'el estado. Revise la evidencia de la consulta.'), 'corresponde a otro documento')
+            return resultado
+        message_json = dian_message.build_message_json(respuesta)
+        if veredicto in (dian_respuesta.ACEPTADO, dian_respuesta.RECHAZADO):
+            intento.write({'state': _ESTADO_INTENTO_POR_VEREDICTO[veredicto], 'message_json': message_json})
+            if self.incierto:
+                self.incierto = False                    # el veredicto concilió el envío incierto
+            self.message_post(
+                body=_('Consulta a la DIAN: %s.', dict(intento._fields['state'].selection).get(intento.state)),
+                message_type='comment', subtype_xmlid='mail.mt_note')
+            return resultado
+        # pendiente
+        vals = {}
+        if intento.state != 'invoice_pending':
+            vals['state'] = 'invoice_pending'
+        if intento.message_json != message_json:
+            vals['message_json'] = message_json
+        if vals:
+            intento.write(vals)
+        horas = company._ne_config_int_param('l10n_co_nomina_electronica.recheck_max_hours', 72)
+        if not self.incierto and intento.datetime and fields.Datetime.now() - intento.datetime > timedelta(hours=horas):
+            self.incierto = True
+            self.message_post(
+                body=_('La DIAN no dio veredicto en %s horas: el envío queda incierto y sale de la reconsulta '
+                       'automática. Consulte su estado a mano.', horas),
+                message_type='comment', subtype_xmlid='mail.mt_note')
+        return resultado
 
     # ──────────────────────────────────────────────────────────────────
     # Restricciones

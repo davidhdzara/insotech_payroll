@@ -10,9 +10,10 @@ Valores a mano: el documento de marzo 2026 con dos quincenas del fixture de ``te
 import base64
 import copy
 import hashlib
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+from odoo import fields
 from odoo.exceptions import AccessError, UserError
 from odoo.tests.common import TransactionCase, tagged
 
@@ -68,6 +69,8 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
         self._patch(nomina_xml_builder, 'build_nomina_individual_v2', lambda datos: XML_STUB)
         self.soap = MagicMock(name='send_nomina_sync')
         self._patch(soap_client, 'send_nomina_sync', self.soap)
+        self.consulta = MagicMock(name='get_status_zip')
+        self._patch(soap_client, 'get_status_zip', self.consulta)
         self.doc = self._documento(date(2024, 3, 1))
         self.doc._ne_validar()
         self.doc.action_generar_xml()                     # NE00000015, listo para enviar
@@ -299,3 +302,159 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
         intento = self.doc.with_company(otra)._ne_enviar_uno()
         self.assertEqual(intento.exchange_id.company_id, self.company)
         self.assertEqual(self.soap.call_args.kwargs['endpoint'], self.company._ne_dian_endpoint())
+
+    # ══ Reconsultar (commit 5, doc 53 §23.12 3.2): contexto 'consulta' ═══════════════════════════════════
+    def _pendiente(self):
+        """Documento enviado con respuesta "en proceso" (ZipKey 'abc'): un intento pendiente."""
+        return self._enviar(PENDIENTE)
+
+    def _consultar(self, respuesta):
+        self.consulta.return_value = respuesta
+        return self.doc._ne_reconsultar()
+
+    def _aceptada_de_este_documento(self):
+        return dict(ACEPTADA, ZipKey='abc', XmlDocumentKey=self.doc.cune)
+
+    def _no_consulta(self):
+        intentos = len(self.doc.intento_ids)
+        with self.assertRaises(UserError) as exc:
+            self.doc._ne_reconsultar()
+        self.consulta.assert_not_called()
+        self.assertEqual(len(self.doc.intento_ids), intentos)
+        return str(exc.exception)
+
+    def test_consulta_pendiente_pasa_a_aceptado_en_el_mismo_intento(self):
+        intento = self._pendiente()
+        resultado = self._consultar(self._aceptada_de_este_documento())
+        self.assertEqual(resultado.veredicto, 'aceptado')
+        self.assertEqual(len(self.doc.intento_ids), 1)                   # NO crea otro intento
+        self.assertEqual(intento.state, 'invoice_accepted')
+        self.assertTrue(intento.message_json['is_valid'])
+        self.assertEqual(self.doc.state, 'invoice_accepted')
+        self.assertIn('Procesado Correctamente.', self.doc.message)
+
+    def test_consulta_guarda_la_evidencia_enlazada_a_la_del_envio(self):
+        intento = self._pendiente()
+        self._consultar(self._aceptada_de_este_documento())
+        consulta = self.doc.exchange_ids.filtered(lambda e: e.operation == 'get_status_zip')
+        self.assertEqual(len(consulta), 1)
+        self.assertEqual(consulta.queried_zip_key, 'abc')
+        self.assertEqual(consulta.parent_exchange_id, intento.exchange_id)
+        self.assertEqual(consulta.payslip_ids, self.doc.payslip_ids)
+        self.assertEqual(len(self.doc.exchange_ids), 2)                  # envío + consulta
+
+    def test_consulta_pendiente_a_rechazado_con_la_regla(self):
+        intento = self._pendiente()
+        self._consultar(dict(RECHAZO, ZipKey='abc'))
+        self.assertEqual(intento.state, 'invoice_rejected')
+        self.assertIn('NIAE191a', self.doc.message)
+        self.assertEqual(self.doc.state, 'invoice_rejected')
+        self.assertEqual(len(self.doc.intento_ids), 1)
+
+    def test_consulta_que_sigue_pendiente_no_cambia_nada(self):
+        intento = self._pendiente()
+        resultado = self._consultar(PENDIENTE)
+        self.assertEqual(resultado.veredicto, 'pendiente')
+        self.assertEqual(intento.state, 'invoice_pending')
+        self.assertEqual(self.doc.state, 'invoice_pending')
+        self.assertFalse(self.doc.incierto)
+        self.assertEqual(len(self.doc.intento_ids), 1)
+
+    def test_respuesta_de_nivel_set_no_resuelve_y_avisa_una_sola_vez(self):
+        intento = self._pendiente()
+        conjunto = {'StatusCode': '2', 'IsValid': 'false', 'ZipKey': 'abc',
+                    'StatusDescription': 'Set de prueba con identificador e07c1748 se encuentra Aceptado.',
+                    'DianResponses': [{'StatusCode': '2', 'IsValid': 'false', 'ErrorMessages': []}]}
+        self.assertEqual(self._consultar(conjunto).veredicto, 'nivel_set')
+        self.assertEqual(intento.state, 'invoice_pending')
+        self.assertFalse(self.doc.incierto)
+        avisos = len(self.doc.message_ids)
+        self._consultar(conjunto)
+        self.assertEqual(len(self.doc.message_ids), avisos)              # el aviso no se repite en cada consulta
+
+    def test_fallo_de_transporte_en_la_consulta_no_cambia_el_estado(self):
+        intento = self._pendiente()
+        self.assertEqual(self._consultar(CONEXION).veredicto, 'error_transporte')
+        self.assertEqual(intento.state, 'invoice_pending')
+        self.assertEqual(self.doc.state, 'invoice_pending')
+        self.assertTrue(self.doc.exchange_ids.filtered(lambda e: e.operation == 'get_status_zip'))
+
+    def test_respuesta_con_el_cune_de_otro_documento_no_resuelve(self):
+        intento = self._pendiente()
+        self._consultar(dict(ACEPTADA, ZipKey='abc', XmlDocumentKey='OTRO-CUNE'))
+        self.assertEqual(intento.state, 'invoice_pending')
+        self.assertEqual(self.doc.state, 'invoice_pending')
+        self.assertTrue(any('corresponde a otro documento' in str(m.body) for m in self.doc.message_ids))
+
+    def test_varios_resultados_para_un_documento_no_resuelve(self):
+        intento = self._pendiente()
+        uno = {'IsValid': 'true', 'StatusCode': '00'}
+        self._consultar({'DianResponses': [uno, dict(uno)], 'ZipKey': 'abc', 'IsValid': 'true', 'StatusCode': '00'})
+        self.assertEqual(intento.state, 'invoice_pending')
+
+    def test_pasadas_las_horas_maximas_sin_veredicto_queda_incierto(self):
+        intento = self._pendiente()
+        self.env['ir.config_parameter'].sudo().set_param('l10n_co_nomina_electronica.recheck_max_hours', '1')
+        self._consultar(PENDIENTE)
+        self.assertFalse(self.doc.incierto)                              # recién enviado: todavía dentro del plazo
+        intento.datetime = fields.Datetime.now() - timedelta(hours=2)
+        self._consultar(PENDIENTE)
+        self.assertTrue(self.doc.incierto)
+        self.assertEqual(self.doc.state, 'uncertain')
+
+    def test_un_veredicto_concilia_el_envio_incierto(self):
+        self._pendiente()
+        self.doc.incierto = True
+        self.assertEqual(self.doc.state, 'uncertain')
+        self._consultar(self._aceptada_de_este_documento())
+        self.assertFalse(self.doc.incierto)
+        self.assertEqual(self.doc.state, 'invoice_accepted')
+
+    def test_desde_un_fallo_de_envio_con_zip_key_pasa_a_pendiente(self):
+        fallido = self._intento('invoice_sending_failed', zip_key='z9', identifier=self.doc.cune,
+                                numero=self.doc.consecutive)
+        self._consultar(dict(PENDIENTE, ZipKey='z9'))
+        self.assertEqual(fallido.state, 'invoice_pending')
+        self.assertEqual(self.doc.state, 'invoice_pending')
+
+    def test_la_consulta_llama_a_get_status_zip_con_el_zip_key_y_no_envia(self):
+        self._pendiente()
+        self.soap.reset_mock()
+        self._consultar(PENDIENTE)
+        self.consulta.assert_called_once()
+        kwargs = self.consulta.call_args.kwargs
+        self.assertEqual(kwargs['track_id'], 'abc')
+        self.assertEqual(kwargs['endpoint'], self.company._ne_dian_endpoint())
+        self.soap.assert_not_called()
+
+    # ── precondiciones de la consulta ────────────────────────────────
+    def test_consulta_de_un_documento_no_enviado(self):
+        self.assertIn('no se ha enviado', self._no_consulta())
+
+    def test_consulta_sin_zip_key(self):
+        self._enviar(CONEXION)                                           # fallo de envío: sin ZipKey
+        self.assertIn('ZipKey', self._no_consulta())
+
+    def test_consulta_con_veredicto_ya_dado(self):
+        self._enviar(ACEPTADA)
+        self.assertIn('ya tiene veredicto', self._no_consulta())
+
+    def test_consulta_de_legacy_y_eliminado(self):
+        self._pendiente()
+        self.doc.legacy = True
+        self.assertIn('migrado', self._no_consulta())
+        self.doc.legacy = False
+        self.doc.eliminado = True
+        self.assertIn('eliminado', self._no_consulta())
+
+    def test_consulta_en_habilitacion_se_bloquea_y_nombra_la_compania(self):
+        self._pendiente()
+        self.company.l10n_co_ne_environment = '2'
+        self.assertIn(self.company.name, self._no_consulta())
+
+    def test_consulta_con_configuracion_incompleta_propaga_el_error(self):
+        self._pendiente()
+        with patch.object(type(self.company), '_l10n_co_ne_validar_config',
+                          side_effect=UserError('config incompleta')):
+            self.assertIn('config incompleta', self._no_consulta())
+
