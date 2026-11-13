@@ -313,7 +313,7 @@ class L10nCoNeDocumento(models.Model):
             alerta('sin_recibos', 'danger', _('El documento no tiene recibos pagados en el mes.'))
         # Datos incompletos: los mismos prerrequisitos del ciclo por recibo, sin sus chequeos de estado.
         try:
-            self.env['hr.payslip']._validate_company_ne_config(self.company_id)
+            self.company_id._l10n_co_ne_validar_config()
         except UserError as error:
             alerta('compania', 'danger', str(error))
         for slip in self.payslip_ids:

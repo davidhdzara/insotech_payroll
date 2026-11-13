@@ -93,7 +93,7 @@ class TestDocumentoGenerar(DocumentoFixture, TransactionCase):
             return datos
         self._patch(type(self.env['hr.payslip']), '_collect_payslip_data', lambda s: fabrica(s))
         self._patch(dian_utils, 'compute_software_security_code', lambda *a: 'SC')
-        self._patch(type(self.env['hr.payslip']), '_validate_company_ne_config', lambda s, *a, **k: None)
+        self._patch(type(self.company), '_l10n_co_ne_validar_config', lambda s, *a, **k: None)
         self._patch(type(self.env['l10n.co.ne.documento']), '_ne_validar_datos_recibo', lambda s, slip: None)
         self._patch(type(self.company), '_get_ne_certificate', lambda s: True)
         self._patch(dian_utils, 'clean_nit', lambda *a, **k: '900123456')

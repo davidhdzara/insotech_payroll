@@ -1276,47 +1276,9 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         employee._l10n_co_nombre_dian()
 
     def _validate_company_ne_config(self, company):
-        """Valida la configuración de nómina electrónica de la empresa."""
-        missing = []
-        mode = company.l10n_co_ne_operation_mode_ids
-        if not mode or not mode.software_id:
-            missing.append(_('ID Software Nómina'))
-        if not mode or not mode.software_pin:
-            missing.append(_('PIN Software Nómina'))
-        if not company._get_ne_certificate():
-            missing.append(_('Certificado Digital'))
-        if missing:
-            raise UserError(_(
-                'Faltan los siguientes datos de configuración de nómina '
-                'electrónica en la empresa %s:\n• %s',
-                company.name,
-                '\n• '.join(missing),
-            ))
-
-        certificate = company._get_ne_certificate()
-        if certificate and certificate.date_end and certificate.date_end < fields.Datetime.now():
-            raise UserError(_(
-                'El certificado digital de la empresa %s está vencido '
-                '(venció el %s). Cargue o seleccione un certificado '
-                'vigente antes de continuar.',
-                company.name,
-                certificate.date_end,
-            ))
-
-        # AUD-DIAN-34 (2026-10-05): el Anexo Técnico (NIE030) es explícito -- "Para Colombia
-        # se debe colocar 'COP'" en TipoMoneda, sin excepción. No se parametriza: es una
-        # constante del Anexo (nomina_xml_builder.NE_TIPO_MONEDA), así que una compañía en
-        # otra moneda debe fallar aquí, antes de generar un XML inválido, en vez de enviar
-        # "COP" por encima de montos que en realidad están en otra moneda.
-        if company.currency_id.name != nomina_xml_builder.NE_TIPO_MONEDA:
-            raise UserError(_(
-                'La compañía %(company)s tiene moneda "%(currency)s" configurada, pero la '
-                'Nómina Electrónica DIAN exige TipoMoneda="%(cop)s" (Anexo Técnico, NIE030: '
-                '"Para Colombia se debe colocar \'%(cop)s\'"). Configure la compañía en '
-                'pesos colombianos antes de generar nómina electrónica.',
-                company=company.name, currency=company.currency_id.name,
-                cop=nomina_xml_builder.NE_TIPO_MONEDA,
-            ))
+        """Envoltorio: la validación vive en ``res.company._l10n_co_ne_validar_config()`` (doc 53
+        §23.13); se conserva el nombre para el ciclo por recibo, la habilitación y las pruebas."""
+        return company._l10n_co_ne_validar_config()
 
     def _ne_expected_prefix(self):
         """Prefijo que DEBE tener un consecutivo oficial de este payslip.

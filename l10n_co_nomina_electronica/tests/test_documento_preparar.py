@@ -54,10 +54,9 @@ class TestDocumentoPreparar(TransactionCase):
     def setUp(self):
         super().setUp()
         # Los prerrequisitos de certificado/software/cuenta se prueban aparte; aqui se aislan.
-        for objetivo in ('_validate_company_ne_config',):
-            patcher = patch.object(type(self.env['hr.payslip']), objetivo, lambda s, *a, **k: None)
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        patcher = patch.object(type(self.company), '_l10n_co_ne_validar_config', lambda s, *a, **k: None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         patcher = patch.object(type(self.env['l10n.co.ne.documento']), '_ne_validar_datos_recibo', lambda s, slip: None)
         patcher.start()
         self.addCleanup(patcher.stop)
