@@ -388,6 +388,38 @@ class TestDocumentoModelo(TransactionCase):
             else:
                 self.assertFalse(oculto(1, estado), '%s: ciclo viejo ya transmitido lo conserva' % texto)
 
+    # ── Bloqueo del ciclo por recibo cuando el recibo va en un documento mensual (doc 53 §23.6) ──
+    def test_el_ciclo_por_recibo_se_bloquea_si_el_recibo_va_en_un_documento_no_legacy(self):
+        doc = self._documento(3)
+        slip = self._recibo(3)
+        slip.l10n_co_ne_documento_id = doc
+        for metodo in ('action_generate_ne_xml', 'action_send_ne_dian', 'action_regenerate_ne_xml',
+                       'action_check_dian_status', 'action_send_test_set', 'action_create_adjustment',
+                       'action_create_elimination'):
+            with self.subTest(metodo=metodo):
+                with self.assertRaises(UserError) as exc:
+                    getattr(slip, metodo)()
+                self.assertIn(doc.display_name, str(exc.exception))      # nombra el documento, no un código
+                self.assertIn('documento mensual', str(exc.exception))
+        self.assertEqual(slip.l10n_co_ne_state, 'draft')                  # el bloqueo no deja el recibo a medias
+
+    def test_un_recibo_sin_documento_no_se_bloquea(self):
+        slip = self._recibo(3)
+        self.assertFalse(slip.l10n_co_ne_documento_id)
+        self.assertIsNone(slip._ne_bloquear_si_va_en_documento())
+        # y su ciclo sigue siendo el de hoy: sin XML generado no hay nada que consultar (error propio, no el bloqueo)
+        with self.assertRaises(UserError) as exc:
+            slip.action_check_dian_status()
+        self.assertNotIn('documento mensual', str(exc.exception))
+
+    def test_un_recibo_con_documento_legacy_conserva_su_ciclo(self):
+        slip = self._legacy(3, 'accepted', l10n_co_ne_cune=CUNE_A, l10n_co_ne_consecutive='NE1')
+        self.env['l10n.co.ne.documento']._ne_migrar_legacy(slip)
+        self.assertTrue(slip.l10n_co_ne_documento_id.legacy)
+        self.assertIsNone(slip._ne_bloquear_si_va_en_documento())
+        accion = slip.action_create_adjustment()                          # aceptado por recibo: abre el formulario
+        self.assertEqual(accion['res_model'], 'hr.payslip')
+
     def test_menu_del_documento_cuelga_de_los_recibos(self):
         menu = self.env.ref('l10n_co_nomina_electronica.menu_l10n_co_ne_documento')
         self.assertEqual(menu.parent_id, self.env.ref('hr_payroll.menu_hr_payroll_payslips'))

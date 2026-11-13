@@ -120,6 +120,18 @@ class HrPayslip(models.Model):
     l10n_co_ne_documento_message = fields.Html(
         related='l10n_co_ne_documento_id.message', string='Motivo DIAN', readonly=True)
 
+    def _ne_bloquear_si_va_en_documento(self):
+        """El ciclo DIAN por recibo (generar, enviar, regenerar, consultar, ajustar) no corre para un recibo que se
+        reporta en un documento mensual no migrado: sin esto el mismo pago se transmitiría dos veces, solo y dentro del
+        mes (doc 53 §23.6). Un recibo sin documento o con documento *legacy* (ya transmitido por recibo) sigue igual."""
+        for slip in self:
+            doc = slip.l10n_co_ne_documento_id
+            if doc and not doc.legacy:
+                raise UserError(_(
+                    'El recibo "%(recibo)s" se reporta en el documento mensual "%(doc)s": se genera, se envía y se '
+                    'consulta desde el documento, no por recibo.',
+                    recibo=slip.display_name, doc=doc.display_name))
+
     @api.constrains('l10n_co_ne_documento_id', 'company_id', 'employee_id', 'credit_note')
     def _check_documento_coherente(self):
         """Un recibo del documento mensual es de la misma compañía y empleado, y no es nota de crédito. Los

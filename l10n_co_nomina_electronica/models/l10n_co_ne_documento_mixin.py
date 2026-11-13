@@ -362,6 +362,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         9. Actualiza estado a ``generated``.
         """
         self.ensure_one()
+        self._ne_bloquear_si_va_en_documento()
         self._validate_ne_prerequisites()
 
         # Asignar consecutivo oficial si no tiene uno, si es el temporal
@@ -458,6 +459,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         5. Actualiza estado según resultado (accepted/rejected).
         """
         self.ensure_one()
+        self._ne_bloquear_si_va_en_documento()
         if self.l10n_co_ne_state not in ('generated', 'rejected'):
             raise UserError(_(
                 'Solo puede enviar a la DIAN documentos en estado '
@@ -606,6 +608,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
 
     def _ne_open_adjustment_form(self, tipo):
         self.ensure_one()
+        self._ne_bloquear_si_va_en_documento()
         if self.l10n_co_ne_state != 'accepted':
             raise UserError(_(
                 'Solo puede crear notas de ajuste para nóminas aceptadas '
@@ -692,6 +695,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         reenviable tal cual, sin regenerar) y las envía como un set de
         pruebas al endpoint de habilitación.
         """
+        self._ne_bloquear_si_va_en_documento()
         records = self.filtered(
             lambda p: p.l10n_co_ne_state in ('generated', 'uncertain')
         )
@@ -840,6 +844,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         Un documento rechazado o con el SoftwareID/TestSetId desactualizado no se puede reenviar
         tal cual: la DIAN devolvería el mismo veredicto viejo (regla 90, "procesado anteriormente").
         """
+        self._ne_bloquear_si_va_en_documento()
         for slip in self:
             if slip.l10n_co_ne_state in ('sent', 'accepted'):
                 raise UserError(_(
@@ -860,6 +865,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         """Consulta una vez por ZipKey y distribuye solo resultados inequívocos."""
         if not self:
             return True
+        self._ne_bloquear_si_va_en_documento()
         companies = self.mapped('company_id')
         if len(companies) != 1:
             raise UserError(_('Seleccione nóminas de una sola compañía para consultar DIAN.'))
