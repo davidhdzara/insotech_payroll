@@ -70,7 +70,7 @@ class TestHoraBogota(TransactionCase):
         cls.company.l10n_co_ne_sequence_id = env['ir.sequence'].create({
             'name': 'Secuencia NE hora', 'prefix': 'NE', 'padding': 8, 'number_next': 1,
             'implementation': 'no_gap', 'company_id': cls.company.id})
-        tipo_id = env['l10n_latam.identification.type'].search([('l10n_co_ne_dian_document_code', '!=', False)], limit=1)
+        tipo_id = env.ref('l10n_co.national_citizen_id')   # Cedula: un trabajador no se identifica con NIT (alerta tipo_documento_trabajador)
         tipo = env['hr.payroll.structure.type'].create({'name': 'Tipo Hora Bogotá', 'country_id': pais.id})
         cls.empleado = env['hr.employee'].create({
             'name': 'Juan Perez', 'company_id': cls.company.id, 'identification_id': '1020304050',

@@ -773,6 +773,15 @@ class L10nCoNeDocumento(models.Model):
             datos = self._collect_documento_data(consecutivo='PRE')
         except UserError as error:
             return [{'key': 'xml', 'level': 'danger', 'message': str(error)}]
+        nit = self.env.ref('l10n_co.rut', raise_if_not_found=False)
+        if nit and self.employee_id.work_contact_id.l10n_latam_identification_type_id == nit:
+            # Anexo, tabla 5.2.1: el codigo 31 (NIT) pasa el esquema, pero un trabajador (persona natural) se identifica
+            # con Cedula, PPT, Cedula de extranjeria o Pasaporte: regla de negocio de InSoTech (David, 2026-11-14).
+            alertas.append({'key': 'tipo_documento_trabajador', 'level': 'danger', 'message': _(
+                'El empleado %(empleado)s está identificado con NIT. Un trabajador (persona natural) se identifica con '
+                'Cédula de ciudadanía, Cédula de extranjería, PPT o Pasaporte: corrija el Tipo de documento en '
+                'Contactos (contacto de trabajo del empleado) antes de enviar. El código 31 (NIT) pasa el esquema del '
+                'Anexo (tabla 5.2.1) pero no corresponde a un trabajador.', empleado=self.employee_id.name)})
         if self.is_adjustment and self.adjustment_type == '2':
             return alertas   # <Eliminar> no lleva totales ni deducciones: no hay nada que conciliar
         dif_dev, dif_ded = documento_merge.diferencias_nodos(datos)

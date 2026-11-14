@@ -155,3 +155,34 @@ class TestDocumentoXml(DocumentoFixture, TransactionCase):
                 patch.object(dian_utils, 'compute_software_security_code', lambda *a: 'SC'):
             datos = slip._collect_payslip_data()
         self.assertEqual(datos['periodo']['TiempoLaborado'], '750')   # el calendario daba 760
+
+    # ── Tipo de documento del trabajador (Frente 6, doc 59 §18) ──────────
+    def _alertas_con_tipo(self, ref_tipo):
+        doc = self._documento(date(2024, 3, 1))
+        doc.employee_id.work_contact_id.sudo().l10n_latam_identification_type_id = self.env.ref(ref_tipo).id
+        with patch.object(type(self.env['hr.payslip']), '_collect_payslip_data', lambda s: _datos_recibo()), \
+                patch.object(dian_utils, 'compute_software_security_code', lambda *a: 'SC'), \
+                patch.object(type(doc), '_ne_conciliar_comprobantes', lambda s: []):
+            return doc, doc._ne_validar_xml()
+
+    def test_empleado_con_nit_alerta_danger_que_lo_nombra(self):
+        """F6-DOC-002: el codigo 31 pasa el esquema (Anexo, tabla 5.2.1) pero un trabajador (persona natural) no se
+        identifica con NIT: regla de negocio de InSoTech."""
+        doc, alertas = self._alertas_con_tipo('l10n_co.rut')
+        nit = [a for a in alertas if a['key'] == 'tipo_documento_trabajador']
+        self.assertEqual([a['level'] for a in nit], ['danger'])
+        self.assertIn(doc.employee_id.name, nit[0]['message'])
+        self.assertIn('Contactos', nit[0]['message'])
+
+    def test_empleado_con_cedula_no_tiene_alerta_de_tipo_de_documento(self):
+        _doc, alertas = self._alertas_con_tipo('l10n_co.national_citizen_id')
+        self.assertFalse([a for a in alertas if a['key'] == 'tipo_documento_trabajador'])
+
+    def test_empleado_con_vat_generico_no_tiene_codigo_dian_y_el_error_lo_nombra(self):
+        """F6-DOC-001: el tipo generico (VAT) no tiene equivalente DIAN: el XML se bloquea nombrando al empleado."""
+        doc = self._documento(date(2024, 3, 1))
+        doc.employee_id.work_contact_id.sudo().l10n_latam_identification_type_id = self.env.ref(
+            'l10n_latam_base.it_vat').id
+        with self.assertRaises(UserError) as error:
+            doc.payslip_ids[:1]._ne_tipo_documento()
+        self.assertIn(doc.employee_id.name, str(error.exception))
