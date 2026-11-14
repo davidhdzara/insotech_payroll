@@ -133,12 +133,21 @@ class L10nCoIbcMensual(models.Model):
         dias_sp = int(min(suma('CO_DIAS_SP'), dias_mes))
         dias_arl = int(min(suma('CO_DIAS_ARL'), dias_mes))
         dias_paraf = int(min(suma('CO_DIAS_PARAF'), dias_mes))
-        ibc_sp = ref._ne_ibc_limites(salarial, incap, remuneracion, pactados, dias_sp)
+
+        def escala(codigo_dias):
+            """SEMANAL (M1-2, doc 61 §10; David 2026-11-14): se PAGAN todos los dias (5 pagos de 7 = 35) pero PILA siempre tiene
+            30 dias comerciales: la base del mes se escala por 30 / dias pagados, sin pasar de un mes de salario. Solo
+            semanal; 5/20 y quincenal ya suman 30. Texto normativo NO VERIFICADO (lo aporta David)."""
+            total = suma(codigo_dias)
+            return dias_mes / total if ref._ne_es_semanal() and total > dias_mes else 1.0
+        f_sp, f_arl, f_paraf = escala('CO_DIAS_SP'), escala('CO_DIAS_ARL'), escala('CO_DIAS_PARAF')
+        ibc_sp = ref._ne_ibc_limites(salarial * f_sp, incap * f_sp, remuneracion * f_sp, pactados * f_sp, dias_sp)
         vals = {
             'payslip_ids': [(6, 0, slips.ids)],
             'ibc_sp': ibc_sp,
-            'ibc_arl': ref._ne_ibc_limites(salarial, 0.0, remuneracion, pactados, dias_arl),
-            'ibc_paraf': ref._ne_ibc_limites(salarial, 0.0, remuneracion, pactados, dias_paraf),
+            'ibc_arl': ref._ne_ibc_limites(salarial * f_arl, 0.0, remuneracion * f_arl, pactados * f_arl, dias_arl),
+            'ibc_paraf': ref._ne_ibc_limites(
+                salarial * f_paraf, 0.0, remuneracion * f_paraf, pactados * f_paraf, dias_paraf),
             'dias_sp': dias_sp, 'dias_arl': dias_arl, 'dias_paraf': dias_paraf,
             **self._valores_sln(slips, ibc_sp, dias_sp),
             'ibc_recibos_sp': suma('CO_IBC_SP'),
