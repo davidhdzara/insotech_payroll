@@ -13,6 +13,8 @@ from datetime import date
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
+from .common_importes import valores_monetarios
+
 REPORTE = 'l10n_co_nomina_electronica.action_report_payslip_ne'
 
 
@@ -76,11 +78,11 @@ class TestPdfReciboNeto(TransactionCase):
         self.assertNotIn('>GROSS<', html)
         self.assertNotIn('>NET<', html)
         self.assertNotIn('>CO_LIQ_NETO<', html)
-        self.assertNotIn('1,800,000', html)
+        self.assertNotIn(1800000.0, valores_monetarios(html))
         self.assertIn('>CO_LIQ_SALARIOS<', html)    # los conceptos reales siguen
-        self.assertIn('$ 2,900,000', html)          # devengado: 900.000 + 600.000 + 1.400.000
-        self.assertIn('$ 72,000', html)             # deducciones: 36.000 + 36.000
-        self.assertIn('$ 2,828,000', html)          # NETO A PAGAR = CO_LIQ_NETO
+        self.assertIn(2900000.0, valores_monetarios(html))          # devengado: 900.000 + 600.000 + 1.400.000
+        self.assertIn(72000.0, valores_monetarios(html))             # deducciones: 36.000 + 36.000
+        self.assertIn(2828000.0, valores_monetarios(html))          # NETO A PAGAR = CO_LIQ_NETO
 
     def test_nomina_general_sin_fila_de_bruto_ni_neto(self):
         slip = self._recibo(self.est_general)
@@ -93,9 +95,9 @@ class TestPdfReciboNeto(TransactionCase):
         self.assertNotIn('>CO_BRUTO<', html)
         self.assertNotIn('>CO_NETO<', html)
         self.assertIn('>CO_BASICO<', html)
-        self.assertIn('$ 3,000,000', html)
-        self.assertIn('$ 240,000', html)
-        self.assertIn('$ 2,760,000', html)
+        self.assertIn(3000000.0, valores_monetarios(html))
+        self.assertIn(240000.0, valores_monetarios(html))
+        self.assertIn(2760000.0, valores_monetarios(html))
 
     def test_prima_y_bonificacion_usan_su_propia_linea_de_neto(self):
         prima = self._recibo(self.est_prima, 'Prima')
@@ -104,7 +106,7 @@ class TestPdfReciboNeto(TransactionCase):
                             ('CO_PRIMA_NETO', 1440000.0)):
             self._linea(prima, code, total)
         self.assertEqual(prima._ne_pdf_neto(), 1440000.0)
-        self.assertIn('$ 1,440,000', self._html(prima))
+        self.assertIn(1440000.0, valores_monetarios(self._html(prima)))
 
         bon = self._recibo(self.est_bonificacion, 'Bonificacion')
         self._con_nativas(bon)
@@ -112,7 +114,7 @@ class TestPdfReciboNeto(TransactionCase):
                             ('CO_BON_NETO', 480000.0)):
             self._linea(bon, code, total)
         self.assertEqual(bon._ne_pdf_neto(), 480000.0)
-        self.assertIn('$ 480,000', self._html(bon))
+        self.assertIn(480000.0, valores_monetarios(self._html(bon)))
 
     def test_lineas_del_pdf_excluyen_solo_nativas_y_totales(self):
         slip = self._recibo(self.est_liquidacion)

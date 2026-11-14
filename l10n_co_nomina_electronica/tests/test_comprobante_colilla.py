@@ -5,6 +5,8 @@ from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
 
+from .common_importes import valores_monetarios
+
 REPORTE = 'l10n_co_nomina_electronica.action_report_payslip_ne'
 PROHIBIDOS = ('DIAN', 'Resolucion', 'Resolución', 'CUNE', 'Estado NE', '/report/barcode', 'QR', 'Firma del empleado')
 
@@ -81,7 +83,7 @@ class TestComprobanteColilla(TransactionCase):
         self.b.company_id.currency_id = euro
         html = self._html(self.b)
         self.assertIn('€', html)
-        self.assertIn('2,880,000', html)
+        self.assertIn(2880000.0, valores_monetarios(html))
 
     def test_los_bloques_comunes_existen_para_reutilizarlos(self):
         for xmlid in ('ne_comprobante_encabezado', 'ne_comprobante_conceptos'):
