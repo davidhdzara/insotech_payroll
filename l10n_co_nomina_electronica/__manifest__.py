@@ -1,6 +1,6 @@
 {
     'name': 'Colombia - Nómina',
-    'version': '18.0.3.0.251',
+    'version': '18.0.3.0.252',
     'category': 'Human Resources/Payroll',
     'countries': ['co'],
     'summary': 'Generación y envío de Nómina Electrónica a la DIAN (Resolución 000013 de 2021)',
@@ -106,6 +106,7 @@ Funcionalidades principales:
         # Reports
         'report/hr_payslip_ne_report.xml',
         'report/comprobante_pago_report.xml',
+        'report/representacion_grafica_report.xml',
         'report/ugpp_oficio_report.xml',
         # Wizards
         'wizard/l10n_co_nomina_ugpp_wizard_views.xml',

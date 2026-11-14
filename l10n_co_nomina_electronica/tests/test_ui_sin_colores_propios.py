@@ -101,3 +101,7 @@ class TestUiSinColoresPropios(TransactionCase):
     def test_el_comprobante_agrupado_sin_estilos_propios(self):
         self._sin_estilo_propio('l10n_co_nomina_electronica.report_comprobante_pago')
 
+    def test_la_representacion_grafica_sin_estilos_propios(self):
+        for xmlid in ('report_representacion_grafica', 'layout_representacion_grafica'):
+            self._sin_estilo_propio('l10n_co_nomina_electronica.' + xmlid)
+

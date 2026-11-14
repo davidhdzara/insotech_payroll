@@ -30,4 +30,5 @@ from . import l10n_co_ibc_mensual
 from . import ir_sequence
 from . import report_payslip_ne
 from . import report_comprobante_pago
+from . import report_representacion_grafica
 from . import hr_leave_prorroga
