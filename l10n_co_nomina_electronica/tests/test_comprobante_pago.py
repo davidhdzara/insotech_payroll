@@ -7,6 +7,8 @@ from datetime import date
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
+from .common_importes import valores_monetarios
+
 REPORTE = 'l10n_co_nomina_electronica.action_report_comprobante_pago'
 PROHIBIDOS = ('DIAN', 'Resolucion', 'Resolución', 'CUNE', 'Estado NE', '/report/barcode', 'QR', 'Firma del empleado')
 
@@ -79,7 +81,7 @@ class TestComprobantePago(TransactionCase):
         self.assertIn(self.nomina.name, html)
         self.assertIn(self.prima.name, html)
         self.assertIn('Neto total pagado', html)
-        self.assertIn('4,200,000', html)          # 2.760.000 + 1.440.000
+        self.assertIn(4200000.0, valores_monetarios(html))          # 2.760.000 + 1.440.000
         self.assertIn('Retención en la fuente', html)
 
     def test_pagos_en_dias_distintos_son_paginas_distintas(self):
@@ -91,7 +93,7 @@ class TestComprobantePago(TransactionCase):
         html = self._html(p)
         self.assertEqual(html.count('class="page"'), 1)
         self.assertIn(self.nomina.name, html)       # la quincena del mismo pago
-        self.assertIn('4,200,000', html)
+        self.assertIn(4200000.0, valores_monetarios(html))
 
     def test_un_recibo_sin_fecha_de_pago_hace_fallar_el_informe_y_lo_nombra(self):
         sin_fecha = self._quincena(pagado=False)
@@ -123,7 +125,7 @@ class TestComprobantePago(TransactionCase):
         self.b.currency_id = euro
         html = self._html(self._quincena(compania=(self.b, self.emp_b, self.con_b)))
         self.assertIn('€', html)
-        self.assertIn('2,760,000', html)
+        self.assertIn(2760000.0, valores_monetarios(html))
 
     def test_media_hoja_a4_horizontal_con_formato_de_papel_propio(self):
         accion = self.env.ref(REPORTE)
