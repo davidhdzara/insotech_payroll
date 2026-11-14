@@ -209,3 +209,43 @@ class TestDocumentoAsistente(DocumentoFixture, TransactionCase):
         with self.assertRaisesRegex(UserError, 'no es colombiana'):
             self._asistente(recibos, enviar=True).action_send_and_print()
         self.assertEqual(self.Doc.search_count([]), antes)
+
+    # ── D5 (doc 53 §28.7): XML ya generado + recibo nuevo ─────────────
+    def _documento_con_xml(self):
+        recibos = self._recibos()
+        self._asistente(recibos, enviar=False).action_send_and_print()      # solo preparar: crea el documento
+        doc = recibos.l10n_co_ne_documento_id
+        doc.action_generar_xml()
+        self.assertTrue(doc.xml_attachment_id and doc.cune)
+        return recibos, doc
+
+    def _recibo_tardio(self, doc, dia_pago=20):
+        slip = self.env['hr.payslip'].create({
+            'name': 'Recibo tardío', 'employee_id': doc.employee_id.id, 'contract_id': doc.contract_id.id,
+            'company_id': self.company.id, 'struct_id': self.struct.id,
+            'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
+        slip.write({'state': 'paid', 'paid_date': date(2026, 3, dia_pago)})
+        return slip
+
+    def test_un_recibo_nuevo_descarta_el_xml_viejo_y_conserva_el_consecutivo(self):
+        recibos, doc = self._documento_con_xml()
+        consecutivo = doc.consecutive
+        nuevo = self._recibo_tardio(doc)
+        self._asistente(recibos | nuevo, enviar=False).action_send_and_print()   # solo preparar
+        self.assertIn(nuevo, doc.payslip_ids)
+        self.assertFalse(doc.xml_attachment_id)                 # el XML viejo ya no corresponde a los recibos
+        self.assertFalse(doc.cune)
+        self.assertEqual(doc.consecutive, consecutivo)           # el consecutivo no usado se conserva
+        with self.assertRaisesRegex(UserError, 'Genere el XML'):
+            doc._ne_encolar()                                   # nada inconsistente entra a la cola
+        self.assertFalse(doc.is_being_sent)
+
+    def test_enviar_despues_de_un_recibo_nuevo_regenera_el_xml_con_el_mismo_consecutivo(self):
+        recibos, doc = self._documento_con_xml()
+        consecutivo, adjunto_viejo = doc.consecutive, doc.xml_attachment_id
+        nuevo = self._recibo_tardio(doc)
+        self._asistente(recibos | nuevo, enviar=True).action_send_and_print()
+        self.assertTrue(doc.is_being_sent)
+        self.assertEqual(doc.consecutive, consecutivo)
+        self.assertTrue(doc.xml_attachment_id and doc.cune)
+        self.assertNotEqual(doc.xml_attachment_id, adjunto_viejo)   # XML nuevo, con el recibo incluido

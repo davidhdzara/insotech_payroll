@@ -381,6 +381,10 @@ class L10nCoNeDocumento(models.Model):
         self.contract_id = contratos[-1:] or False
         if self.etapa == 'ready':
             self.etapa = 'draft'   # cambió la composición: se revalida
+        if (sueltos or nuevos) and not self.state and self.xml_attachment_id:
+            # El XML generado ya no corresponde a los recibos: se descarta para que NADA inconsistente se encole ni se
+            # transmita (hay que volver a generarlo). El consecutivo no usado se conserva y se reutiliza (doc 53 §28.7).
+            self.write({'xml_attachment_id': False, 'cune': False})
 
     # ──────────────────────────────────────────────────────────────────
     # Cadena de notas de ajuste (doc 53 §23.16, precisión (e)): original → notas, por ``parent_id`` (sin parent_path)
