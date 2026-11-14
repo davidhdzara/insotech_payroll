@@ -24,7 +24,7 @@
                     <field name="resumen" invisible="not resumen"/>
                     <group>
                         <group string="Canales de Transmisión">
-                            <field name="checkbox_send_dian" string="Enviar a la DIAN"/>
+                            <field name="checkbox_send_dian" string="DIAN"/>
                             <field name="confirmo_mes_incompleto" invisible="not hay_confirmable or not checkbox_send_dian"/>
                             <field name="confirmo_envio_extemporaneo" invisible="not hay_extemporaneo or not checkbox_send_dian"/>
                             <field name="checkbox_send_mail"/>

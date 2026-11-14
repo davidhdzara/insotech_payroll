@@ -48,7 +48,7 @@ class HrPayslipSend(models.TransientModel):
     # Opciones de Envío (DIAN & Email)
     # ──────────────────────────────────────────────────────────────────
     checkbox_send_dian = fields.Boolean(
-        string='Enviar a la DIAN',
+        string='DIAN',
         default=True,
         help='Si está marcado, se generará el XML, se firmará digitalmente y se transmitirá '
              'al webservice de la DIAN para su aprobación oficial.',
@@ -66,9 +66,10 @@ class HrPayslipSend(models.TransientModel):
     hay_extemporaneo = fields.Boolean(compute='_compute_resumen')
     resumen = fields.Html(string='Grupos y alertas', compute='_compute_resumen', sanitize=False)
     checkbox_send_mail = fields.Boolean(
-        string='Enviar colilla por correo',
-        help='Si está marcado, se envía la colilla (PDF) de cada recibo confirmado al correo del contacto de trabajo '
-             'del empleado, por la cola de correo. Es independiente del estado ante la DIAN.',
+        string='Correo: comprobante de pago',
+        help='Si está marcado, se envía UN correo por empleado y fecha de pago con el comprobante de pago (PDF) de los '
+             'recibos de ese pago, al correo del contacto de trabajo del empleado, por la cola de correo. Es un '
+             'comprobante interno, independiente del estado ante la DIAN.',
     )
     mail_template_id = fields.Many2one(
         comodel_name='mail.template',
@@ -173,23 +174,35 @@ class HrPayslipSend(models.TransientModel):
                         problemas.append(_('%(recibo)s: no se transmitió (%(error)s).', recibo=nombre, error=error))
                         payslip.message_post(
                             body=_('Error de transmisión automatizada: %s', error), message_type='comment')
-            # 2. Colilla por correo: por recibo confirmado, sin depender del estado DIAN.
-            if self.checkbox_send_mail:
-                if payslip.message_ids.filtered(lambda m: m.body and 'Colilla enviada por correo' in str(m.body)):
-                    avisos.append(_('%s: ya se había enviado la colilla por correo antes.', nombre))
+
+        # 2. Comprobante de pago por correo: UN correo por (empleado, fecha de pago), sin depender del estado DIAN.
+        if self.checkbox_send_mail:
+            agrupados = self.env['hr.payslip']._ne_comprobantes(self.payslip_ids)
+            for recibo, motivo in agrupados['sin_fecha']:
+                problemas.append(_('%(recibo)s: no se envió el comprobante (%(motivo)s)',
+                                   recibo=recibo.number or recibo.name, motivo=motivo))
+            for grupo in agrupados['grupos']:
+                recibos = grupo['recibos']
+                nombre = '%s (%s)' % (grupo['empleado'].name, grupo['fecha_pago'])
+                marca = self.env['hr.payslip'].NE_MARCA_CORREO_COMPROBANTE
+                if recibos.message_ids.filtered(lambda m: m.body and marca in str(m.body)):
+                    avisos.append(_('%s: ya se había enviado el comprobante de pago por correo antes.', nombre))
                 try:
                     with self.env.cr.savepoint():
-                        payslip.action_send_payslip_email(template)
+                        recibos.action_send_comprobante_email(template)
                     enviados += 1
                 except Exception as error:
-                    _logger.error('Fallo en envio de correo para nomina %s: %s', nombre, error)
-                    problemas.append(_('%(recibo)s: no se envió la colilla (%(error)s).', recibo=nombre, error=error))
-                    payslip.message_post(
-                        body=_('Fallo al enviar la colilla por correo: %s', error), message_type='comment')
+                    _logger.error('Fallo en envio de correo para el comprobante %s: %s', nombre, error)
+                    problemas.append(_('%(grupo)s: no se envió el comprobante de pago (%(error)s).', grupo=nombre,
+                                       error=error))
+                    for recibo in recibos:
+                        recibo.message_post(
+                            body=_('Fallo al enviar el comprobante de pago por correo: %s', error),
+                            message_type='comment')
 
         problemas += resultado_docs['bloqueados']
         resumen = _('Documentos: %(p)s preparados, %(c)s encolados, %(b)s bloqueados. Recibos: %(total)s; transmitidos '
-                    'por recibo: %(t)s; colillas encoladas para envío: %(e)s.',
+                    'por recibo: %(t)s; comprobantes de pago encolados para envío: %(e)s.',
                     p=len(resultado_docs['preparados']), c=len(resultado_docs['encolados']),
                     b=len(resultado_docs['bloqueados']), total=len(self.payslip_ids), t=transmitidos, e=enviados)
         return self._ne_aviso_resultado(resumen, problemas, avisos)

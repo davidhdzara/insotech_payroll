@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 # Part of InSoTech. See LICENSE file for full copyright and licensing details.
 
-"""Etapa 4, commit 8b (doc 53 §23.17): colilla por correo desacoplada de la DIAN y los 5 defectos del asistente
+"""Etapa 4, commit 8b (doc 53 §23.17) y Frente 5, C5 (doc 58): el comprobante de pago por correo (UN correo por empleado
+y fecha de pago) desacoplado de la DIAN y los 5 defectos del asistente
 ``hr.payslip.send`` (cada prueba ``test_defecto_*`` falla contra el código anterior). Sin SMTP: la cola nativa de
 correo (``mail.mail`` en ``outgoing``); el PDF se parchea."""
 
@@ -75,7 +76,7 @@ class TestPayslipSendCorreo(DocumentoFixture, TransactionCase):
     # ── destinatario, cola y estado ──────────────────────────────────
     def test_el_correo_creado_tiene_el_destinatario_y_queda_en_cola(self):
         """Lectura directa del mail.mail que crea la plantilla (sin pasar por el asistente)."""
-        self.slip.action_send_payslip_email(self.nativa)
+        self.slip.action_send_comprobante_email(self.nativa)
         correos = self.env['mail.mail'].search([('model', '=', 'hr.payslip'), ('res_id', '=', self.slip.id)])
         self.assertEqual(len(correos), 1, 'La plantilla no dejó ningún mail.mail para el recibo')
         self.assertIn('contacto@ejemplo.co', (correos.email_to or '') + ' '.join(correos.recipient_ids.mapped('email')))
@@ -144,10 +145,11 @@ class TestPayslipSendCorreo(DocumentoFixture, TransactionCase):
         self.assertEqual(len(adjuntos), 1)
 
     def test_sin_reporte_error_claro_que_nombra_estructura_y_reporte(self):
-        self._patch(type(self.env['hr.payslip']), 'NE_REPORT_XMLID', 'l10n_co_nomina_electronica.no_existe_reporte')
+        self._patch(type(self.env['hr.payslip']), 'NE_REPORT_COMPROBANTE_XMLID',
+                    'l10n_co_nomina_electronica.no_existe_reporte')
         accion = self._ejecutar(self._asistente())
         self.assertIn('no_existe_reporte', self._mensaje(accion))
-        self.assertIn(self.slip.struct_id.display_name, self._mensaje(accion))
+        self.assertIn(self.slip.display_name, self._mensaje(accion))
 
     # ── errores: no se tragan ni abortan, sin emojis ─────────────────
     def test_defecto_error_tragado_sin_aviso(self):
@@ -264,3 +266,47 @@ class TestPayslipSendCorreo(DocumentoFixture, TransactionCase):
                 self._ejecutar(self._asistente(recibos, checkbox_send_dian=False))
                 self._afirmar_un_correo_por_recibo_con_su_pdf(recibos, esperados=orden)
         self.assertEqual(self.doc.state, 'invoice_rejected')   # el último estado probado fue de verdad el rechazo
+
+    # ── C5: UN correo por (empleado, fecha de pago) ──────────────────
+    def test_dos_recibos_del_mismo_pago_salen_en_un_solo_correo_con_un_pdf(self):
+        otro = self.recibos[1]
+        mismo_dia = self.slip.paid_date
+        otro.write({'paid_date': mismo_dia})
+        self._ejecutar(self._asistente(self.slip | otro))
+        correos = self._correos_de(self.recibos)
+        self.assertEqual(len(correos), 1)                                  # un correo por grupo, no por recibo
+        pdfs = correos.attachment_ids.filtered(lambda a: a.mimetype == 'application/pdf')
+        self.assertEqual(len(pdfs), 1)
+        self.assertIn('Comprobante_de_pago_%s' % mismo_dia, pdfs.name)
+
+    def test_el_comprobante_enviado_deja_constancia_en_cada_recibo_del_grupo(self):
+        otro = self.recibos[1]
+        otro.write({'paid_date': self.slip.paid_date})
+        self._ejecutar(self._asistente(self.slip | otro))
+        for recibo in (self.slip, otro):
+            self.assertTrue(recibo.message_ids.filtered(
+                lambda m: 'Comprobante de pago enviado por correo' in str(m.body)), recibo.display_name)
+
+    def test_seleccionar_un_solo_recibo_envia_el_pago_completo(self):
+        otro = self.recibos[1]
+        otro.write({'paid_date': self.slip.paid_date})
+        self._ejecutar(self._asistente(self.slip))                          # solo uno seleccionado
+        self.assertEqual(len(self._correos_de(self.recibos)), 1)
+        pdf = self._correos_de(self.recibos).attachment_ids.filtered(lambda a: a.mimetype == 'application/pdf')
+        self.assertIn(str(otro.id), pdf.name)                               # el nombre incluye los recibos del grupo
+
+    def test_pagos_en_fechas_distintas_son_correos_distintos(self):
+        self._ejecutar(self._asistente(self.recibos))
+        self.assertEqual(len(self._correos_de(self.recibos)), 2)
+
+    def test_un_recibo_sin_fecha_de_pago_no_recibe_comprobante_y_se_lista(self):
+        self.slip.paid_date = False
+        accion = self._ejecutar(self._asistente(self.slip))
+        self.assertIn('fecha de pago', self._mensaje(accion))
+        self.assertFalse(self._correos_de(self.recibos))
+
+    def test_las_casillas_del_asistente_usan_las_etiquetas_nativas(self):
+        campos = self.env['hr.payslip.send']._fields
+        self.assertEqual(campos['checkbox_send_dian'].string, 'DIAN')
+        self.assertEqual(campos['checkbox_send_mail'].string, 'Correo: comprobante de pago')
+

@@ -756,7 +756,8 @@ class HrPayslip(models.Model):
     # Plantilla nativa de la colilla (hr_payroll): se resuelve SIEMPRE por xmlid, nunca "la primera" que devuelva la
     # base (doc 53 §23.17, 8b / D-G).
     NE_MAIL_TEMPLATE_XMLID = 'hr_payroll.mail_template_new_payslip'
-    NE_REPORT_XMLID = 'l10n_co_nomina_electronica.action_report_payslip_ne'
+    NE_REPORT_COMPROBANTE_XMLID = 'l10n_co_nomina_electronica.action_report_comprobante_pago'
+    NE_MARCA_CORREO_COMPROBANTE = 'Comprobante de pago enviado por correo'
 
     @api.model
     def _ne_plantilla_colilla(self):
@@ -768,55 +769,58 @@ class HrPayslip(models.Model):
                 'plantilla, o elija otra en el asistente.', self.NE_MAIL_TEMPLATE_XMLID))
         return plantilla
 
-    def _ne_pdf_colilla(self):
-        """Adjunto PDF de la colilla: se REUTILIZA el existente del recibo; si no hay, se genera uno (una sola vez)."""
-        self.ensure_one()
-        nombre = '%s.pdf' % (self.number or self.name or 'Recibo_Nomina')
+    def _ne_pdf_comprobante(self):
+        """Adjunto PDF del comprobante de pago del GRUPO (``self`` = recibos del mismo pago): se REUTILIZA el existente
+        (mismo nombre: fecha de pago y recibos del grupo) y, si no hay, se genera una sola vez. Se guarda en el primer
+        recibo del grupo. Un grupo que cambia de recibos tiene otro nombre y por tanto otro PDF."""
+        primero = self.sorted(lambda s: (s.date_to, s.id))[:1]
+        fecha = primero._ne_fecha_pago()
+        nombre = 'Comprobante_de_pago_%s_%s.pdf' % (fecha, '-'.join(str(i) for i in sorted(self.ids)))
         adjunto = self.env['ir.attachment'].search([
-            ('res_model', '=', 'hr.payslip'), ('res_id', '=', self.id), ('name', '=', nombre),
+            ('res_model', '=', 'hr.payslip'), ('res_id', '=', primero.id), ('name', '=', nombre),
             ('mimetype', '=', 'application/pdf')], limit=1)
         if adjunto:
             return adjunto
-        reporte = self.env.ref(self.NE_REPORT_XMLID, raise_if_not_found=False)
+        reporte = self.env.ref(self.NE_REPORT_COMPROBANTE_XMLID, raise_if_not_found=False)
         if not reporte:
             raise UserError(_(
-                'La estructura salarial "%(estructura)s" no tiene el reporte de la colilla configurado (%(xmlid)s): no '
-                'se genera el PDF del recibo "%(recibo)s".', estructura=self.struct_id.display_name or '-',
-                xmlid=self.NE_REPORT_XMLID, recibo=self.display_name))
-        pdf, _tipo = self.env['ir.actions.report'].sudo()._render_qweb_pdf(reporte.id, [self.id])
+                'No se encontró el reporte del comprobante de pago (%(xmlid)s): no se genera el PDF del recibo '
+                '"%(recibo)s".', xmlid=self.NE_REPORT_COMPROBANTE_XMLID, recibo=primero.display_name))
+        pdf, _tipo = self.env['ir.actions.report'].sudo()._render_qweb_pdf(reporte.id, self.ids)
         return self.env['ir.attachment'].create({
             'name': nombre, 'type': 'binary', 'datas': base64.b64encode(pdf), 'res_model': 'hr.payslip',
-            'res_id': self.id, 'mimetype': 'application/pdf'})
+            'res_id': primero.id, 'mimetype': 'application/pdf'})
 
-    def action_send_payslip_email(self, template=None):
-        """Envía la colilla (PDF) del recibo al correo de contacto del empleado, por la cola nativa de correo.
-
-        Independiente del estado DIAN: solo exige el recibo confirmado (hecho o pagado). Destinatario:
-        ``work_contact_id.email``. Sin ``template`` usa la plantilla nativa por xmlid (no "la primera").
-        """
-        self.ensure_one()
-        if self.state not in ('done', 'paid'):
-            raise UserError(_('El recibo "%s" no está confirmado (hecho o pagado): no se envía la colilla.',
-                              self.display_name))
-        correo = self.employee_id.work_contact_id.email
+    def action_send_comprobante_email(self, template=None):
+        """Envía UN correo con el comprobante de pago del grupo (``self`` = los recibos de UN mismo pago: mismo
+        empleado y misma fecha de pago, ver ``_ne_comprobantes``) al correo del contacto de trabajo del empleado, por la
+        cola nativa de correo. Independiente del estado DIAN: solo exige los recibos confirmados (hechos o pagados)."""
+        if len(self.employee_id) != 1:
+            raise UserError(_('El comprobante de pago se envía por empleado: los recibos son de %s empleados.',
+                              len(self.employee_id)))
+        for recibo in self:
+            if recibo.state not in ('done', 'paid'):
+                raise UserError(_('El recibo "%s" no está confirmado (hecho o pagado): no se envía el comprobante.',
+                                  recibo.display_name))
+        empleado = self.employee_id
+        correo = empleado.work_contact_id.email
         if not correo:
-            raise UserError(_('El empleado %s no tiene correo en su contacto de trabajo.', self.employee_id.name))
+            raise UserError(_('El empleado %s no tiene correo en su contacto de trabajo.', empleado.name))
         template = template or self._ne_plantilla_colilla()
-        adjunto = self._ne_pdf_colilla()
-        mail_id = template.send_mail(self.id, force_send=False, email_values={
+        adjunto = self._ne_pdf_comprobante()
+        referencia = self.sorted(lambda s: (s.date_to, s.id))[:1]
+        mail_id = template.send_mail(referencia.id, force_send=False, email_values={
             'email_to': correo, 'attachment_ids': [(6, 0, adjunto.ids)]})
         correo_en_cola = self.env['mail.mail'].sudo().browse(mail_id).exists()
         if not correo_en_cola:
-            raise UserError(_('La plantilla "%(plantilla)s" no generó el correo de la colilla del recibo "%(recibo)s".',
-                              plantilla=template.display_name, recibo=self.display_name))
-        self.message_post(
-            body=_('Colilla enviada por correo a %(correo)s con la plantilla "%(plantilla)s".',
-                   correo=correo, plantilla=template.display_name),
-            message_type='comment', subtype_xmlid='mail.mt_note')
+            raise UserError(_('La plantilla "%(plantilla)s" no generó el correo del comprobante de pago de "%(recibo)s".',
+                              plantilla=template.display_name, recibo=referencia.display_name))
+        for recibo in self:
+            recibo.message_post(
+                body=_('%(marca)s a %(correo)s con la plantilla "%(plantilla)s".', marca=self.NE_MARCA_CORREO_COMPROBANTE,
+                       correo=correo, plantilla=template.display_name),
+                message_type='comment', subtype_xmlid='mail.mt_note')
         return True
-
-
-
 
     # ──────────────────────────────────────────────────────────────────
     # Procesamiento masivo
