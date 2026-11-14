@@ -101,4 +101,5 @@ from . import test_documento_cune
 from . import test_payslip_send_correo
 from . import test_documento_cola
 from . import test_documento_reconsulta
+from . import test_documento_asistente
 from . import test_migracion_vistas_211

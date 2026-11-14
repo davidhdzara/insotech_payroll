@@ -13,6 +13,7 @@ from . import l10n_co_ne_documento_mixin
 from . import hr_payslip
 from . import l10n_co_ne_documento_intento
 from . import l10n_co_ne_documento
+from . import l10n_co_ne_documento_send
 from . import l10n_co_ne_habilitacion
 from . import l10n_co_ne_exchange
 from . import l10n_co_nomina_ugpp

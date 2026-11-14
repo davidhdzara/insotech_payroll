@@ -11,7 +11,7 @@ Permite procesamiento masivo e individual desde el formulario de nómina y la vi
 
 import logging
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 
 _logger = logging.getLogger(__name__)
 
@@ -28,7 +28,11 @@ class HrPayslipSend(models.TransientModel):
     payslip_ids = fields.Many2many(
         comodel_name='hr.payslip',
         string='Nóminas a Procesar',
-        required=True,
+    )
+    documento_ids = fields.Many2many(
+        comodel_name='l10n.co.ne.documento',
+        string='Documentos mensuales',
+        help='Documentos mensuales de nómina electrónica a preparar y enviar (entrada desde documentos).',
     )
     mode = fields.Selection(
         selection=[
@@ -49,6 +53,13 @@ class HrPayslipSend(models.TransientModel):
         help='Si está marcado, se generará el XML, se firmará digitalmente y se transmitirá '
              'al webservice de la DIAN para su aprobación oficial.',
     )
+    confirmo_mes_incompleto = fields.Boolean(
+        string='Confirmo mes incompleto',
+        help='Obligatorio si algún grupo avisa que el mes no ha terminado o faltan recibos: sin esta casilla ese grupo '
+             'se prepara pero no se encola. Queda constancia en el documento (usuario y fecha).',
+    )
+    hay_confirmable = fields.Boolean(compute='_compute_resumen')
+    resumen = fields.Html(string='Grupos y alertas', compute='_compute_resumen', sanitize=False)
     checkbox_send_mail = fields.Boolean(
         string='Enviar colilla por correo',
         help='Si está marcado, se envía la colilla (PDF) de cada recibo confirmado al correo del contacto de trabajo '
@@ -65,10 +76,22 @@ class HrPayslipSend(models.TransientModel):
     # ──────────────────────────────────────────────────────────────────
     # Computes y Defaults
     # ──────────────────────────────────────────────────────────────────
-    @api.depends('payslip_ids')
+    @api.depends('payslip_ids', 'documento_ids')
     def _compute_mode(self):
         for rec in self:
-            rec.mode = 'multi' if len(rec.payslip_ids) > 1 else 'single'
+            rec.mode = 'multi' if len(rec.payslip_ids) + len(rec.documento_ids) > 1 else 'single'
+
+    @api.depends('payslip_ids', 'documento_ids')
+    def _compute_resumen(self):
+        """Grupos (empleado + mes) y alertas del asistente. SOLO calcula: no crea documentos ni escribe nada."""
+        Envio = self.env['l10n.co.ne.documento.send']
+        for rec in self:
+            produccion = rec.payslip_ids.filtered(lambda s: Envio._ne_es_produccion(s.company_id))
+            documentos = rec.documento_ids
+            grupos = Envio._ne_grupos(produccion, documentos) if (produccion or documentos) else []
+            rec.resumen = Envio._ne_resumen(grupos) if grupos else False
+            rec.hay_confirmable = any(
+                a['confirmable'] for g in grupos for a in Envio._ne_alertas_grupo(g))
 
     @api.model
     def default_get(self, fields_list):
@@ -76,6 +99,8 @@ class HrPayslipSend(models.TransientModel):
         active_ids = self._context.get('active_ids')
         active_model = self._context.get('active_model')
 
+        if active_model == 'l10n.co.ne.documento' and active_ids:
+            res['documento_ids'] = [(6, 0, active_ids)]
         if active_model == 'hr.payslip' and active_ids:
             res['payslip_ids'] = [(6, 0, active_ids)]
             # Plantilla nativa por xmlid (nunca "la primera"); si falta, queda vacía y el envío da un error claro.
@@ -99,8 +124,22 @@ class HrPayslipSend(models.TransientModel):
     def action_send_and_print(self):
         """Transmite por recibo (ciclo de habilitación) y envía la colilla por correo; ambos independientes."""
         self.ensure_one()
-        if not self.payslip_ids:
-            raise UserError(_('No hay nóminas cargadas para procesar en el asistente.'))
+        if not (self.payslip_ids or self.documento_ids):
+            raise UserError(_('No hay recibos ni documentos cargados para procesar en el asistente.'))
+        # Módulo inerte fuera de Colombia: error claro y no se crea nada.
+        (self.payslip_ids.company_id | self.documento_ids.company_id)._ne_exigir_colombia()
+        Envio = self.env['l10n.co.ne.documento.send']
+        produccion = self.payslip_ids.filtered(lambda s: Envio._ne_es_produccion(s.company_id))
+        habilitacion = self.payslip_ids - produccion
+        resultado_docs = {'preparados': [], 'encolados': [], 'bloqueados': []}
+        if (produccion or self.documento_ids) and not self.env.user.has_group('hr_payroll.group_hr_payroll_manager'):
+            raise AccessError(_('Solo el administrador de nómina puede preparar y enviar documentos mensuales.'))
+        if produccion or self.documento_ids:
+            # Producción: el documento mensual (preparar y, si se marca "Enviar a la DIAN", generar y encolar).
+            if self.checkbox_send_dian:
+                Envio._ne_exigir_cron_activo()
+            resultado_docs = Envio._ne_procesar(
+                produccion, self.documento_ids, self.checkbox_send_dian, self.confirmo_mes_incompleto)
         template = False
         if self.checkbox_send_mail:
             template = self.mail_template_id or self.env['hr.payslip']._ne_plantilla_colilla()
@@ -109,8 +148,9 @@ class HrPayslipSend(models.TransientModel):
 
         for payslip in self.payslip_ids:
             nombre = payslip.number or payslip.name
-            # 1. Ciclo DIAN por recibo (habilitación). Un recibo que va en un documento mensual se transmite desde él.
-            if self.checkbox_send_dian and payslip.l10n_co_ne_state in ('draft', 'generated', 'rejected'):
+            # 1. Ciclo DIAN por recibo: SOLO compañías en habilitación (producción va por documento). Un recibo que va en un documento mensual se transmite desde él.
+            if self.checkbox_send_dian and payslip in habilitacion \
+                    and payslip.l10n_co_ne_state in ('draft', 'generated', 'rejected'):
                 doc = payslip.l10n_co_ne_documento_id
                 if doc and not doc.legacy:
                     avisos.append(_('%(recibo)s: se transmite desde el documento mensual "%(doc)s".',
@@ -140,6 +180,9 @@ class HrPayslipSend(models.TransientModel):
                     payslip.message_post(
                         body=_('Fallo al enviar la colilla por correo: %s', error), message_type='comment')
 
-        resumen = _('Recibos: %(total)s. Transmitidos por recibo: %(t)s. Colillas encoladas para envío: %(e)s.',
-                    total=len(self.payslip_ids), t=transmitidos, e=enviados)
+        problemas += resultado_docs['bloqueados']
+        resumen = _('Documentos: %(p)s preparados, %(c)s encolados, %(b)s bloqueados. Recibos: %(total)s; transmitidos '
+                    'por recibo: %(t)s; colillas encoladas para envío: %(e)s.',
+                    p=len(resultado_docs['preparados']), c=len(resultado_docs['encolados']),
+                    b=len(resultado_docs['bloqueados']), total=len(self.payslip_ids), t=transmitidos, e=enviados)
         return self._ne_aviso_resultado(resumen, problemas, avisos)

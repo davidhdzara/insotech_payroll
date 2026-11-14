@@ -17,7 +17,7 @@
                         string="Enviar y Procesar"
                         type="action"
                         class="oe_highlight"
-                        invisible="country_code != 'CO' or (l10n_co_ne_documento_id and l10n_co_ne_state == 'draft') or l10n_co_ne_state not in ('draft', 'generated', 'uncertain', 'rejected') or state != 'done'"
+                        invisible="country_code != 'CO' or state not in ('done', 'paid') or (not l10n_co_ne_documento_id and (state != 'done' or l10n_co_ne_state not in ('draft', 'generated', 'uncertain', 'rejected')))"
                         groups="hr_payroll.group_hr_payroll_manager"/>
                 <button name="action_generate_ne_xml"
                         string="Generar XML"

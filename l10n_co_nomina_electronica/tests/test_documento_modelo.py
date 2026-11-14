@@ -370,7 +370,7 @@ class TestDocumentoModelo(TransactionCase):
         sin tocar, 'draft') se ocultan; un recibo con documento legacy (ya transmitido por recibo) los conserva."""
         arch = etree.fromstring(self.env['hr.payslip'].get_view(view_type='form')['arch'].encode())
         # (texto del botón, estado del recibo en el que se ve en el ciclo por recibo)
-        botones = (('Enviar y Procesar', 'draft'), ('Generar XML', 'draft'), ('Regenerar XML', 'generated'),
+        botones = (('Generar XML', 'draft'), ('Regenerar XML', 'generated'),
                    ('Enviar a DIAN', 'generated'), ('Consultar Estado', 'sent'), ('Nota de Ajuste', 'accepted'),
                    ('Eliminar Documento', 'accepted'))
         for texto, estado in botones:
@@ -387,6 +387,25 @@ class TestDocumentoModelo(TransactionCase):
                 self.assertTrue(oculto(1, 'draft'), '%s: recibo con documento no debe verlo' % texto)
             else:
                 self.assertFalse(oculto(1, estado), '%s: ciclo viejo ya transmitido lo conserva' % texto)
+
+    def test_enviar_y_procesar_abre_el_asistente_tambien_para_recibos_con_documento(self):
+        """D-P (doc 53 §23.17): el botón del recibo pasa a abrir el asistente de documentos también si el recibo va
+        en un documento (el bloqueo B ya impide el ciclo por recibo); sin documento conserva sus condiciones."""
+        arch = etree.fromstring(self.env['hr.payslip'].get_view(view_type='form')['arch'].encode())
+        nodo = arch.xpath("//header/button[@string='Enviar y Procesar']")
+        self.assertEqual(len(nodo), 1)
+        condicion = nodo[0].get('invisible')
+
+        def oculto(documento, estado_recibo, estado_ne='draft'):
+            return bool(safe_eval(condicion, {
+                'country_code': 'CO', 'state': estado_recibo, 'l10n_co_ne_documento_id': documento,
+                'l10n_co_ne_state': estado_ne}))
+        self.assertFalse(oculto(1, 'done'))                 # con documento: visible
+        self.assertFalse(oculto(1, 'paid'))
+        self.assertTrue(oculto(1, 'draft'))                 # un recibo sin confirmar nunca
+        self.assertFalse(oculto(False, 'done', 'generated'))   # sin documento: igual que antes
+        self.assertTrue(oculto(False, 'done', 'accepted'))
+        self.assertTrue(oculto(False, 'paid', 'draft'))
 
     # ── Bloqueo del ciclo por recibo cuando el recibo va en un documento mensual (doc 53 §23.6) ──
     def test_el_ciclo_por_recibo_se_bloquea_si_el_recibo_va_en_un_documento_no_legacy(self):
