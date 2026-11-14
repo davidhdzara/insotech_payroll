@@ -327,7 +327,10 @@ class L10nCoNeDocumento(models.Model):
             grupos[clave] |= slip
         for (company, employee, period) in grupos:
             doc = self._ne_documento_del_grupo(company, employee, period)
-            if doc.state in (False, 'invoice_sending_failed') and not doc.is_being_sent:
+            # Solo se recompone un documento SIN estado DIAN: uno con envío fallido (``invoice_sending_failed``) pudo haber
+            # llegado a la DIAN, así que se reenvía el MISMO XML y su composición no cambia (solo se valida y alerta);
+            # mismo criterio que un envío incierto (doc 53 §28.7, D6).
+            if not doc.state and not doc.is_being_sent:
                 doc._ne_componer(self._ne_recibos_del_mes(company, employee, period))
             else:
                 # Documento ya transmitido (D-5): los recibos nuevos del mes se adoptan en la nota abierta, nunca en el
@@ -559,6 +562,15 @@ class L10nCoNeDocumento(models.Model):
                 alerta('recibo_tardio', 'warning', _(
                     'Hay recibos pagados del mes que no están en ningún documento: %(recibos)s. Cree una nota de '
                     'ajuste Reemplazar para incluirlos.', recibos=', '.join(tardios.mapped('display_name'))))
+        # Envío fallido: no se recompone (su XML pudo llegar a la DIAN); si el mes cambió, se avisa en vez de cambiarlo.
+        if self.state == 'invoice_sending_failed' and not self.is_adjustment and not self.legacy:
+            mes = self._ne_recibos_del_mes(self.company_id, self.employee_id, self.period)
+            if mes != self.payslip_ids:
+                alerta('fallo_envio_composicion', 'warning', _(
+                    'El documento tuvo un fallo de envío y su XML pudo haber llegado a la DIAN: no se recompone. Los '
+                    'recibos del mes ya no coinciden con los del documento (%(recibos)s). Reintente el envío tal como '
+                    'está y corrija el resto con una nota de ajuste.',
+                    recibos=', '.join(((mes - self.payslip_ids) | (self.payslip_ids - mes)).mapped('display_name'))))
         # Recibos del mes que NO entraron (sin fecha de pago, en borrador...): ¿falta una quincena?
         fin = (self.period.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
         faltan = self._ne_recibos_que_faltan(self.company_id, self.employee_id, self.period, recibos_xml)

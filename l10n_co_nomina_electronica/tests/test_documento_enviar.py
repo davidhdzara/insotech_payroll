@@ -465,3 +465,54 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
                           side_effect=UserError('config incompleta')):
             self.assertIn('config incompleta', self._no_consulta())
 
+    # ── D6 (doc 53 §28.7): un documento con envío fallido NO se recompone ──────────────────────────────────
+    def _recibo_nuevo_del_mes(self):
+        slip = self.env['hr.payslip'].create({
+            'name': 'Recibo tardío', 'employee_id': self.doc.employee_id.id, 'contract_id': self.doc.contract_id.id,
+            'company_id': self.company.id, 'struct_id': self.struct.id,
+            'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
+        slip.write({'state': 'paid', 'paid_date': date(2026, 3, 20)})
+        return slip
+
+    def test_envio_fallido_no_se_recompone_y_alerta(self):
+        self._enviar(CONEXION)
+        self.assertEqual(self.doc.state, 'invoice_sending_failed')
+        originales, xml, cune = self.doc.payslip_ids, self.doc.xml_attachment_id, self.doc.cune
+        nuevo = self._recibo_nuevo_del_mes()
+        self.env['l10n.co.ne.documento']._ne_preparar(nuevo)
+        self.assertEqual(self.doc.payslip_ids, originales)             # la composición no cambia
+        self.assertFalse(nuevo.l10n_co_ne_documento_id)
+        self.assertEqual((self.doc.xml_attachment_id, self.doc.cune), (xml, cune))   # el XML sigue siendo el mismo
+        alerta = [a for a in self.doc.alertas if a['key'] == 'fallo_envio_composicion']
+        self.assertEqual(len(alerta), 1)
+        self.assertEqual(alerta[0]['level'], 'warning')
+        self.assertIn(nuevo.display_name, alerta[0]['message'])
+
+    def test_envio_fallido_se_reintenta_con_el_mismo_xml_aunque_haya_recibo_nuevo(self):
+        self._enviar(CONEXION)
+        consecutivo = self.doc.consecutive
+        self.env['l10n.co.ne.documento']._ne_preparar(self._recibo_nuevo_del_mes())
+        intento = self._enviar(ACEPTADA)
+        self.assertEqual(intento.numero, consecutivo)
+        self.assertEqual(self.doc.state, 'invoice_accepted')
+
+    def _sigue_sin_recomponerse(self, estado):
+        self._intento(estado)
+        originales = self.doc.payslip_ids
+        nuevo = self._recibo_nuevo_del_mes()
+        self.env['l10n.co.ne.documento']._ne_preparar(nuevo)
+        self.assertEqual(self.doc.payslip_ids, originales)
+        self.assertFalse(nuevo.l10n_co_ne_documento_id)
+
+    def test_pendiente_sigue_sin_recomponerse(self):
+        self._sigue_sin_recomponerse('invoice_pending')
+
+    def test_rechazado_sigue_sin_recomponerse(self):
+        self._sigue_sin_recomponerse('invoice_rejected')
+
+    def test_documento_sin_estado_dian_si_se_recompone(self):
+        originales = self.doc.payslip_ids
+        nuevo = self._recibo_nuevo_del_mes()
+        self.env['l10n.co.ne.documento']._ne_preparar(nuevo)
+        self.assertEqual(self.doc.payslip_ids, originales | nuevo)
+        self.assertFalse(self.doc.xml_attachment_id)                    # D5: el XML viejo ya no corresponde
