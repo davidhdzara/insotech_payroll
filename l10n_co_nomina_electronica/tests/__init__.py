@@ -85,6 +85,7 @@ from . import test_retefuente_config_compartida
 from . import test_multiempresa_aislamiento
 from . import test_multiempresa_descubrimiento
 from . import test_oficial_alcance
+from . import test_informes_compania_del_recibo
 from . import test_wizards_compania_del_registro
 from . import test_vistas_por_pais
 from . import test_aviso_anio_siguiente
