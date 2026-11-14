@@ -68,3 +68,28 @@ class TestUiSinColoresPropios(TransactionCase):
         self.assertIsNotNone(campo)
         self.assertEqual(campo.get('decoration-success'), "l10n_co_ne_state == 'accepted'")
         self.assertEqual(campo.get('decoration-danger'), "l10n_co_ne_state == 'rejected'")
+
+    # ── Frente 4 (doc 57 §14): reporte UGPP y oficio, solo estilo nativo ─────────────────────────────────
+    def _sin_estilo_propio(self, xmlid):
+        arch = self._arch(xmlid)
+        for nodo in arch.iter():
+            if not isinstance(nodo.tag, str):
+                continue
+            self.assertIsNone(nodo.get('style'), '%s: style inline en <%s>' % (xmlid, nodo.tag))
+            clases = nodo.get('class') or ''
+            self.assertNotRegex(clases, r'\bfa(\s|-)', '%s: ícono fa en <%s>' % (xmlid, nodo.tag))
+            for atributo in nodo.attrib:
+                self.assertFalse(atributo.startswith('decoration-') or atributo in ('color', 'bgcolor'),
+                                 '%s: color propio (%s) en <%s>' % (xmlid, atributo, nodo.tag))
+        return arch
+
+    def test_reporte_ugpp_sin_estilos_propios_ni_pestanas_nuevas(self):
+        arch = self._sin_estilo_propio('l10n_co_nomina_electronica.view_l10n_co_nomina_ugpp_form')
+        self.assertFalse(arch.xpath('//notebook | //page'), 'El reporte UGPP no lleva pestañas nuevas.')
+
+    def test_oficio_ugpp_sin_estilos_propios(self):
+        self._sin_estilo_propio('l10n_co_nomina_electronica.report_ugpp_oficio')
+
+    def test_ajustes_y_asistente_de_envio_sin_estilos_propios(self):
+        self._sin_estilo_propio('l10n_co_nomina_electronica.res_config_settings_view_form')
+        self._sin_estilo_propio('l10n_co_nomina_electronica.hr_payslip_send_view_form')
