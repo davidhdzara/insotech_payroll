@@ -52,9 +52,9 @@ class TestCompanyValidarConfig(TransactionCase):
         self._con_certificado(_Certificado())
         self.company._l10n_co_ne_validar_config()
 
-    # ``software_id`` y ``software_pin`` son ``required=True`` (NOT NULL en la base): un modo de operación existente
-    # nunca los tiene vacíos, así que "falta solo el ID" o "falta solo el PIN" no se puede provocar; lo alcanzable es
-    # que NO haya modo de operación (faltan los dos) o que falte el certificado.
+    # ``software_id`` y ``software_pin`` son ``required=True``, pero en Odoo eso es solo NOT NULL en la base: la cadena
+    # vacía pasa (código, API, importación; solo la interfaz la impide). Por eso "falta solo el ID" o "falta solo el PIN"
+    # SÍ se puede provocar con '' y el validador lo bloquea (doc 53 §23.15 corregido). NO simplificar a ``not mode``.
     def test_falta_solo_el_certificado(self):
         self._con_certificado(False)
         with self.assertRaises(UserError) as exc:
@@ -63,6 +63,29 @@ class TestCompanyValidarConfig(TransactionCase):
         self.assertIn('Certificado Digital', mensaje)
         self.assertNotIn('ID Software Nómina', mensaje)
         self.assertNotIn('PIN Software Nómina', mensaje)
+        self.assertIn(self.company.name, mensaje)
+
+    def test_modo_con_software_id_vacio_falta_solo_el_id(self):
+        """'' pasa el NOT NULL: sin la condición ``not mode.software_id`` este caso dejaría de bloquear."""
+        self._con_certificado(_Certificado())
+        self.modo.software_id = ''
+        with self.assertRaises(UserError) as exc:
+            self.company._l10n_co_ne_validar_config()
+        mensaje = str(exc.exception)
+        self.assertIn('ID Software Nómina', mensaje)
+        self.assertNotIn('PIN Software Nómina', mensaje)
+        self.assertNotIn('Certificado Digital', mensaje)
+        self.assertIn(self.company.name, mensaje)
+
+    def test_modo_con_software_pin_vacio_falta_solo_el_pin(self):
+        self._con_certificado(_Certificado())
+        self.modo.software_pin = ''
+        with self.assertRaises(UserError) as exc:
+            self.company._l10n_co_ne_validar_config()
+        mensaje = str(exc.exception)
+        self.assertIn('PIN Software Nómina', mensaje)
+        self.assertNotIn('ID Software Nómina', mensaje)
+        self.assertNotIn('Certificado Digital', mensaje)
         self.assertIn(self.company.name, mensaje)
 
     def test_sin_modo_y_sin_certificado_se_listan_juntos(self):
