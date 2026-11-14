@@ -182,6 +182,14 @@ class TestNeDiasPagablesLiquidacion(TestDiasTrabajadosCommon):
     30" para meses de 28/29 días, dando min(28, 30)=28 en vez de 30 para un retiro en
     febrero)."""
 
+    def _make_payslip(self, employee, contract, date_from, date_to):
+        """Estos casos son de LIQUIDACION: el recorte al ultimo mes es solo de esa estructura (M1-1, doc 61), asi que el
+        recibo usa la estructura real de liquidacion y no la generica de la prueba."""
+        return self.env['hr.payslip'].create({
+            'name': 'Liquidación %s' % employee.name, 'employee_id': employee.id, 'contract_id': contract.id,
+            'company_id': self.company.id, 'date_from': date_from, 'date_to': date_to,
+            'struct_id': self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion').id})
+
     def test_incidente_real_h009_contrato_2024_retiro_2026_11_15(self):
         """(a) Caso exacto reportado: contrato desde 2024-10-05, retiro 2026-11-15 -> 15 días."""
         employee, contract = self._make_contract(

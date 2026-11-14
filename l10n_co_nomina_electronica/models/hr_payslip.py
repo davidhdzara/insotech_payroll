@@ -26,7 +26,7 @@ import calendar
 import hashlib
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from pytz import timezone as _pytz_timezone
 from lxml import etree as _etree
@@ -1440,6 +1440,47 @@ class HrPayslip(models.Model):
             return dias_mes
         return min(d.day, dias_mes)
 
+    def _ne_dias_comerciales(self, ini, fin):
+        """Dias comerciales (mes de 30 dias) de [ini, fin] con extremos incluidos, para un tramo de UN mes o de VARIOS
+        (M1-1, doc 61): suma por segmento de mes calendario de ``comercial(fin) - comercial(ini) + 1``. Dentro de un solo mes
+        da lo mismo que antes; el 21-mar a 5-abr da 10 + 5 = 15. 0 si ini > fin. Unica fuente de la cuenta de dias
+        comerciales de un periodo."""
+        if ini > fin:
+            return 0
+        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
+        total = 0
+        anio, mes = ini.year, ini.month
+        while (anio, mes) <= (fin.year, fin.month):
+            primero = date(anio, mes, 1)
+            ultimo = date(anio, mes, self._ne_dias_en_mes_calendario(anio, mes))
+            seg_ini, seg_fin = max(ini, primero), min(fin, ultimo)
+            total += self._ne_dia_comercial(seg_fin, dias_mes) - self._ne_dia_comercial(seg_ini, dias_mes) + 1
+            anio, mes = (anio + 1, 1) if mes == 12 else (anio, mes + 1)
+        return total
+
+    def _ne_es_liquidacion(self):
+        """El recibo es de la estructura de liquidacion (date_from = inicio de contrato)."""
+        self.ensure_one()
+        return self.struct_id == self.env.ref(
+            'l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion', raise_if_not_found=False)
+
+    def _ne_es_semanal(self):
+        """El empleado se paga por semana (periodicidad nativa del contrato o, sin ella, la de su tipo de estructura)."""
+        self.ensure_one()
+        contrato = self.contract_id
+        return (contrato.schedule_pay or contrato.structure_type_id.default_schedule_pay) == 'weekly'
+
+    def _ne_contar_dias(self, ini, fin):
+        """Dias de [ini, fin] segun la periodicidad: SEMANAL = dias calendario (7 por semana; David 2026-11-14, valor del dia =
+        salario / 30), el resto mes comercial de 30 dias (``_ne_dias_comerciales``). La liquidacion siempre cuenta dias
+        comerciales (un mes completo = 30). Unica fuente de dias de un tramo."""
+        self.ensure_one()
+        if ini > fin:
+            return 0
+        if self._ne_es_semanal() and not self._ne_es_liquidacion():
+            return (fin - ini).days + 1
+        return self._ne_dias_comerciales(ini, fin)
+
     def _ne_dias_prestacion(self, fecha_ini, fecha_fin):
         """Dias de [fecha_ini, fecha_fin] (extremos incluidos) para prima, cesantias, intereses,
         indemnizacion y vacaciones causadas de la liquidacion. El divisor del anio sigue siendo
@@ -1642,7 +1683,9 @@ class HrPayslip(models.Model):
         self._ne_validar_inicio_liquidacion()
         periodo_ini = self.date_from
         periodo_fin = self.date_to
-        if (periodo_fin.year, periodo_fin.month) != (periodo_ini.year, periodo_ini.month):
+        # M1-1 (doc 61): el recorte al mes de date_to es SOLO de la liquidacion (los meses anteriores ya se pagaron en
+        # nominas regulares). Un periodo regular que cruza de mes (pagos los 5 y 20, semana que cruza) se paga completo.
+        if self._ne_es_liquidacion() and (periodo_fin.year, periodo_fin.month) != (periodo_ini.year, periodo_ini.month):
             periodo_ini = max(periodo_ini, periodo_fin.replace(day=1))
         return periodo_ini, periodo_fin
 
@@ -1655,14 +1698,13 @@ class HrPayslip(models.Model):
         fin = min(fecha_fin, tramo_fin)
         if ini > fin:
             return 0
-        return self._ne_dia_comercial(fin, dias_mes) - self._ne_dia_comercial(ini, dias_mes) + 1
+        return self._ne_contar_dias(ini, fin)
 
     def _ne_dias_bajo_contrato(self):
         """Dias (mes comercial) del tramo pagable en que el contrato estuvo vigente.
         Delimita ING/RET: la fecha de ingreso y de retiro recortan el rango."""
         self.ensure_one()
         contract = self.contract_id
-        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
         periodo_ini, periodo_fin = self._ne_tramo_pagable_periodo()
         contrato_ini = contract.date_start
         contrato_fin = contract.date_end or periodo_fin
@@ -1670,8 +1712,7 @@ class HrPayslip(models.Model):
         activo_fin = min(periodo_fin, contrato_fin)
         if activo_ini > activo_fin:
             return 0
-        return (self._ne_dia_comercial(activo_fin, dias_mes)
-                - self._ne_dia_comercial(activo_ini, dias_mes) + 1)
+        return self._ne_contar_dias(activo_ini, activo_fin)
 
     def _ne_dias_pagables(self):
         """Días pagables del período -- misma convención de "mes comercial" colombiano que ya
