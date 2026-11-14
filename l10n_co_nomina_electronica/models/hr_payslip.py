@@ -1132,6 +1132,59 @@ class HrPayslip(models.Model):
         return sum(neto.mapped('total'))
 
 
+    # Desglose del recibo para el comprobante de pago (Frente 5, C1): clasificación por CÓDIGO de regla del módulo (no
+    # por cliente). Lo que no cae en ninguna columna va a "otras deducciones" (negativo) o queda en el devengado
+    # (positivo), de modo que devengado - deducciones siempre se explica completo.
+    _NE_DESGLOSE_SALUD = ('CO_SALUD_EMP', 'CO_PRIMA_SALUD', 'CO_LIQ_SALUD', 'CO_BON_SALUD')
+    _NE_DESGLOSE_PENSION = ('CO_PENSION_EMP', 'CO_PRIMA_PENSION', 'CO_LIQ_PENSION', 'CO_BON_PENSION')
+    _NE_DESGLOSE_FSP = ('CO_FSP',)
+    _NE_DESGLOSE_RETENCION = ('CO_RETEFUENTE', 'CO_PRIMA_RETE', 'CO_LIQ_RETE', 'CO_BON_RETE')
+
+    def _ne_fecha_pago_o_falso(self):
+        """Primera fecha de pago del recibo o False si no se puede resolver (sin fecha, sin fuente configurada o sin
+        recibo hecho). No lanza: sirve para agrupar y para el desglose; quien exige la fecha usa ``_ne_fecha_pago``."""
+        self.ensure_one()
+        if self.state not in ('done', 'paid'):
+            return False
+        try:
+            return self._ne_fecha_pago()
+        except UserError:
+            return False
+
+    def _ne_desglose(self):
+        """Desglose del recibo (Frente 5, C1): ``{recibo, origen, paid_date, devengado, deducciones, salud, pension, fsp,
+        retencion, otras_deducciones, neto, diferencia}``. Todo sale de las líneas YA calculadas que imprime la colilla
+        (``_ne_pdf_lineas``) y del neto de la estructura (``_ne_pdf_neto``): no recalcula nada ni escribe. Los importes
+        de deducciones van en positivo. ``origen`` es el nombre de la estructura salarial. ``diferencia`` =
+        devengado - deducciones - neto (0 si el recibo cuadra; si no, es lo que la conciliación debe explicar)."""
+        self.ensure_one()
+        lineas = self._ne_pdf_lineas()
+
+        def deducido(codigos):
+            return -sum(l.total for l in lineas if l.code in codigos)
+
+        devengado = sum(l.total for l in lineas if l.total > 0)
+        deducciones = -sum(l.total for l in lineas if l.total < 0)
+        salud = deducido(self._NE_DESGLOSE_SALUD)
+        pension = deducido(self._NE_DESGLOSE_PENSION)
+        fsp = deducido(self._NE_DESGLOSE_FSP)
+        retencion = deducido(self._NE_DESGLOSE_RETENCION)
+        neto = self._ne_pdf_neto()
+        return {
+            'recibo': self,
+            'origen': self.struct_id.name,
+            'paid_date': self._ne_fecha_pago_o_falso(),
+            'devengado': devengado,
+            'deducciones': deducciones,
+            'salud': salud,
+            'pension': pension,
+            'fsp': fsp,
+            'retencion': retencion,
+            'otras_deducciones': deducciones - salud - pension - fsp - retencion,
+            'neto': neto,
+            'diferencia': devengado - deducciones - neto,
+        }
+
     @api.depends('line_ids.total')
     def _compute_basic_net(self):
         super()._compute_basic_net()
