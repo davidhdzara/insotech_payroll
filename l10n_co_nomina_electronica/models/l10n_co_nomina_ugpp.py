@@ -25,6 +25,8 @@ import logging
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
 
+from ..services import dian_utils
+
 _logger = logging.getLogger(__name__)
 
 try:
@@ -41,6 +43,26 @@ except ImportError:
 # Constantes UGPP
 # ──────────────────────────────────────────────────────────────────────────
 # SMMLV – valor de respaldo si no está configurado en la empresa.
+
+
+# Marco del libro Storm User: copia de la plantilla oficial ``Anexo_1.xlsx`` de la UGPP (Guía V-20.1 §1.3: no se
+# cambia el nombre ni la estructura del archivo). Por hoja: nombre, formulario (preámbulo C2), su descripción (D2) y
+# el título de la fila 8. Los nombres de hoja son los de la plantilla (la 2.ª, truncada a 31 caracteres por Excel).
+_UGPP_HOJAS = {
+    'aportante': ('Formulario Nómina - Aportante', 7001, 'Formulario Nómina - Aportante',
+                  '0 Formulario Nómina - Aportante'),
+    'conceptos': ('Formulario Nómina - Concepto...', 7003, 'Formulario Nómina - Concepto Pago Aportante ',
+                  '0 Formulario Nómina - Concepto Pago Aportante'),
+    'nomina': ('Formulario Nómina', 7002, 'Formulario Nómina', '0 Formulario Nómina'),
+}
+# Código de columna (fila 9) de la hoja ``nomina`` para las 32 primeras columnas fijas; las 3 siguientes de la
+# plantilla (fechas de permiso, suspensión y huelga: 148/152/156) las agrega U5. Observaciones = 184; el concepto N
+# de la plantilla = 276 + 4 × (N - 1).
+_UGPP_COD_NOMINA = (8, 12, 16, 24, 28, 32, 36, 40, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108,
+                    112, 116, 120, 124, 128, 132, 136, 140, 144)
+_UGPP_COD_OBSERVACIONES = 184
+_UGPP_COD_CONCEPTO_1 = 276
+_UGPP_PRIMERA_FILA = 11
 
 
 # Mapeo de tipo de documento DIAN → código corto UGPP
@@ -189,10 +211,10 @@ class L10nCoNominaUgpp(models.Model):
 
         Flujo:
         1. Busca las nóminas confirmadas del período.
-        2. Genera la hoja 'nomina-aportante' con datos de la empresa.
-        3. Genera la hoja 'nomina-conceptos de pago' con el mapeo de
+        2. Genera la hoja 'Formulario Nómina - Aportante' con datos de la empresa.
+        3. Genera la hoja 'Formulario Nómina - Concepto...' con el mapeo de
            reglas salariales a conceptos UGPP.
-        4. Genera la hoja 'nomina' con el detalle consolidado por
+        4. Genera la hoja 'Formulario Nómina' con el detalle consolidado por
            empleado.
         5. Guarda el archivo Excel en el campo binario.
         """
@@ -245,21 +267,21 @@ class L10nCoNominaUgpp(models.Model):
 
         # ── Hoja 1: nomina-aportante ─────────────────────────────────
         ws_aportante = wb.active
-        ws_aportante.title = 'nomina-aportante'
+        ws_aportante.title = _UGPP_HOJAS['aportante'][0]
         self._generate_sheet_aportante(
             ws_aportante, header_font, header_fill,
             header_alignment, thin_border,
         )
 
         # ── Hoja 2: nomina-conceptos de pago ─────────────────────────
-        ws_conceptos = wb.create_sheet('nomina-conceptos de pago')
+        ws_conceptos = wb.create_sheet(_UGPP_HOJAS['conceptos'][0])
         self._generate_sheet_conceptos(
             ws_conceptos, header_font, header_fill,
             header_alignment, thin_border,
         )
 
         # ── Hoja 3: nomina ───────────────────────────────────────────
-        ws_nomina = wb.create_sheet('nomina')
+        ws_nomina = wb.create_sheet(_UGPP_HOJAS['nomina'][0])
         self._generate_sheet_nomina(
             ws_nomina, payslips, header_font, header_fill,
             header_alignment, thin_border,
@@ -301,6 +323,57 @@ class L10nCoNominaUgpp(models.Model):
     # GENERACIÓN DE HOJAS INDIVIDUALES
     # ══════════════════════════════════════════════════════════════════
 
+    def _ugpp_marco(self, ws, clave, columnas, header_font, header_fill, header_alignment, thin_border):
+        """Escribe el marco de la plantilla Storm User (``Anexo_1.xlsx``) en la hoja ``ws`` y devuelve la primera fila
+        de datos.
+
+        Filas 1-6: preámbulo (tipo de modalidad 7000, formulario, moneda 1, NIT del aportante SIN dígito de
+        verificación, fecha de corte = último día del periodo, periodicidad 0 Ocasional); fila 8: título; fila 9:
+        código de cada columna (``None`` si la columna aún no existe en el formato); fila 10: encabezados; datos
+        desde la fila 11 con el número de fila en A y ``FILA_n`` en B, y los valores desde la columna C.
+        ``columnas``: lista de ``(código, encabezado)``. Nivel de verificación: copia de la estructura leída de la
+        plantilla; que Storm User acepte un libro generado se prueba solo con Storm real (piloto)."""
+        self.ensure_one()
+        _nombre, formulario, descripcion, titulo = _UGPP_HOJAS[clave]
+        nit = dian_utils.clean_nit(self.company_id.vat)
+        preambulo = (
+            ('Tipo Modalidad', 7000, 'Informe Nomina - UGPP'),
+            ('Formulario', formulario, descripcion),
+            ('Moneda Informe', 1, None),
+            ('Entidad', int(nit) if nit.isdigit() else nit, None),
+            ('Fecha', self.date_to, None),
+            ('Periodicidad', 0, 'Ocasional'),
+        )
+        for fila, (etiqueta, valor, detalle) in enumerate(preambulo, 1):
+            ws.cell(row=fila, column=2, value=etiqueta)
+            celda = ws.cell(row=fila, column=3, value=valor)
+            if fila == 5:
+                celda.number_format = 'dd/mm/yyyy'
+            if detalle:
+                ws.cell(row=fila, column=4, value=detalle)
+        ws.cell(row=8, column=1, value='[1]')
+        ws.cell(row=8, column=2, value=titulo)
+        for col_num, (codigo, encabezado) in enumerate(columnas, 3):
+            if codigo is not None:
+                ws.cell(row=9, column=col_num, value=codigo)
+            cell = ws.cell(row=10, column=col_num, value=encabezado)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+        return _UGPP_PRIMERA_FILA
+
+    def _ugpp_escribir_fila(self, ws, fila, valores, thin_border):
+        """Una fila de datos del marco: número de fila en A, ``FILA_n`` en B y los valores desde la columna C."""
+        n = fila - _UGPP_PRIMERA_FILA + 1
+        ws.cell(row=fila, column=1, value=n)
+        ws.cell(row=fila, column=2, value='FILA_%d' % n)
+        for col_num, valor in enumerate(valores, 3):
+            cell = ws.cell(row=fila, column=col_num, value=valor)
+            cell.border = thin_border
+            if isinstance(valor, float):
+                cell.number_format = '#,##0.00'
+
     def _generate_sheet_aportante(
         self, ws, header_font, header_fill, header_alignment, thin_border
     ):
@@ -313,29 +386,25 @@ class L10nCoNominaUgpp(models.Model):
         - Dirección, Municipio, Departamento, Teléfono, Correo
         - Autorretención Especial
         """
+        # (código de columna de la plantilla, encabezado). Las columnas sin código no existen en el formato: U2 las retira.
         headers = [
-            'Tipo Documento',
-            'Número Documento',
-            'DV',
-            'Razón Social',
-            'Naturaleza Jurídica',
-            'Tipo Aportante',
-            'Dirección',
-            'Municipio',
-            'Departamento',
-            'Teléfono',
-            'Correo Electrónico',
-            'Autorretención Especial',
-            'Período Año',
-            'Período Mes',
+            (4, 'Tipo Documento'),
+            (8, 'Número Documento'),
+            (None, 'DV'),
+            (12, 'Razón Social'),
+            (16, 'Naturaleza Jurídica'),
+            (20, 'Tipo Aportante'),
+            (None, 'Dirección'),
+            (None, 'Municipio'),
+            (None, 'Departamento'),
+            (None, 'Teléfono'),
+            (None, 'Correo Electrónico'),
+            (28, 'Autorretención Especial'),
+            (None, 'Período Año'),
+            (None, 'Período Mes'),
         ]
-
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_num, value=header)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = header_alignment
-            cell.border = thin_border
+        fila_datos = self._ugpp_marco(
+            ws, 'aportante', headers, header_font, header_fill, header_alignment, thin_border)
 
         company = self.company_id
 
@@ -369,9 +438,7 @@ class L10nCoNominaUgpp(models.Model):
             dict(self._fields['month'].selection).get(self.month, ''),
         ]
 
-        for col_num, value in enumerate(row_data, 1):
-            cell = ws.cell(row=2, column=col_num, value=value)
-            cell.border = thin_border
+        self._ugpp_escribir_fila(ws, fila_datos, row_data, thin_border)
 
         # Ajustar anchos
         for col in ws.columns:
@@ -402,19 +469,14 @@ class L10nCoNominaUgpp(models.Model):
         5. Clasificación TP NO SALARIAL
         """
         headers = [
-            'Concepto',
-            'Nombre concepto',
-            'Cuenta contable',
-            'Tipo pago',
-            'Clasificación TP NO SALARIAL',
+            (4, 'Concepto'),
+            (8, 'Nombre concepto'),
+            (12, 'Cuenta contable'),
+            (19, 'Tipo pago'),
+            (20, 'Clasificación TP NO SALARIAL'),
         ]
-
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_num, value=header)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = header_alignment
-            cell.border = thin_border
+        fila_datos = self._ugpp_marco(
+            ws, 'conceptos', headers, header_font, header_fill, header_alignment, thin_border)
 
         # Buscar reglas salariales con tipo de pago UGPP configurado
         salary_rules = self._get_ugpp_salary_rules()
@@ -446,10 +508,7 @@ class L10nCoNominaUgpp(models.Model):
                 tp_label,                             # Tipo pago
                 ns_label,                             # Clasificación TP NO SALARIAL
             ]
-            row_num = idx + 1
-            for col_num, value in enumerate(row_data, 1):
-                cell = ws.cell(row=row_num, column=col_num, value=value)
-                cell.border = thin_border
+            self._ugpp_escribir_fila(ws, fila_datos + idx - 1, row_data, thin_border)
 
         # Ajustar anchos
         for col in ws.columns:
@@ -554,22 +613,19 @@ class L10nCoNominaUgpp(models.Model):
         ibc_headers = ['IBC Salud', 'IBC Pensión', 'IBC ARL', 'IBC CCF']
 
         all_headers = fixed_headers + concept_headers + ibc_headers
-
-        for col_num, header in enumerate(all_headers, 1):
-            cell = ws.cell(row=1, column=col_num, value=header)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = header_alignment
-            cell.border = thin_border
+        # Códigos de columna de la plantilla; None = columna que el formato no tiene (las 4 de IBC: U5 las retira).
+        codigos = (list(_UGPP_COD_NOMINA) + [_UGPP_COD_OBSERVACIONES]
+                   + [_UGPP_COD_CONCEPTO_1 + 4 * i for i in range(len(concept_headers))]
+                   + [None] * len(ibc_headers))
+        fila_datos = self._ugpp_marco(
+            ws, 'nomina', list(zip(codigos, all_headers)), header_font, header_fill, header_alignment, thin_border)
 
         # ── Preparar mapeos ──────────────────────────────────────────
-        from ..services import dian_utils
-
         period_start = self.date_from
         period_end = self.date_to
 
         # ── Iterar nóminas ───────────────────────────────────────────
-        row_num = 2
+        row_num = fila_datos
         ibc_reportados = set()
         for payslip in payslips.sorted(
             key=lambda p: (p.employee_id.name, p.number or '')
@@ -745,11 +801,7 @@ class L10nCoNominaUgpp(models.Model):
             # ═════════════════════════════════════════════════════════
             row_data = fixed_data + concept_data + ibc_data
 
-            for col_num, value in enumerate(row_data, 1):
-                cell = ws.cell(row=row_num, column=col_num, value=value)
-                cell.border = thin_border
-                if isinstance(value, float):
-                    cell.number_format = '#,##0.00'
+            self._ugpp_escribir_fila(ws, row_num, row_data, thin_border)
 
             row_num += 1
 
@@ -765,7 +817,7 @@ class L10nCoNominaUgpp(models.Model):
         _logger.info(
             'Hoja "nomina" generada con %d filas (%d columnas: '
             '%d fijas + %d conceptos + 4 IBC)',
-            row_num - 2,
+            row_num - fila_datos,
             len(all_headers),
             len(fixed_headers),
             len(concept_headers),

@@ -16,9 +16,10 @@ except ImportError:  # pragma: no cover
     openpyxl = None
 
 _PAYSLIP = 'odoo.addons.l10n_co_nomina_electronica.models.hr_payslip.HrPayslip'
-# Posición (0-based) de cada columna de días en la fila de la hoja.
-_COL = {'trabajados': 18, 'incapacidad': 19, 'lic_mat': 20, 'lic_rem': 21,
-        'suspension': 22, 'vacaciones': 23, 'huelga': 24, 'total': 25}
+# Posición (0-based) de cada columna de días en la fila de la hoja (los datos empiezan en la columna C: A y B llevan el
+# número de fila, marco de la plantilla Storm User, U1).
+_COL = {'trabajados': 20, 'incapacidad': 21, 'lic_mat': 22, 'lic_rem': 23,
+        'suspension': 24, 'vacaciones': 25, 'huelga': 26, 'total': 27}
 
 
 @tagged('post_install', '-at_install')
@@ -64,7 +65,7 @@ class TestUgppDias(TransactionCase):
             'date_to': date(2026, 9, 30), 'company_id': self.company.id})
         report._generate_sheet_nomina(
             ws, slips, Font(bold=True), PatternFill(), Alignment(), Border())
-        return [[c.value for c in fila] for fila in ws.iter_rows(min_row=2)]
+        return [[c.value for c in fila] for fila in ws.iter_rows(min_row=11)]
 
     def test_un_recibo_sin_novedades_total_30_y_trabajados_30(self):
         employee, contract = self._empleado()
