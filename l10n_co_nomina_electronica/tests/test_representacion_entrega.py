@@ -100,6 +100,32 @@ class TestRepresentacionEntrega(DocumentoFixture, TransactionCase):
         self.assertFalse(self.doc.entregar_representacion)                    # la intención se consumió
         self.assertTrue(self.doc.message_ids.filtered(lambda m: self.doc.NE_MARCA_REPRESENTACION in str(m.body)))
 
+    def test_el_remitente_es_el_usuario_que_envia_y_la_plantilla_usa_el_idioma_del_empleado(self):
+        """Doc 59 §9 (4): email_from = usuario que envía; lang = idioma del empleado (patrón nativo)."""
+        plantilla = self.env.ref(self.doc.NE_PLANTILLA_REPRESENTACION_XMLID)
+        self.assertEqual(plantilla.lang, '{{ object.employee_id.lang }}')
+        usuario = self.env['res.users'].with_context(no_reset_password=True).create({
+            'name': 'Remitente Entrega', 'login': 'remitente_entrega', 'email': 'remitente_entrega@example.com',
+            'company_id': self.company.id, 'company_ids': [(6, 0, self.company.ids)],
+            'groups_id': [(6, 0, [self.env.ref('base.group_user').id,
+                                  self.env.ref('hr_payroll.group_hr_payroll_manager').id])]})
+        self._intento('invoice_accepted', '2026-04-06 10:00:00')
+        self.doc.with_user(usuario).with_context(allowed_company_ids=self.company.ids)._ne_enviar_representacion()
+        self.assertIn('remitente_entrega@example.com', self._correos().email_from)
+
+    def test_enviado_por_el_sistema_no_fuerza_un_remitente(self):
+        self._intento('invoice_accepted', '2026-04-06 10:00:00')
+        capturado = {}
+        original = type(self.env['mail.template']).send_mail
+
+        def captura(plantilla, res_id, *args, **kwargs):
+            capturado.update(kwargs.get('email_values') or {})
+            return original(plantilla, res_id, *args, **kwargs)
+        self._patch(type(self.env['mail.template']), 'send_mail', captura)
+        self.doc.with_user(self.env.ref('base.user_root'))._ne_enviar_representacion()
+        self.assertIn('email_to', capturado)
+        self.assertNotIn('email_from', capturado)
+
     def test_documento_pendiente_registra_la_intencion_y_se_envia_al_aceptar(self):
         self._intento('invoice_pending', '2026-04-05 10:00:00')
         self._ejecutar(self._asistente())

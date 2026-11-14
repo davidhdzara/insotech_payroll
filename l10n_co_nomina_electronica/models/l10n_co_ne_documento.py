@@ -1161,8 +1161,12 @@ class L10nCoNeDocumento(models.Model):
         if not template:
             raise UserError(_('No se encontró la plantilla de correo "%s".', self.NE_PLANTILLA_REPRESENTACION_XMLID))
         adjunto = self._ne_zip_representacion()
-        mail_id = template.send_mail(self.id, force_send=False, email_values={
-            'email_to': correo, 'attachment_ids': [(6, 0, adjunto.ids)]})
+        valores = {'email_to': correo, 'attachment_ids': [(6, 0, adjunto.ids)]}
+        # Remitente: el usuario que envía (patron de la plantilla nativa de la colilla). Si lo envia el sistema (el cron
+        # que recibe la aceptacion) no hay usuario humano: se deja el remitente por defecto del servidor de correo.
+        if not self.env.user._is_superuser() and self.env.user.email:
+            valores['email_from'] = self.env.user.email_formatted
+        mail_id = template.send_mail(self.id, force_send=False, email_values=valores)
         if not self.env['mail.mail'].sudo().browse(mail_id).exists():
             raise UserError(_('La plantilla "%s" no generó el correo.', template.display_name))
         self.message_post(

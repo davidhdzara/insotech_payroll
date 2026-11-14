@@ -39,6 +39,10 @@
         <field name="model_id" ref="model_l10n_co_ne_operation_mode"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <!-- PRINCIPIO (TL/consultor v19, 2026-11-14): la visibilidad de estos modelos es la del recibo nativo de CADA version
+         de Odoo, no una copia fija. En v18 el recibo del oficial se limita por usuario/departamento/gerente; en v19
+         `hr_payroll_rule_officer` es [(1,'=',1)]. Al portar a v19, las reglas del Oficial de este archivo se reescriben
+         a su dominio. -->
     <!-- Frente 6, P6-3 (doc 59 4.4): la visibilidad de estos modelos no puede exceder la del recibo. Mismo dominio que la
          regla nativa hr_payroll_rule_officer del recibo para el oficial; el administrador ve todo, como en el recibo.
          Las reglas de grupo se combinan con O entre si y con Y con la regla global por compania. -->
