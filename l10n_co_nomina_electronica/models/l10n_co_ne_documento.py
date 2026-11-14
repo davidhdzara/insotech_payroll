@@ -16,7 +16,7 @@ import pytz
 
 from markupsafe import Markup
 
-from odoo import _, api, fields, models
+from odoo import _, api, fields, models, modules
 from odoo.exceptions import UserError, ValidationError
 
 from ..services import (
@@ -927,6 +927,176 @@ class L10nCoNeDocumento(models.Model):
                 nota.parent_id.message_post(
                     body=_('Eliminado por la nota de ajuste "%s".', nota.display_name),
                     message_type='comment', subtype_xmlid='mail.mt_note')
+
+    # ──────────────────────────────────────────────────────────────────
+    # Cola de envío y cron (doc 53 §23.17, 7b). Patrón de ``account.move.send``: ``sending_data`` + ``_trigger`` + cron.
+    # ──────────────────────────────────────────────────────────────────
+    _CRON_ENVIO_XMLID = 'l10n_co_nomina_electronica.ir_cron_ne_documento_send'
+
+    def _ne_commit(self):
+        """Único punto de ``commit`` de la cola (como ``_can_commit`` del nativo): un commit dentro de una prueba
+        rompería su transacción, así que no se hace cuando hay una prueba en curso; las pruebas lo parchean."""
+        if not modules.module.current_test:
+            self.env.cr.commit()
+
+    def _ne_cron_envio(self):
+        cron = self.env.ref(self._CRON_ENVIO_XMLID, raise_if_not_found=False)
+        if not cron:
+            raise UserError(_('Falta la acción planificada del envío de documentos de nómina electrónica '
+                              '(%s).', self._CRON_ENVIO_XMLID))
+        return cron
+
+    def _ne_encolar(self):
+        """Pone los documentos en la cola de envío. NO envía: lo hace el cron.
+
+        Corre las MISMAS precondiciones de ``_ne_enviar_uno`` (el error sale ahora, no horas después) y exige que no
+        estén ya en la cola. Es atómico: si uno falla, ninguno se encola. ``sending_data`` lleva autor, hora y el
+        estado de reintentos; se dispara el cron una sola vez."""
+        cron = self._ne_cron_envio()
+        if not cron.active:
+            raise UserError(_('La acción planificada de envío de nómina electrónica está archivada: actívela en '
+                              'Ajustes > Técnico > Acciones planificadas para poder encolar envíos.'))
+        for doc in self:
+            if doc.is_being_sent:
+                raise UserError(_('El documento "%s" ya está en la cola de envío.', doc.display_name))
+            doc._ne_precondiciones_envio()
+        ahora = fields.Datetime.to_string(fields.Datetime.now())
+        for doc in self:
+            doc.sending_data = {
+                'author_user_id': self.env.user.id, 'author_partner_id': self.env.user.partner_id.id,
+                'queued_at': ahora, 'intentos': 0, 'proximo': ahora}
+        if self:
+            cron._trigger()
+        return self
+
+    @api.model
+    def _ne_espera_reintento(self, intentos, company):
+        """Minutos de espera tras ``intentos`` fallos de transporte seguidos: base × 2^(n-1) con tope (5, 10, 20, 40, 60)."""
+        base = company._ne_config_int_param('l10n_co_nomina_electronica.send_retry_minutes', 5)
+        tope = company._ne_config_int_param('l10n_co_nomina_electronica.send_retry_max_minutes', 60)
+        return min(base * 2 ** (intentos - 1), tope)
+
+    def _ne_avisar_autor(self, partner_id, titulo, mensaje, advertencia=False):
+        """Notificación nativa del bus (``simple_notification``, sin JavaScript propio) al autor del envío."""
+        if partner_id:
+            self.env['bus.bus']._sendone(
+                self.env['res.partner'].browse(partner_id), 'simple_notification',
+                {'title': titulo, 'message': mensaje, 'warning': advertencia})
+
+    @api.model
+    def _ne_barrido_en_curso(self, ahora):
+        """Un envío ``en_curso`` más viejo que ``send_stale_minutes`` sin intento posterior es un proceso que murió
+        durante el envío: el documento pasa a ``incierto`` (pudo llegar a la DIAN) y se avisa al autor. Con un intento
+        posterior solo se limpia la cola. Un ``en_curso`` reciente no se toca (otro proceso puede estar enviando)."""
+        company = self.env.company
+        minutos = company._ne_config_int_param('l10n_co_nomina_electronica.send_stale_minutes', 15)
+        limite = ahora - timedelta(minutes=minutos)
+        for doc in self.sudo().search([('sending_data', '!=', False)]):
+            datos = doc.sending_data or {}
+            if not datos.get('en_curso'):
+                continue
+            desde = fields.Datetime.to_datetime(datos['en_curso'])
+            if desde > limite:
+                continue
+            if doc.intento_ids.filtered(lambda i: i.create_date and i.create_date >= desde):
+                doc.sending_data = False
+                continue
+            doc.write({'incierto': True, 'sending_data': False})
+            doc.message_post(
+                body=_('El proceso se interrumpió durante el envío a la DIAN: el documento queda como envío incierto. '
+                       'Consulte su estado.'), message_type='comment', subtype_xmlid='mail.mt_note')
+            doc._ne_avisar_autor(datos.get('author_partner_id'), _('Envío interrumpido'), _(
+                'El envío de "%s" se interrumpió: consulte su estado en la DIAN.', doc.display_name), True)
+            self._ne_commit()
+
+    @api.model
+    def _cron_enviar_cola(self):
+        """Cron de envío: procesa la cola de documentos, uno por uno y aislados.
+
+        1. Barrido de envíos interrumpidos. 2. Por compañía colombiana y fuera de habilitación, hasta
+        ``send_batch_size`` documentos con ``proximo`` vencido (orden: mes e id), con candado de fila. 3. Por
+        documento: COMMIT PREVIO de ``en_curso`` ANTES de llamar a la DIAN y otro al terminar (un ZipKey ya recibido
+        no se pierde). Aceptado, rechazado o pendiente no se reintentan; un fallo de transporte sí, con espera
+        creciente; un ``UserError`` local no; una excepción inesperada deja el documento ``incierto`` (nunca un fallo
+        reintentable: pudo haber llegado a la DIAN)."""
+        ahora = fields.Datetime.now()
+        self._ne_barrido_en_curso(ahora)
+        resultados = {}   # author_partner_id -> {'aceptado': n, ...}
+        quedan = False
+        companias = self.env['res.company'].sudo().search([
+            ('partner_id.country_id.code', '=', 'CO'), ('l10n_co_ne_environment', '=', '1'),
+            ('l10n_co_ne_certification_process', '=', False)])
+        for company in companias:
+            vencidos = self.sudo().search([
+                ('company_id', '=', company.id), ('sending_data', '!=', False),
+                ('legacy', '=', False), ('eliminado', '=', False)], order='period, id').filtered(
+                lambda d: not (d.sending_data or {}).get('en_curso') and not (d.sending_data or {}).get('error')
+                and fields.Datetime.to_datetime((d.sending_data or {}).get('proximo') or ahora) <= ahora)
+            lote = company._ne_config_int_param('l10n_co_nomina_electronica.send_batch_size', 10)
+            if len(vencidos) > lote:
+                quedan = True
+            vencidos = vencidos[:lote]
+            if vencidos:
+                self.env.cr.execute(
+                    'SELECT id FROM l10n_co_ne_documento WHERE id IN %s FOR UPDATE SKIP LOCKED', (tuple(vencidos.ids),))
+                vencidos = vencidos.browse([row[0] for row in self.env.cr.fetchall()])
+            for doc in vencidos:
+                datos = dict(doc.sending_data)
+                resumen = resultados.setdefault(datos.get('author_partner_id') or 0, {})
+
+                def contar(clave, _r=resumen):
+                    _r[clave] = _r.get(clave, 0) + 1
+                datos['en_curso'] = fields.Datetime.to_string(fields.Datetime.now())
+                doc.sending_data = datos
+                self._ne_commit()                      # commit previo: ANTES de llamar a la DIAN
+                try:
+                    with self.env.cr.savepoint():
+                        intento = doc._ne_enviar_uno()
+                except UserError as error:
+                    doc.sending_data = {'error': str(error), 'author_partner_id': datos.get('author_partner_id')}
+                    doc.message_post(body=_('No se envió el documento desde la cola: %s', error),
+                                     message_type='comment', subtype_xmlid='mail.mt_note')
+                    contar('fallido')
+                except Exception as error:   # noqa: BLE001 -- pudo llegar a la DIAN: incierto, no reintento
+                    _logger.exception('Cola de envío: error inesperado enviando el documento %s', doc.id)
+                    doc.write({'incierto': True, 'sending_data': False})
+                    doc.message_post(body=_('Error inesperado durante el envío (%s): el documento queda como envío '
+                                            'incierto. Consulte su estado.', error),
+                                     message_type='comment', subtype_xmlid='mail.mt_note')
+                    contar('incierto')
+                else:
+                    if intento.state == 'invoice_sending_failed':
+                        intentos = int(datos.get('intentos') or 0) + 1
+                        maximo = company._ne_config_int_param('l10n_co_nomina_electronica.send_max_retries', 5)
+                        if intentos <= maximo:
+                            espera = self._ne_espera_reintento(intentos, company)
+                            doc.sending_data = {
+                                'author_user_id': datos.get('author_user_id'),
+                                'author_partner_id': datos.get('author_partner_id'),
+                                'queued_at': datos.get('queued_at'), 'intentos': intentos,
+                                'proximo': fields.Datetime.to_string(fields.Datetime.now() + timedelta(minutes=espera))}
+                            contar('reintento')
+                        else:
+                            doc.sending_data = False
+                            doc.message_post(body=_('Se agotaron los reintentos de envío: el documento queda como '
+                                                    'envío fallido.'), message_type='comment',
+                                             subtype_xmlid='mail.mt_note')
+                            contar('fallido')
+                    else:
+                        contar({'invoice_accepted': 'aceptado', 'invoice_rejected': 'rechazado'}.get(
+                            intento.state, 'pendiente'))
+                self._ne_commit()
+        # Avisos al autor y limpieza de los errores locales ya notificados.
+        for doc in self.sudo().search([('sending_data', '!=', False)]):
+            if (doc.sending_data or {}).get('error'):
+                doc.sending_data = False
+        for partner_id, resumen in resultados.items():
+            if partner_id and resumen:
+                texto = _('Envío a la DIAN: %s.', ', '.join('%s %s' % (n, k) for k, n in sorted(resumen.items())))
+                self._ne_avisar_autor(partner_id, _('Nómina electrónica'), texto,
+                                      bool(resumen.get('fallido') or resumen.get('incierto')))
+        if quedan:
+            self._ne_cron_envio()._trigger()
 
     # ──────────────────────────────────────────────────────────────────
     # Reconsultar el estado en la DIAN (doc 53 §23.12 3.2, §23.3)

@@ -64,5 +64,32 @@
             <field name="key">l10n_co_nomina_electronica.recheck_batch_limit</field>
             <field name="value">200</field>
         </record>
+
+        <!-- Cola de envío del documento mensual (doc 53 §23.17, 7b / D-C): decisiones de funcionamiento editables sin
+             tocar código. send_batch_size = documentos por corrida del cron (el job_count del nativo);
+             send_max_retries = reintentos tras un fallo de transporte; send_retry_minutes y send_retry_max_minutes =
+             espera base y tope (5, 10, 20, 40, 60); send_stale_minutes = cuánto puede llevar "en curso" un envío antes
+             de darlo por interrumpido (debe ser MAYOR que soap_timeout_seconds + margen). Leídos con
+             ResCompany._ne_config_int_param(). -->
+        <record id="config_parameter_send_batch_size" model="ir.config_parameter">
+            <field name="key">l10n_co_nomina_electronica.send_batch_size</field>
+            <field name="value">10</field>
+        </record>
+        <record id="config_parameter_send_max_retries" model="ir.config_parameter">
+            <field name="key">l10n_co_nomina_electronica.send_max_retries</field>
+            <field name="value">5</field>
+        </record>
+        <record id="config_parameter_send_retry_minutes" model="ir.config_parameter">
+            <field name="key">l10n_co_nomina_electronica.send_retry_minutes</field>
+            <field name="value">5</field>
+        </record>
+        <record id="config_parameter_send_retry_max_minutes" model="ir.config_parameter">
+            <field name="key">l10n_co_nomina_electronica.send_retry_max_minutes</field>
+            <field name="value">60</field>
+        </record>
+        <record id="config_parameter_send_stale_minutes" model="ir.config_parameter">
+            <field name="key">l10n_co_nomina_electronica.send_stale_minutes</field>
+            <field name="value">15</field>
+        </record>
     </data>
 </odoo>
