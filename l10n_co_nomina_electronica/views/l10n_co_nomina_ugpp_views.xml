@@ -17,7 +17,7 @@
                             invisible="state == 'generated'"
                             groups="hr_payroll.group_hr_payroll_manager"/>
                     <button name="action_imprimir_oficio"
-                            string="Oficio de respuesta (borrador)"
+                            string="Oficio de Respuesta (Borrador)"
                             type="object"
                             groups="hr_payroll.group_hr_payroll_manager"/>
                     <field name="state"

@@ -38,7 +38,7 @@
                         <p><strong>Notificaciones:</strong>
                             <span t-out="d['direccion']"/><t t-if="d['direccion'] and d['correo']"> / </t><span t-out="d['correo']"/></p>
                         <p>Cordialmente,</p>
-                        <p style="margin-top: 60px;">____________________________<br/>
+                        <p class="mt-5">____________________________<br/>
                             <strong t-out="d['representante'].name"/><br/>
                             <span t-out="d['representante_documento']"/><br/>
                             Representante legal<br/>
