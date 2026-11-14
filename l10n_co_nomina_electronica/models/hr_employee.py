@@ -72,11 +72,34 @@ class HrEmployee(models.Model):
         # _inverse_work_contact_details() (hr_employee_base.py). sudo()
         # acotado a esta sola escritura, nunca a todo el registro.
         for employee in self:
-            if employee.work_contact_id:
-                employee.work_contact_id.sudo().write({
-                    'l10n_latam_identification_type_id':
-                        employee.l10n_co_ne_identification_type_id.id,
-                })
+            contacto = employee.work_contact_id
+            if contacto:
+                anterior = contacto.l10n_latam_identification_type_id
+                nuevo = employee.l10n_co_ne_identification_type_id
+                contacto.sudo().write({'l10n_latam_identification_type_id': nuevo.id})
+                if anterior != nuevo:
+                    employee._ne_nota_cambio_tipo_documento(contacto, anterior, nuevo)
+
+    def _ne_asientos_publicados_del_contacto(self, contacto):
+        """Asientos publicados del contacto (el contacto del empleado los recibe desde la primera nomina)."""
+        return self.env['account.move'].sudo().search_count([
+            ('partner_id', '=', contacto.id), ('state', '=', 'posted')])
+
+    def _ne_nota_cambio_tipo_documento(self, contacto, anterior, nuevo):
+        """Constancia en el chatter del contacto: el cambio del tipo de documento desde la ficha del empleado NO se bloquea (el
+        dato correcto del trabajador manda para la nomina electronica) pero tampoco es silencioso (doc 59 18.8, TL 2026-11-14;
+        principio «sin defaults silenciosos» de David). Si el contacto tiene asientos publicados, la nota lo dice."""
+        self.ensure_one()
+        asientos = self._ne_asientos_publicados_del_contacto(contacto)
+        cuerpo = _(
+            'Tipo de documento cambiado de "%(antes)s" a "%(despues)s" desde la ficha del empleado %(empleado)s por %(usuario)s.',
+            antes=anterior.name or _('(vacío)'), despues=nuevo.name or _('(vacío)'),
+            empleado=self.display_name, usuario=self.env.user.name)
+        if asientos:
+            cuerpo += ' ' + _('El contacto tiene %(n)s asientos publicados.', n=asientos)
+        contacto.sudo().message_post(
+            body=cuerpo, message_type='comment', subtype_xmlid='mail.mt_note',
+            author_id=self.env.user.partner_id.id)
 
     # ──────────────────────────────────────────────────────────────────
     # Nombres y apellidos (H-024). Odoo solo guarda ``name``; Colombia pide
