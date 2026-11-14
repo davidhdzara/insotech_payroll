@@ -83,15 +83,16 @@ class TestUgppDias(TransactionCase):
         consolidado = self.env['l10n.co.ibc.mensual'].search([('employee_id', '=', employee.id)])
         self.assertEqual(self._filas(slip)[0][_COL['total']], consolidado.dias_sp)
 
-    def test_dos_recibos_del_mes_los_dias_van_solo_en_la_primera_fila(self):
+    def test_dos_recibos_del_mes_son_una_sola_fila_con_los_dias_del_consolidado(self):
+        # U4 (doc 57): una fila por empleado y mes; los días salen del consolidado del mes, no de cada recibo.
         employee, contract = self._empleado()
         s1 = self._recibo(employee, contract, date(2026, 9, 1), date(2026, 9, 15))
         s2 = self._recibo(employee, contract, date(2026, 9, 16), date(2026, 9, 30))
         self._confirmar(s1, s2)
         filas = self._filas(s1 | s2)
-        self.assertEqual(sum(f[_COL['total']] for f in filas), 30)
-        self.assertEqual(filas[1][_COL['total']], 0)
-        self.assertEqual(filas[1][_COL['trabajados']], 0)
+        self.assertEqual(len(filas), 1)
+        self.assertEqual(filas[0][_COL['total']], 30)
+        self.assertEqual(filas[0][_COL['trabajados']], 30)
 
     def test_novedades_salen_de_las_funciones_de_nomina(self):
         employee, contract = self._empleado()

@@ -104,6 +104,8 @@ _UGPP_CLASE_NO_SALARIAL = {
 }
 # Guía §1.3: "No utilice caracteres especiales (¡!"#$%&) en ninguno de los campos".
 _UGPP_CARACTERES_PROHIBIDOS = dict.fromkeys(map(ord, '¡!"”“#$%&'), None)
+# Tipos de pago cuyo valor se reporta en el mes del PAGO (Guía V-20.1 §1.3, p. 13).
+_UGPP_TIPOS_VACACIONES = ('tp_vacaciones', 'tp_vacaciones_terminacion')
 _UGPP_MAX_CUENTAS = 200      # largo máximo del campo "cuenta contable" en la plantilla
 
 
@@ -268,19 +270,8 @@ class L10nCoNominaUgpp(models.Model):
                 'pip install openpyxl'
             ))
 
-        # Buscar nóminas del período
-        payslips = self.env['hr.payslip'].search([
-            ('company_id', '=', self.company_id.id),
-            # date_to y no date_from: la liquidacion tiene date_from = inicio de contrato
-            # (H-017b); y los recibos pagados tambien se reportan.
-            ('date_to', '>=', self.date_from),
-            ('date_to', '<=', self.date_to),
-            ('state', 'in', ('done', 'paid')),
-            # doc 39 (2026-10-04): excluir empleados sintéticos del
-            # wizard de habilitación DIAN -- nunca son personal real,
-            # no deben contarse en un reporte UGPP real.
-            ('employee_id.l10n_co_ne_is_habilitacion_test', '=', False),
-        ])
+        # Recibos del periodo (por date_to) y los de otros meses con vacaciones pagadas en él
+        payslips = self._ugpp_recibos()
 
         if not payslips:
             raise UserError(_(
@@ -543,13 +534,94 @@ class L10nCoNominaUgpp(models.Model):
                 '; '.join(problemas)))
         return filas
 
+    def _ugpp_fecha_pago(self, slip):
+        """Primera fecha de pago del recibo (la misma fuente del documento DIAN). Sin fecha no se supone ninguna: el
+        error nombra el recibo y dice cómo corregirlo; solo afecta a los reportes que incluyen ese recibo."""
+        try:
+            return slip._ne_fecha_pago()
+        except UserError as error:
+            raise UserError(_(
+                '%(error)s\n\nEl reporte UGPP necesita la fecha de pago del recibo "%(recibo)s" porque tiene valor '
+                'de vacaciones (la Guía pide reportarlo en el mes en que se pagó). Corríjalo registrando la fecha de '
+                'pago en ese recibo; solo afecta a los reportes que lo incluyan.',
+                error=error.args[0], recibo=slip.display_name)) from error
+
+    def _ugpp_recibos_del_mes(self, payslips):
+        """Recibos del reporte cuyo ``date_to`` cae en el periodo (decisión de David: el mes es el del periodo
+        trabajado). El resto de ``payslips`` son recibos de otros meses con vacaciones pagadas en este."""
+        return payslips.filtered(lambda s: self.date_from <= s.date_to <= self.date_to)
+
+    def _ugpp_recibos(self):
+        """Recibos que alimentan el reporte: los del mes (por ``date_to``) más los de otros meses con valor de
+        vacaciones cuyo pago cae en el mes (Guía V-20.1, numeral 1.3, p. 13: el valor de las vacaciones se reporta en
+        el mes en que realmente se pagó). Excluye notas de crédito, notas de ajuste por recibo y empleados de
+        habilitación."""
+        self.ensure_one()
+        base = [
+            ('company_id', '=', self.company_id.id),
+            ('state', 'in', ('done', 'paid')),
+            # doc 39 (2026-10-04): los empleados sintéticos del asistente de habilitación DIAN no son personal real.
+            ('employee_id.l10n_co_ne_is_habilitacion_test', '=', False),
+        ]
+        # date_to y no date_from: la liquidación tiene date_from = inicio de contrato (H-017b).
+        del_mes = self.env['hr.payslip'].search(
+            base + [('date_to', '>=', self.date_from), ('date_to', '<=', self.date_to)])
+        con_vacaciones = self.env['hr.payslip'].search(base + [
+            ('date_to', '<', self.date_from),
+            ('line_ids.salary_rule_id.l10n_co_ugpp_payment_type', 'in', _UGPP_TIPOS_VACACIONES)])
+        con_vacaciones = con_vacaciones.filtered(lambda s: any(
+            l.total and l.salary_rule_id.l10n_co_ugpp_payment_type in _UGPP_TIPOS_VACACIONES for l in s.line_ids))
+        pagadas_en_el_mes = con_vacaciones.filtered(
+            lambda s: self.date_from <= self._ugpp_fecha_pago(s) <= self.date_to)
+        return del_mes | pagadas_en_el_mes
+
+    def _ugpp_valores(self, payslips):
+        """``{employee_id: {rule_id: total}}`` con el valor de cada concepto UGPP en el mes: los conceptos de tipo
+        vacaciones salen de los recibos pagados en el mes (el pago manda), todos los demás de los recibos del mes
+        (``date_to``). Las vacaciones de un recibo del mes pagadas en otro mes no se cuentan aquí."""
+        self.ensure_one()
+        del_mes = self._ugpp_recibos_del_mes(payslips)
+        valores = {}
+        for slip in payslips:
+            paga_en_el_mes = None
+            for line in slip.line_ids:
+                tipo = line.salary_rule_id.l10n_co_ugpp_payment_type
+                if not tipo or not line.total:
+                    continue
+                if tipo in _UGPP_TIPOS_VACACIONES:
+                    if paga_en_el_mes is None:
+                        paga_en_el_mes = self.date_from <= self._ugpp_fecha_pago(slip) <= self.date_to
+                    if not paga_en_el_mes:
+                        continue
+                elif slip not in del_mes:
+                    continue
+                por_regla = valores.setdefault(slip.employee_id.id, {})
+                por_regla[line.salary_rule_id.id] = por_regla.get(line.salary_rule_id.id, 0.0) + line.total
+        return valores
+
+    def _ugpp_empleados(self, payslips):
+        """``[(empleado, recibo de referencia)]`` ordenado por nombre: una fila por empleado y mes. El recibo de
+        referencia (contrato, datos fijos) es el último del mes; si el empleado solo tiene vacaciones pagadas en el mes,
+        el último recibo que las trae."""
+        valores = self._ugpp_valores(payslips)
+        del_mes = self._ugpp_recibos_del_mes(payslips)
+        filas = []
+        for empleado in payslips.employee_id.sorted('name'):
+            propios = del_mes.filtered(lambda s: s.employee_id == empleado)
+            if not propios and not valores.get(empleado.id):
+                continue
+            candidatos = propios or payslips.filtered(lambda s: s.employee_id == empleado)
+            filas.append((empleado, candidatos.sorted(lambda s: (s.date_to, s.id))[-1]))
+        return filas
+
     def _get_ugpp_salary_rules(self, payslips):
         """Reglas salariales con tipo de pago UGPP que tienen VALOR (total distinto de cero) en los recibos del
         reporte, ordenadas. Una regla sin uso en el periodo no es un concepto del reporte (ni hoja de conceptos ni
         columna de la hoja nómina): así no se exige cuenta contable a lo que no se pagó (doc 57, U3b). La hoja de
         conceptos y la de nómina usan esta misma lista, de modo que el CONCEPTO N coincide en las dos."""
-        lineas = payslips.line_ids.filtered(lambda l: l.total and l.salary_rule_id.l10n_co_ugpp_payment_type)
-        return lineas.salary_rule_id.sorted(key=lambda r: (r.sequence, r.code or ''))
+        ids = {rid for por_regla in self._ugpp_valores(payslips).values()
+               for rid, total in por_regla.items() if total}
+        return self.env['hr.salary.rule'].browse(ids).sorted(key=lambda r: (r.sequence, r.code or ''))
 
     def _generate_sheet_conceptos(
         self, ws, payslips, header_font, header_fill, header_alignment, thin_border
@@ -695,59 +767,32 @@ class L10nCoNominaUgpp(models.Model):
 
         # ── Iterar nóminas ───────────────────────────────────────────
         row_num = fila_datos
-        ibc_reportados = set()
-        for payslip in payslips.sorted(
-            key=lambda p: (p.employee_id.name, p.number or '')
-        ):
-            employee = payslip.employee_id
+        valores = self._ugpp_valores(payslips)
+        for employee, payslip in self._ugpp_empleados(payslips):
             contract = payslip.contract_id
-
-            # -- Totales por tipo de pago UGPP -------------------------
-            total_salarial = 0.0
-            total_no_salarial = 0.0
-
-            # Acumular monto por regla salarial (rule.id → total)
-            rule_totals = {}
-            for line in payslip.line_ids:
-                rule = line.salary_rule_id
-                ugpp_type = rule.l10n_co_ugpp_payment_type
-                if ugpp_type:
-                    rule_totals[rule.id] = (
-                        rule_totals.get(rule.id, 0.0) + line.total
-                    )
-                    if ugpp_type == 'tp_salarial':
-                        total_salarial += line.total
-                    elif ugpp_type == 'tp_no_salarial':
-                        total_no_salarial += line.total
-                    elif ugpp_type in (
-                        'tp_compensacion_ord', 'tp_compensacion_ext',
-                    ):
-                        # Compensaciones son salariales para IBC
-                        total_salarial += line.total
+            # Valor de cada concepto del mes para el empleado (una fila por empleado y mes; vacaciones por fecha de pago).
+            rule_totals = valores.get(employee.id, {})
 
             # -- Días e IBC: del consolidado mensual (H-017b / UGPP días) ----
-            # El consolidado es por empleado y mes: PILA, nómina y este reporte comparten la
-            # misma fuente. Si hay varios recibos, días e IBC van solo en la primera fila de
-            # ese empleado y mes; las siguientes en 0 para no duplicar.
-            clave_ibc = (employee.id, payslip.date_to.strftime('%Y-%m'))
-            if clave_ibc in ibc_reportados:
-                ibc_data = [0.0, 0.0, 0.0, 0.0]
-                dias = dict.fromkeys(
-                    ('trabajados', 'incapacidad', 'lic_mat', 'lic_rem', 'suspension',
-                     'vacaciones', 'huelga', 'total'), 0)
-            else:
+            # El consolidado es por empleado y mes: PILA, nómina y este reporte comparten la misma fuente. Un empleado
+            # sin recibos con ``date_to`` en el mes (solo vacaciones pagadas en él) va con días en 0, sin novedades.
+            if payslip in self._ugpp_recibos_del_mes(payslips):
                 consolidado = self.env['l10n.co.ibc.mensual']._refrescar(
-                    payslip.company_id, employee, payslip.date_to)
+                    payslip.company_id, employee, self.date_from)
                 if not consolidado:
                     raise UserError(_(
                         'No hay IBC consolidado para %(empleado)s en %(mes)s: ningun '
                         'recibo confirmado trae las lineas de IBC. Recalcule y confirme '
                         'la nomina.',
-                        empleado=employee.name, mes=payslip.date_to.strftime('%Y-%m')))
-                ibc_reportados.add(clave_ibc)
+                        empleado=employee.name, mes=self.date_from.strftime('%Y-%m')))
                 ibc_data = [consolidado.ibc_sp, consolidado.ibc_sp,
                             consolidado.ibc_arl, consolidado.ibc_paraf]
                 dias = self._dias_ugpp(consolidado)
+            else:
+                ibc_data = [0.0, 0.0, 0.0, 0.0]
+                dias = dict.fromkeys(
+                    ('trabajados', 'incapacidad', 'lic_mat', 'lic_rem', 'suspension',
+                     'vacaciones', 'huelga', 'total'), 0)
 
             dias_trabajados = dias['trabajados']
             dias_incapacidad = dias['incapacidad']
