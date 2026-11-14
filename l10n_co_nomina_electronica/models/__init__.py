@@ -17,6 +17,7 @@ from . import l10n_co_ne_documento_send
 from . import l10n_co_ne_habilitacion
 from . import l10n_co_ne_exchange
 from . import l10n_co_nomina_ugpp
+from . import l10n_co_ugpp_oficio_report
 from . import hr_retefuente
 from . import hr_leave_ne
 from . import hr_salary_attachment

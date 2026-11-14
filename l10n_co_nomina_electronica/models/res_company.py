@@ -415,6 +415,12 @@ class ResCompany(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # Campos UGPP – Clasificación del aportante
     # ──────────────────────────────────────────────────────────────────
+    l10n_co_ne_representante_legal_id = fields.Many2one(
+        'res.partner', string='Representante legal',
+        help='Contacto que firma los oficios de la compañía ante entidades (hoy, el oficio de respuesta a la UGPP). Su '
+             'nombre y su identificación salen de Contactos: no se digitan aparte. Odoo no trae este dato en la '
+             'compañía ni en la localización colombiana.')
+
     # Listas de la Guía UGPP V-20.1 (p. 15): el código de cada opción sale de ``_UGPP_NATURALEZA`` / ``_UGPP_TIPO_APORTANTE``
     # en models/l10n_co_nomina_ugpp.py (formulario 7001, columnas 16 y 20).
     l10n_co_ugpp_legal_nature = fields.Selection(

@@ -89,6 +89,8 @@ class ResConfigSettings(models.TransientModel):
     )
 
     # UGPP
+    l10n_co_ne_representante_legal_id = fields.Many2one(
+        related='company_id.l10n_co_ne_representante_legal_id', readonly=False)
     l10n_co_ugpp_legal_nature = fields.Selection(related='company_id.l10n_co_ugpp_legal_nature', readonly=False)
     l10n_co_ugpp_contributor_type = fields.Selection(related='company_id.l10n_co_ugpp_contributor_type', readonly=False)
 

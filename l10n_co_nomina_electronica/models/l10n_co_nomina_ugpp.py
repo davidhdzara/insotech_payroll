@@ -124,6 +124,10 @@ _UGPP_NOTA_360 = ('Las prestaciones sociales (prima, cesantías e intereses) se 
                   'conforme a los artículos 249 y 306 del Código Sustantivo del Trabajo.')
 # Las columnas de concepto de la plantilla son 133 (CONCEPTO 1 a 133).
 _UGPP_MAX_CONCEPTOS = 133
+# Oficio de respuesta (9006): párrafo sobre los ajustes. BORRADOR a validar por el representante legal / David (la Guía
+# pide "explicar cómo se realizan los ajustes" y no trae modelo).
+_UGPP_TEXTO_AJUSTES = ('Los ajustes de nómina se registran en el mes en que se conocen, mediante recibos de ajuste '
+                       'o notas de ajuste, y el formato de pagos informa el valor mensual por concepto y trabajador.')
 
 
 class L10nCoNominaUgpp(models.Model):
@@ -178,6 +182,13 @@ class L10nCoNominaUgpp(models.Model):
         required=True,
         help='Fecha de fin del período de reporte.',
     )
+    requerimiento_radicado = fields.Char(
+        string='Radicado del requerimiento',
+        help='Número de radicado del requerimiento de información de la UGPP que se responde. Solo para el oficio de '
+             'respuesta (9006).')
+    requerimiento_fecha = fields.Date(
+        string='Fecha del requerimiento',
+        help='Fecha del requerimiento de información de la UGPP. Solo para el oficio de respuesta (9006).')
     company_id = fields.Many2one(
         comodel_name='res.company',
         string='Empresa',
@@ -533,6 +544,55 @@ class L10nCoNominaUgpp(models.Model):
                 'Nómina > Configuración > Cuentas Contables por Regla y en la regla (Tipo de pago UGPP).',
                 '; '.join(problemas)))
         return filas
+
+    def _ugpp_datos_oficio(self):
+        """Datos del oficio de respuesta a la UGPP (código 9006, Guía V-20.1 §2.2). Todo sale de Contactos, de la
+        compañía y del propio reporte; lo que falte se pide con un error que nombra la compañía (sin valores por
+        defecto). El módulo NO firma ni radica: es un borrador para el representante legal."""
+        self.ensure_one()
+        company = self.company_id
+        faltan = []
+        partner = company.partner_id
+        representante = company.l10n_co_ne_representante_legal_id
+        if not representante:
+            faltan.append(_('el representante legal (Ajustes > Nómina > UGPP)'))
+        elif not representante.vat or not representante.l10n_latam_identification_type_id:
+            faltan.append(_('el tipo y número de identificación del contacto "%s" (representante legal)',
+                            representante.display_name))
+        if not self.requerimiento_radicado or not self.requerimiento_fecha:
+            faltan.append(_('el radicado y la fecha del requerimiento de la UGPP (en este reporte)'))
+        if not (partner.email or partner.street):
+            faltan.append(_('una dirección de notificaciones: correo o dirección en el contacto de la compañía'))
+        if not partner.vat:
+            faltan.append(_('el NIT de la compañía'))
+        recibos = self._ugpp_recibos()
+        if not recibos:
+            faltan.append(_('recibos confirmados del periodo (nada que informar)'))
+        if faltan:
+            raise UserError(_(
+                'Para el oficio de respuesta a la UGPP de la compañía "%(compania)s" falta: %(faltan)s.',
+                compania=company.display_name, faltan='; '.join(faltan)))
+        periodicidad = dict(self.env['hr.contract']._fields['schedule_pay'].selection)
+        calendarios = sorted({periodicidad.get(c.schedule_pay or c.structure_type_id.default_schedule_pay, '')
+                              for c in recibos.contract_id} - {''})
+        meses = dict(self._fields['month'].selection)
+        return {
+            'nit': dian_utils.clean_nit(partner.vat, strip_dv=False),
+            'direccion': ', '.join(filter(None, [partner.street, partner.city, partner.state_id.name])),
+            'correo': partner.email or '',
+            'representante': representante,
+            'representante_documento': '%s %s' % (representante.l10n_latam_identification_type_id.name, representante.vat),
+            'periodo': '%s de %s' % (meses.get(self.month, ''), self.year),
+            'calendarios': calendarios,
+            'texto_ajustes': _UGPP_TEXTO_AJUSTES,
+            'nota_360': _UGPP_NOTA_360,
+        }
+
+    def action_imprimir_oficio(self):
+        """Valida los datos y devuelve el PDF del oficio de respuesta (borrador)."""
+        self.ensure_one()
+        self._ugpp_datos_oficio()
+        return self.env.ref('l10n_co_nomina_electronica.action_report_ugpp_oficio').report_action(self)
 
     def _ugpp_cotizante(self, employee, contract):
         """``(tipo, subtipo)`` de cotizante de la lista UGPP, desde los campos PILA del contrato (la misma fuente que

@@ -141,6 +141,9 @@
                         </setting>
                     </block>
                     <block title="UGPP" id="l10n_co_ne_settings_ugpp">
+                        <setting help="Contacto que firma el oficio de respuesta a la UGPP; su nombre y documento salen de Contactos.">
+                            <field name="l10n_co_ne_representante_legal_id"/>
+                        </setting>
                         <setting help="Clasificación del aportante ante la UGPP.">
                             <field name="l10n_co_ugpp_legal_nature"/>
                             <field name="l10n_co_ugpp_contributor_type"/>

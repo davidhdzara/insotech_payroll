@@ -16,6 +16,10 @@
                             class="btn-primary"
                             invisible="state == 'generated'"
                             groups="hr_payroll.group_hr_payroll_manager"/>
+                    <button name="action_imprimir_oficio"
+                            string="Oficio de respuesta (borrador)"
+                            type="object"
+                            groups="hr_payroll.group_hr_payroll_manager"/>
                     <field name="state"
                            widget="statusbar"
                            statusbar_visible="draft,generated"/>
@@ -38,6 +42,16 @@
                                    groups="base.group_multi_company"/>
                         </group>
                     </group>
+                    <group string="Requerimiento de la UGPP (oficio de respuesta)">
+                        <field name="requerimiento_radicado"/>
+                        <field name="requerimiento_fecha"/>
+                    </group>
+                    <div class="alert alert-info" role="alert">
+                        El módulo genera el borrador del oficio de respuesta (código 9006); lo firma el representante
+                        legal o su apoderado (si hay apoderado, el poder se anexa al mismo archivo). La certificación de
+                        la información (código 9007) se adjunta con el modelo oficial que publica la UGPP; el módulo no la
+                        redacta.
+                    </div>
                     <group string="Resultado" invisible="state != 'generated'">
                         <field name="excel_file"
                                string="Archivo Excel"
