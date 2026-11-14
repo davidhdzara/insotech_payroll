@@ -21,7 +21,7 @@ from odoo.exceptions import AccessError, UserError, ValidationError
 
 from ..services import (
     cune as cune_service, dian_message, dian_respuesta, dian_utils, documento_merge, ne_xml_utils, nomina_xml_builder,
-    nota_ajuste, soap_client, xml_signer)
+    nota_ajuste, representacion_grafica, soap_client, xml_signer)
 from ..services.soap_client import _parse_response
 
 _logger = logging.getLogger(__name__)
@@ -786,6 +786,28 @@ class L10nCoNeDocumento(models.Model):
                 'recibo sin nodo en el XML de la DIAN; revíselas. El XML no se modifica.',
                 '; '.join(self._ne_texto_diferencia(d) for d in diferencias))})
         return alertas
+
+    # Representación gráfica oficial (Frente 5, C6a): solo para un documento ACEPTADO por la DIAN.
+    def _ne_datos_representacion(self):
+        """Datos de la representación gráfica (Res. 13/2021 art. 24: contenido mínimo de los arts. 5 y 17 y QR) leídos del
+        XML validado del documento. Solo existe para un documento aceptado por la DIAN, con CUNE y consecutivo reales:
+        nunca para borradores, pendientes, rechazados, eliminados ni migrados. No recalcula nada."""
+        self.ensure_one()
+        estado = dict(self._fields['state'].selection).get(self.state) or _('sin enviar')
+        if self.legacy or self.eliminado:
+            raise UserError(_('El documento "%s" está migrado o eliminado: no tiene representación gráfica.',
+                              self.display_name))
+        if self.state != 'invoice_accepted':
+            raise UserError(_(
+                'El documento "%(doc)s" no está aceptado por la DIAN (estado: %(estado)s): la representación gráfica '
+                'solo se genera para documentos aceptados.', doc=self.display_name, estado=estado))
+        if not (self.cune and self.consecutive and self.xml_attachment_id):
+            raise UserError(_('El documento "%s" no tiene CUNE, consecutivo o XML validado.', self.display_name))
+        try:
+            return representacion_grafica.datos_representacion(self.xml_attachment_id.raw)
+        except representacion_grafica.ErrorRepresentacion as error:
+            raise UserError(_('No se puede generar la representación gráfica de "%(doc)s": %(error)s',
+                              doc=self.display_name, error=str(error)))
 
     # Conciliación comprobante de pago ↔ documento mensual (Frente 5, C4): el comprobante (desglose del recibo, lo que
     # se le muestra al empleado) debe cuadrar con los valores del recibo que viajan al XML (devengados, deducciones y
