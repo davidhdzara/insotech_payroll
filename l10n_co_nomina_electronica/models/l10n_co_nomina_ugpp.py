@@ -318,7 +318,7 @@ class L10nCoNominaUgpp(models.Model):
         # ── Hoja 2: nomina-conceptos de pago ─────────────────────────
         ws_conceptos = wb.create_sheet(_UGPP_HOJAS['conceptos'][0])
         self._generate_sheet_conceptos(
-            ws_conceptos, header_font, header_fill,
+            ws_conceptos, payslips, header_font, header_fill,
             header_alignment, thin_border,
         )
 
@@ -538,19 +538,21 @@ class L10nCoNominaUgpp(models.Model):
             problemas.append(_('TP NO Salarial sin clasificación: %s', ', '.join(sin_clase)))
         if problemas:
             raise UserError(_(
-                'No se puede generar la hoja de conceptos del reporte UGPP. Reglas salariales %s. Corríjalo en '
+                'No se puede generar la hoja de conceptos del reporte UGPP. Reglas salariales con valor en el periodo %s. Corríjalo en '
                 'Nómina > Configuración > Cuentas Contables por Regla y en la regla (Tipo de pago UGPP).',
                 '; '.join(problemas)))
         return filas
 
-    def _get_ugpp_salary_rules(self):
-        """Retorna las reglas salariales con tipo de pago UGPP, ordenadas."""
-        return self.env['hr.salary.rule'].search([
-            ('l10n_co_ugpp_payment_type', '!=', False),
-        ], order='sequence, code')
+    def _get_ugpp_salary_rules(self, payslips):
+        """Reglas salariales con tipo de pago UGPP que tienen VALOR (total distinto de cero) en los recibos del
+        reporte, ordenadas. Una regla sin uso en el periodo no es un concepto del reporte (ni hoja de conceptos ni
+        columna de la hoja nómina): así no se exige cuenta contable a lo que no se pagó (doc 57, U3b). La hoja de
+        conceptos y la de nómina usan esta misma lista, de modo que el CONCEPTO N coincide en las dos."""
+        lineas = payslips.line_ids.filtered(lambda l: l.total and l.salary_rule_id.l10n_co_ugpp_payment_type)
+        return lineas.salary_rule_id.sorted(key=lambda r: (r.sequence, r.code or ''))
 
     def _generate_sheet_conceptos(
-        self, ws, header_font, header_fill, header_alignment, thin_border
+        self, ws, payslips, header_font, header_fill, header_alignment, thin_border
     ):
         """
         Genera la hoja de conceptos de pago (formulario 7003) según la Guía UGPP V-20.1.
@@ -572,7 +574,7 @@ class L10nCoNominaUgpp(models.Model):
         fila_datos = self._ugpp_marco(
             ws, 'conceptos', headers, header_font, header_fill, header_alignment, thin_border)
 
-        salary_rules = self._get_ugpp_salary_rules()
+        salary_rules = self._get_ugpp_salary_rules(payslips)
         filas = self._ugpp_filas_conceptos(salary_rules)
         for idx, row_data in enumerate(filas, 1):
             self._ugpp_escribir_fila(ws, fila_datos + idx - 1, row_data, thin_border)
@@ -673,7 +675,7 @@ class L10nCoNominaUgpp(models.Model):
         ]
 
         # ── Columnas dinámicas (conceptos de pago) ───────────────────
-        ugpp_rules = self._get_ugpp_salary_rules()
+        ugpp_rules = self._get_ugpp_salary_rules(payslips)
         concept_headers = [rule.name or rule.code or '' for rule in ugpp_rules]
 
         # ── Columnas IBC ─────────────────────────────────────────────

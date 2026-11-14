@@ -30,6 +30,11 @@ class TestUgppMarco(TransactionCase):
             'year': 2026, 'month': '9', 'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30),
             'company_id': cls.company.id})
 
+    def _reglas_de_prueba(self, *_args):
+        """Tres reglas con tipo UGPP: el marco no depende de los valores de los recibos."""
+        return self.env['hr.salary.rule'].search(
+            [('l10n_co_ugpp_payment_type', '!=', False)], order='sequence, code', limit=3)
+
     def _hoja(self, metodo, *args):
         ws = openpyxl.Workbook().active
         getattr(self.reporte, metodo)(ws, *args, Font(bold=True), PatternFill(), Alignment(), Border())
@@ -61,21 +66,23 @@ class TestUgppMarco(TransactionCase):
 
     def test_hoja_conceptos_lleva_el_marco_y_un_concepto_por_fila(self):
         # Las cuentas de las reglas se prueban en test_ugpp_conceptos: aquí solo el marco de la hoja.
-        with patch.object(type(self.reporte), '_ugpp_cuentas_regla', lambda _self, _regla: '510506'):
-            ws = self._hoja('_generate_sheet_conceptos')
+        with patch.object(type(self.reporte), '_ugpp_cuentas_regla', lambda _self, _regla: '510506'), \
+                patch.object(type(self.reporte), '_get_ugpp_salary_rules', self._reglas_de_prueba):
+            ws = self._hoja('_generate_sheet_conceptos', self.env['hr.payslip'])
         self._preambulo(ws, 7003, 'Formulario Nómina - Concepto Pago Aportante ')
         self.assertEqual(ws['B8'].value, '0 Formulario Nómina - Concepto Pago Aportante')
         self.assertEqual([c.value for c in ws[9] if c.value is not None], [4, 8, 12, 19, 20])
         self.assertEqual([c.value for c in ws[10] if c.value is not None],
                          ['Concepto', 'Nombre concepto', 'Cuenta contable', 'Tipo pago', 'Clasificación TP NO SALARIAL'])
-        reglas = self.reporte._get_ugpp_salary_rules()
+        reglas = self._reglas_de_prueba(self.reporte, self.env['hr.payslip'])
         self.assertTrue(reglas)
         self.assertEqual(ws.max_row, 10 + len(reglas))
         self.assertEqual((ws['A11'].value, ws['B11'].value, ws['C11'].value), (1, 'FILA_1', 1))
         self.assertEqual(ws.cell(row=10 + len(reglas), column=1).value, len(reglas))
 
     def test_hoja_nomina_lleva_los_codigos_de_columna_de_la_plantilla(self):
-        ws = self._hoja('_generate_sheet_nomina', self.env['hr.payslip'])   # sin recibos: solo marco
+        with patch.object(type(self.reporte), '_get_ugpp_salary_rules', self._reglas_de_prueba):
+            ws = self._hoja('_generate_sheet_nomina', self.env['hr.payslip'])   # sin recibos: solo marco
         self._preambulo(ws, 7002, 'Formulario Nómina')
         self.assertEqual(ws['B8'].value, '0 Formulario Nómina')
         codigos = [c.value for c in ws[9] if c.value is not None]
@@ -83,7 +90,7 @@ class TestUgppMarco(TransactionCase):
         self.assertEqual(codigos[31:34], [144, 184, 276])         # fin de las fijas, observaciones, concepto 1
         self.assertEqual(len(set(codigos)), len(codigos))          # sin repetidos
         self.assertEqual(codigos, sorted(codigos))
-        n_conceptos = len(self.reporte._get_ugpp_salary_rules())
+        n_conceptos = len(self._reglas_de_prueba(self.reporte, self.env['hr.payslip']))
         self.assertEqual(codigos[33:], [276 + 4 * i for i in range(n_conceptos)])
         self.assertEqual(ws['C10'].value, 'Tipo cotizante')
         self.assertFalse(ws['C11'].value)                          # sin recibos no hay filas de datos

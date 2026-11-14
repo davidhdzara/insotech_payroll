@@ -89,3 +89,53 @@ class TestUgppConceptos(TransactionCase):
 
     def test_ya_no_existe_el_campo_de_cuentas_ugpp_aparte(self):
         self.assertNotIn('l10n_co_ugpp_accounts', self.env['hr.salary.rule']._fields)
+
+    # ── U3b: la cuenta solo se exige a las reglas con valor en el periodo ──────────────────────────────
+    def _recibo_con_valores(self, *valores):
+        """Recibo del mes con una línea por (regla, total)."""
+        tipo = self.env['hr.payroll.structure.type'].create({
+            'name': 'Tipo U3b', 'country_id': self.env.ref('base.co').id})
+        empleado = self.env['hr.employee'].create({
+            'name': 'Empleado U3b', 'company_id': self.company.id, 'l10n_co_ne_worker_type': '01',
+            'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
+        contrato = self.env['hr.contract'].create({
+            'name': 'Contrato U3b', 'employee_id': empleado.id, 'company_id': self.company.id,
+            'structure_type_id': tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open',
+            'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01',
+            'l10n_co_pila_subtipo_cotizante': '00'})
+        recibo = self.env['hr.payslip'].create({
+            'name': 'Recibo U3b', 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'company_id': self.company.id,
+            'struct_id': self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina').id,
+            'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30)})
+        for regla, total in valores:
+            self.env['hr.payslip.line'].create({
+                'slip_id': recibo.id, 'salary_rule_id': regla.id, 'code': regla.code, 'name': regla.name,
+                'category_id': regla.category_id.id, 'employee_id': empleado.id, 'contract_id': contrato.id,
+                'total': total, 'amount': total, 'quantity': 1, 'rate': 100})
+        return recibo
+
+    def test_el_reporte_solo_incluye_reglas_con_valor_y_con_tipo_ugpp(self):
+        con_valor = self._regla('U3B_VAL', 'tp_salarial', debito=self.gasto)
+        en_cero = self._regla('U3B_CERO', 'tp_salarial')
+        sin_tipo = self._regla('U3B_SINTIPO', False)
+        recibo = self._recibo_con_valores((con_valor, 1000.0), (en_cero, 0.0), (sin_tipo, 500.0))
+        self.assertEqual(self.reporte._get_ugpp_salary_rules(recibo), con_valor)
+
+    def test_una_regla_sin_uso_y_sin_cuenta_no_tumba_el_reporte(self):
+        con_valor = self._regla('U3B_OK', 'tp_salarial', debito=self.gasto)
+        sin_uso = self._regla('U3B_SINUSO', 'tp_prestaciones')          # sin cuenta, pero sin valor en el mes
+        recibo = self._recibo_con_valores((con_valor, 1000.0), (sin_uso, 0.0))
+        reglas = self.reporte._get_ugpp_salary_rules(recibo)
+        self.assertEqual(self.reporte._ugpp_filas_conceptos(reglas)[0][1:3], ['Regla U3B_OK', '510506'])
+        self.assertEqual(len(reglas), 1)
+
+    def test_una_regla_con_valor_y_sin_cuenta_si_tumba_el_reporte_y_se_nombra(self):
+        con_valor = self._regla('U3B_FALTA', 'tp_salarial')
+        sin_uso = self._regla('U3B_NOMBRE_NO', 'tp_salarial')
+        recibo = self._recibo_con_valores((con_valor, 1000.0), (sin_uso, 0.0))
+        with self.assertRaises(UserError) as exc:
+            self.reporte._ugpp_filas_conceptos(self.reporte._get_ugpp_salary_rules(recibo))
+        self.assertIn('Regla U3B_FALTA', str(exc.exception))
+        self.assertNotIn('Regla U3B_NOMBRE_NO', str(exc.exception))
+        self.assertIn('con valor en el periodo', str(exc.exception))
