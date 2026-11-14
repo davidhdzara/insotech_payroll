@@ -75,6 +75,13 @@ class TestResCompanyDianConfig(TransactionCase):
     def _set_param(self, key, value):
         self.env['ir.config_parameter'].sudo().set_param(key, value)
 
+    def setUp(self):
+        super().setUp()
+        # Aislamiento: la base puede traer overrides globales (p. ej. la salvaguarda de staging que apunta
+        # dian_soap_endpoint_1 a habilitacion). La prueba parte "sin override" DENTRO de su transaccion.
+        for clave in ('dian_soap_endpoint_1', 'dian_soap_endpoint_2', 'dian_qr_host_1', 'dian_qr_host_2'):
+            self._set_param('l10n_co_nomina_electronica.%s' % clave, False)
+
     def test_endpoint_default_matches_environment_when_no_override(self):
         self.company.l10n_co_ne_environment = '1'
         self.assertEqual(
