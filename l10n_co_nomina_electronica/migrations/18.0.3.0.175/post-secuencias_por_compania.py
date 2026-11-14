@@ -28,6 +28,9 @@ def _maximo_usado(env, company, prefijo):
     slips = env['hr.payslip'].with_context(active_test=False).search([
         ('company_id', '=', company.id),
         ('l10n_co_ne_consecutive', '=like', prefijo + '%')])
+    # Lo transmitido solo en habilitación (set de pruebas) NO cuenta: el primer documento real sale desde 1 (David,
+    # 2026-11-14). Las bases que ya corrieron esta migración no cambian.
+    slips = slips.filtered(lambda s: not s._ne_historia_solo_habilitacion())
     patron = re.compile('^%s(\\d+)$' % re.escape(prefijo))
     numeros = [int(m.group(1)) for m in (
         patron.match(s.l10n_co_ne_consecutive or '') for s in slips) if m]

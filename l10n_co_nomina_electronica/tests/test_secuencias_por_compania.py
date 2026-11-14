@@ -123,3 +123,36 @@ class TestSecuenciasPorCompania(TransactionCase):
         self.assertEqual(len(propia), 1)
         self.assertEqual(propia.prefix, 'NA')
         self.assertEqual(propia.next_by_id(), 'NA0000000001')
+
+    def _con_envio(self, slip, operacion):
+        self.env['l10n.co.ne.exchange'].create_exchange(
+            slip.company_id, operacion, 'https://dian.test/ws', {'RawRequest': b'<r/>'}, slip)
+
+    def test_el_historial_solo_de_habilitacion_no_cuenta_y_el_primer_numero_real_es_1(self):
+        """Guapante: la compañía tiene NE57 pero del set de pruebas (hab_set_id / solo send_test_set); la secuencia de
+        producción está en 1. El primer documento real sale desde 1 (David, 2026-11-14)."""
+        migracion = _migracion()
+        self._como_heredada(self.a)
+        self._como_heredada(self.b)
+        marcado = self._con_consecutivo(self.a, 57)
+        marcado.l10n_co_ne_hab_set_id = 'SET-PRUEBAS'
+        por_tipo = self._con_consecutivo(self.a, 56)
+        self._con_envio(por_tipo, 'send_test_set')
+        self._con_envio(por_tipo, 'get_status_zip')
+        self.plantilla_ne.number_next = 1
+        migracion.separar_secuencias(self.env, self.a | self.b)
+        self.assertEqual(self.a.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000001')
+        self.assertEqual(self.b.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000001')
+
+    def test_el_historial_real_si_cuenta_aunque_haya_tambien_historial_de_habilitacion(self):
+        migracion = _migracion()
+        self._como_heredada(self.a)
+        self._como_heredada(self.b)
+        marcado = self._con_consecutivo(self.a, 57)
+        marcado.l10n_co_ne_hab_set_id = 'SET-PRUEBAS'
+        real = self._con_consecutivo(self.a, 12)
+        self._con_envio(real, 'send_sync')
+        self.plantilla_ne.number_next = 1
+        migracion.separar_secuencias(self.env, self.a | self.b)
+        self.assertEqual(self.a.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000013')   # max real + 1
+        self.assertEqual(self.b.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000001')

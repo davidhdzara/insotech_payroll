@@ -33,7 +33,10 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
         for slip in recibos:
             motivo = False
             periodo = False
-            if slip.state not in ('done', 'paid'):
+            excluido = Documento._ne_motivo_no_entra(slip)
+            if excluido:
+                motivo = excluido
+            elif slip.state not in ('done', 'paid'):
                 motivo = _('El recibo "%s" no está confirmado (hecho o pagado).', slip.display_name)
             else:
                 try:
@@ -101,10 +104,8 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
                 alerta('mes_incompleto', 'warning', _(
                     'El mes %(mes)s no ha terminado y el empleado no tiene liquidación final pagada en él.',
                     mes=periodo.strftime('%Y-%m')), confirmable=True)
-            faltan = self.env['hr.payslip'].search([
-                ('company_id', '=', company.id), ('employee_id', '=', grupo['employee'].id),
-                ('credit_note', '=', False), ('state', '!=', 'cancel'),
-                ('date_to', '>=', periodo), ('date_to', '<=', fin), ('id', 'not in', del_mes.ids)])
+            faltan = self.env['l10n.co.ne.documento']._ne_recibos_que_faltan(
+                company, grupo['employee'], periodo, del_mes)
             if faltan:
                 alerta('faltan_recibos', 'warning', _(
                     'Hay recibos del mes sin pagar o sin fecha de pago: %s.', ', '.join(faltan.mapped('display_name'))),

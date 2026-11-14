@@ -248,15 +248,44 @@ class L10nCoNeDocumento(models.Model):
     @api.model
     def _ne_recibos_del_mes(self, company, employee, period):
         """Recibos pagados (hechos o pagados, no notas de crédito) del empleado cuya PRIMERA fecha de pago cae en el
-        mes ``period``. Con fuente 'recibo' filtra en SQL por fecha; con 'contabilidad' calcula por recibo."""
+        mes ``period``. Con fuente 'recibo' filtra en SQL por fecha; con 'contabilidad' calcula por recibo. NO entran
+        las notas de ajuste por recibo, los recibos de un documento migrado (legacy) ni los de habilitación."""
         fin = (period.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
         dominio = [('company_id', '=', company.id), ('employee_id', '=', employee.id),
-                   ('state', 'in', ('done', 'paid')), ('credit_note', '=', False)]
+                   ('state', 'in', ('done', 'paid')), ('credit_note', '=', False),
+                   ('l10n_co_ne_is_adjustment', '=', False)]
         if company.l10n_co_ne_fuente_fecha_pago == 'recibo':
-            return self.env['hr.payslip'].search(dominio + [('paid_date', '>=', period), ('paid_date', '<=', fin)])
-        candidatos = self.env['hr.payslip'].search(dominio)
-        return candidatos.filtered(lambda s: s._ne_fechas_pagos_contables()
-                                   and period <= s._ne_fechas_pagos_contables()[0] <= fin)
+            recibos = self.env['hr.payslip'].search(dominio + [('paid_date', '>=', period), ('paid_date', '<=', fin)])
+        else:
+            candidatos = self.env['hr.payslip'].search(dominio)
+            recibos = candidatos.filtered(lambda s: s._ne_fechas_pagos_contables()
+                                          and period <= s._ne_fechas_pagos_contables()[0] <= fin)
+        return recibos.filtered(lambda s: not self._ne_motivo_no_entra(s))
+
+    @api.model
+    def _ne_motivo_no_entra(self, slip):
+        """Motivo (texto) por el que un recibo NO puede entrar a un documento mensual, o False si puede."""
+        if slip.l10n_co_ne_is_adjustment:
+            return _('El recibo "%s" es una nota de ajuste por recibo: no entra a un documento mensual.',
+                     slip.display_name)
+        if slip.l10n_co_ne_documento_id.legacy:
+            return _('El recibo "%(recibo)s" ya fue transmitido por recibo y está en el documento migrado "%(doc)s": '
+                     'no se reporta otra vez.', recibo=slip.display_name, doc=slip.l10n_co_ne_documento_id.display_name)
+        if slip._ne_historia_solo_habilitacion():
+            return _('El recibo "%s" solo tiene historia de habilitación (pruebas): no entra a un documento real.',
+                     slip.display_name)
+        return False
+
+    @api.model
+    def _ne_recibos_que_faltan(self, company, employee, period, entran):
+        """Recibos del mes (no cancelados, no notas de crédito) que NO entraron al documento: sin pagar, sin fecha de
+        pago o pagados en otro mes. Excluye notas de ajuste por recibo, legacy y habilitación (no faltan: no aplican)."""
+        fin = (period.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        faltan = self.env['hr.payslip'].search([
+            ('company_id', '=', company.id), ('employee_id', '=', employee.id),
+            ('credit_note', '=', False), ('state', '!=', 'cancel'), ('l10n_co_ne_is_adjustment', '=', False),
+            ('date_to', '>=', period), ('date_to', '<=', fin), ('id', 'not in', entran.ids)])
+        return faltan.filtered(lambda s: not self._ne_motivo_no_entra(s))
 
     @api.model
     def _ne_preparar(self, recibos):
@@ -271,6 +300,10 @@ class L10nCoNeDocumento(models.Model):
         for slip in recibos:
             if not slip.company_id._ne_es_colombia():
                 resultado['sin_fecha'].append((slip, _('La compañía no es colombiana.')))
+                continue
+            motivo = self._ne_motivo_no_entra(slip)
+            if motivo:
+                resultado['sin_fecha'].append((slip, motivo))
                 continue
             if slip.state not in ('done', 'paid'):
                 resultado['sin_fecha'].append((slip, _('El recibo no está en estado "Hecho" ni "Pagado".')))
@@ -509,10 +542,7 @@ class L10nCoNeDocumento(models.Model):
                     'ajuste Reemplazar para incluirlos.', recibos=', '.join(tardios.mapped('display_name'))))
         # Recibos del mes que NO entraron (sin fecha de pago, en borrador...): ¿falta una quincena?
         fin = (self.period.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-        faltan = self.env['hr.payslip'].search([
-            ('company_id', '=', self.company_id.id), ('employee_id', '=', self.employee_id.id),
-            ('credit_note', '=', False), ('state', '!=', 'cancel'),
-            ('date_to', '>=', self.period), ('date_to', '<=', fin), ('id', 'not in', recibos_xml.ids)])
+        faltan = self._ne_recibos_que_faltan(self.company_id, self.employee_id, self.period, recibos_xml)
         if faltan:
             alerta('faltan_recibos', 'warning', _(
                 'Hay recibos del mes que no están en el documento (sin pagar, pagados en otro mes o sin fecha de pago): %(recibos)s.',
@@ -1451,6 +1481,9 @@ class L10nCoNeDocumento(models.Model):
             dominio.append(('id', 'in', recibos.ids))
         recibos = Payslip.search(dominio, order='id')
         recibos = recibos.filtered(lambda s: s.company_id._ne_es_colombia())
+        # Lo transmitido SOLO en habilitación (set de pruebas) no es un reporte real: no se migra (doc 53 §28.6). Un
+        # recibo con consecutivo gastado pero sin intercambios sí se migra (ocupa ese número).
+        recibos = recibos.filtered(lambda s: not s._ne_historia_solo_habilitacion())
         Documento = self.sudo().with_context(mail_notrack=True, mail_create_nolog=True)
         creados = Documento
         por_cune = {}

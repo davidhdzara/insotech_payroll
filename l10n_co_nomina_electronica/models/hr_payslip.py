@@ -120,6 +120,19 @@ class HrPayslip(models.Model):
     l10n_co_ne_documento_message = fields.Html(
         related='l10n_co_ne_documento_id.message', string='Motivo DIAN', readonly=True)
 
+    def _ne_historia_solo_habilitacion(self):
+        """True si lo que el recibo transmitió fue SOLO del proceso de habilitación (set de pruebas), no un reporte real.
+
+        Criterio (doc 53 §28.6): el marcador propio ``l10n_co_ne_hab_set_id`` (TestSetId con el que se envió en el set
+        de pruebas) O, sin marcador, intercambios que NO incluyen ningún ``send_sync`` (envío real síncrono). Se mira
+        el TIPO de intercambio y no la URL (el endpoint es un parámetro del sistema). Un recibo sin intercambios ni
+        marcador no es "de habilitación": puede ser un recibo real nuevo."""
+        self.ensure_one()
+        if self.l10n_co_ne_hab_set_id:
+            return True
+        intercambios = self.l10n_co_ne_exchange_ids
+        return bool(intercambios) and not any(op == 'send_sync' for op in intercambios.mapped('operation'))
+
     def _ne_bloquear_si_va_en_documento(self):
         """El ciclo DIAN por recibo (generar, enviar, regenerar, consultar, ajustar) no corre para un recibo que se
         reporta en un documento mensual no migrado: sin esto el mismo pago se transmitiría dos veces, solo y dentro del

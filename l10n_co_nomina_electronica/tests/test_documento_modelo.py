@@ -272,21 +272,22 @@ class TestDocumentoModelo(TransactionCase):
         self.assertFalse(self.env['l10n.co.ne.documento']._ne_migrar_legacy(borrador))
 
     def test_migracion_aceptado_uno_a_uno_e_idempotente(self):
+        # (doc 53 §28.6) un recibo con hab_set_id es historia de HABILITACIÓN y ya no se migra; este es un envío real
         slip = self._legacy(3, 'accepted', l10n_co_ne_cune=CUNE_A, l10n_co_ne_consecutive='NE1',
-                            l10n_co_ne_zip_key='Z1', l10n_co_ne_hab_set_id='SET1')
+                            l10n_co_ne_zip_key='Z1')
         borrador = self._recibo(4)   # sin historia: no se migra
         creados = self.env['l10n.co.ne.documento']._ne_migrar_legacy(slip | borrador)
         doc = slip.l10n_co_ne_documento_id
         self.assertEqual(creados, doc)
         self.assertFalse(borrador.l10n_co_ne_documento_id)
         self.assertTrue(doc.legacy)
-        self.assertEqual((doc.cune, doc.consecutive, doc.zip_key, doc.hab_set_id), (CUNE_A, 'NE1', 'Z1', 'SET1'))
+        self.assertEqual((doc.cune, doc.consecutive, doc.zip_key, doc.hab_set_id), (CUNE_A, 'NE1', 'Z1', False))
         self.assertEqual(doc.period, date(2026, 3, 1))
         self.assertEqual(doc.state, 'invoice_accepted')
         self.assertEqual(doc.intento_ids.state, 'invoice_accepted')
         self.assertEqual(doc.intento_ids.identifier, CUNE_A)
         self.assertEqual(doc.intento_ids.numero, 'NE1')
-        self.assertTrue(doc.intento_ids.certification_process)
+        self.assertFalse(doc.intento_ids.certification_process)
         # no se quita nada del recibo
         self.assertEqual((slip.l10n_co_ne_state, slip.l10n_co_ne_cune, slip.l10n_co_ne_consecutive),
                          ('accepted', CUNE_A, 'NE1'))
