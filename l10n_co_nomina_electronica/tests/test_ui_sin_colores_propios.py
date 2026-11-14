@@ -98,3 +98,6 @@ class TestUiSinColoresPropios(TransactionCase):
         for xmlid in ('report_payslip_ne', 'ne_comprobante_encabezado', 'ne_comprobante_conceptos'):
             self._sin_estilo_propio('l10n_co_nomina_electronica.' + xmlid)
 
+    def test_el_comprobante_agrupado_sin_estilos_propios(self):
+        self._sin_estilo_propio('l10n_co_nomina_electronica.report_comprobante_pago')
+

@@ -63,6 +63,7 @@ from . import test_ugpp_soportes
 from . import test_comprobante_colilla
 from . import test_desglose_recibo
 from . import test_comprobantes_agrupador
+from . import test_comprobante_pago
 from . import test_recibos_solapados
 from . import test_sln_aportes
 from . import test_ajustes_generales
