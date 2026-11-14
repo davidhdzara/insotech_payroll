@@ -197,9 +197,14 @@ class TestDocumentoAsistente(DocumentoFixture, TransactionCase):
             'company_ids': [(6, 0, self.company.ids)],
             'groups_id': [(6, 0, [self.env.ref('base.group_user').id,
                                   self.env.ref('hr_payroll.group_hr_payroll_user').id])]})
-        with self.assertRaises(AccessError):
-            self.Wizard.with_user(usuario).create({
-                'payslip_ids': [(6, 0, recibos.ids)], 'checkbox_send_dian': False}).action_send_and_print()
+        # El usuario del grupo de nómina SÍ puede abrir el asistente (lee documentos y recibos): el error sale del
+        # ``has_group`` del propio botón, no de la creación. Si algún día se le retirara la lectura, el origen cambiaría.
+        asistente = self.Wizard.with_user(usuario).create({
+            'payslip_ids': [(6, 0, recibos.ids)], 'checkbox_send_dian': False})
+        self.assertTrue(asistente.resumen)
+        self.assertFalse(usuario.has_group('hr_payroll.group_hr_payroll_manager'))
+        with self.assertRaisesRegex(AccessError, 'administrador de nómina'):
+            asistente.action_send_and_print()
         self.assertFalse(recibos.l10n_co_ne_documento_id)
 
     def test_compania_no_colombiana_da_error_y_no_crea_nada(self):

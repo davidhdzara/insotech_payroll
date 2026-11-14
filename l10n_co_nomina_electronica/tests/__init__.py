@@ -106,4 +106,5 @@ from . import test_historia_habilitacion
 from . import test_ciclo_recibo_produccion
 from . import test_plazo_bloqueante
 from . import test_hora_bogota
+from . import test_flujo_usuario_real
 from . import test_migracion_vistas_211
