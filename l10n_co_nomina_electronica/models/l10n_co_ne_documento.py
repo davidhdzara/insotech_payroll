@@ -120,6 +120,11 @@ class L10nCoNeDocumento(models.Model):
              'jornada en el calendario del contrato (o de la compañía) y no festivo (D10). Solo alerta, no bloquea. '
              'No aplica a documentos migrados ni a notas de ajuste.')
 
+    # Reconsulta automática (doc 53 §23.17, 7c / D-B): una consulta por documento por intervalo y espera creciente tras
+    # fallos de transporte seguidos. Solo técnicos (sin vista).
+    proxima_consulta = fields.Datetime(string='Próxima consulta DIAN', copy=False, readonly=True)
+    fallos_consulta = fields.Integer(string='Fallos de consulta seguidos', copy=False, readonly=True)
+
     # Cola de envío y alertas (patrón de account.move.send; los llena el asistente y el cron, etapas 2 y 4).
     sending_data = fields.Json(string='Datos de envío en cola', copy=False, readonly=True)
     is_being_sent = fields.Boolean(string='En cola', compute='_compute_is_being_sent')
@@ -1294,6 +1299,64 @@ class L10nCoNeDocumento(models.Model):
                 'state'].selection).get(estado)),
             message_type='comment', subtype_xmlid='mail.mt_note')
         return resultado
+
+    # ──────────────────────────────────────────────────────────────────
+    # Cron de reconsulta del documento (doc 53 §23.17, 7c). El cron del RECIBO no se toca.
+    # ──────────────────────────────────────────────────────────────────
+    _CRON_RECONSULTA_XMLID = 'l10n_co_nomina_electronica.ir_cron_ne_documento_recheck'
+
+    @api.model
+    def _ne_intervalo_reconsulta(self):
+        """Minutos entre consultas = el intervalo editable de la acción planificada (30 por defecto)."""
+        cron = self.env.ref(self._CRON_RECONSULTA_XMLID, raise_if_not_found=False)
+        if not cron:
+            return 30
+        factor = {'minutes': 1, 'hours': 60, 'days': 1440, 'weeks': 10080, 'months': 43200}.get(cron.interval_type, 1)
+        return max(cron.interval_number * factor, 1)
+
+    @api.model
+    def _cron_reconsultar_pendientes(self):
+        """Reconsulta (``GetStatusZip``) los documentos cuyo último intento sigue pendiente o con envío fallido pero con
+        ZipKey. Una consulta por documento por intervalo (``proxima_consulta``); tras ``n`` fallos de transporte seguidos
+        la espera es ``min(intervalo × 2^n, send_retry_max_minutes)`` (30 → 60 y se queda en 60); un veredicto o una
+        respuesta pendiente reinician el contador. Lotes de ``recheck_batch_limit`` en orden de envío ascendente (el que
+        más espera, primero), commit por documento y aislamiento (un error no frena a los demás). Pasadas
+        ``recheck_max_hours`` ``_ne_reconsultar`` lo deja ``incierto`` y sale de este cron."""
+        ahora = fields.Datetime.now()
+        intervalo = self._ne_intervalo_reconsulta()
+        companias = self.env['res.company'].sudo().search([
+            ('partner_id.country_id.code', '=', 'CO'), ('l10n_co_ne_environment', '=', '1'),
+            ('l10n_co_ne_certification_process', '=', False)])
+        for company in companias:
+            candidatos = self.sudo().search([
+                ('company_id', '=', company.id), ('incierto', '=', False), ('legacy', '=', False),
+                ('eliminado', '=', False), ('state', 'in', ('invoice_pending', 'invoice_sending_failed'))])
+            elegibles = candidatos.filtered(
+                lambda d: d._ultimo_intento().zip_key and (not d.proxima_consulta or d.proxima_consulta <= ahora))
+            lote = company._ne_config_int_param('l10n_co_nomina_electronica.recheck_batch_limit', 200)
+            elegibles = elegibles.sorted(lambda d: (d._ultimo_intento().datetime or _dt.min, d.id))[:lote]
+            tope = company._ne_config_int_param('l10n_co_nomina_electronica.send_retry_max_minutes', 60)
+            for doc in elegibles:
+                try:
+                    with self.env.cr.savepoint():
+                        resultado = doc._ne_reconsultar()
+                except UserError as error:
+                    doc.message_post(body=_('Reconsulta automática omitida: %s', error),
+                                     message_type='comment', subtype_xmlid='mail.mt_note')
+                    doc.proxima_consulta = ahora + timedelta(minutes=intervalo)
+                except Exception:   # noqa: BLE001 -- un documento con error nunca frena a los demás
+                    _logger.exception('Reconsulta automática: error consultando el documento %s', doc.id)
+                    doc.proxima_consulta = ahora + timedelta(minutes=intervalo)
+                else:
+                    if resultado.veredicto == dian_respuesta.ERROR_TRANSPORTE:
+                        fallos = doc.fallos_consulta + 1
+                        doc.write({'fallos_consulta': fallos, 'proxima_consulta': ahora + timedelta(
+                            minutes=min(intervalo * 2 ** fallos, tope))})
+                    elif resultado.veredicto in (dian_respuesta.ACEPTADO, dian_respuesta.RECHAZADO):
+                        doc.write({'fallos_consulta': 0, 'proxima_consulta': False})
+                    else:   # pendiente o respuesta sobre el set: se vuelve a consultar en un intervalo
+                        doc.write({'fallos_consulta': 0, 'proxima_consulta': ahora + timedelta(minutes=intervalo)})
+                self._ne_commit()
 
     # ──────────────────────────────────────────────────────────────────
     # Restricciones
