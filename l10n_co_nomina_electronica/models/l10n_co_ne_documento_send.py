@@ -71,8 +71,10 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
         bloquea el grupo (no aborta el lote); ``confirmable`` exige la casilla "Confirmo mes incompleto" (D14)."""
         alertas = []
 
-        def alerta(key, level, message, confirmable=False):
-            alertas.append({'key': key, 'level': level, 'message': message, 'confirmable': confirmable})
+        def alerta(key, level, message, confirmable=False, confirma=False):
+            # ``confirma``: qué casilla del asistente la confirma ('mes_incompleto' o 'extemporaneo')
+            alertas.append({'key': key, 'level': level, 'message': message, 'confirmable': confirmable,
+                            'confirma': confirma})
 
         company, doc, periodo = grupo['company'], grupo['documento'], grupo['period']
         for motivo in grupo['motivos']:
@@ -103,14 +105,34 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
             if hoy <= fin and not del_mes.filtered(lambda s: s.struct_id == liquidacion):
                 alerta('mes_incompleto', 'warning', _(
                     'El mes %(mes)s no ha terminado y el empleado no tiene liquidación final pagada en él.',
-                    mes=periodo.strftime('%Y-%m')), confirmable=True)
+                    mes=periodo.strftime('%Y-%m')), confirmable=True, confirma='mes_incompleto')
             faltan = self.env['l10n.co.ne.documento']._ne_recibos_que_faltan(
                 company, grupo['employee'], periodo, del_mes)
             if faltan:
                 alerta('faltan_recibos', 'warning', _(
                     'Hay recibos del mes sin pagar o sin fecha de pago: %s.', ', '.join(faltan.mapped('display_name'))),
-                    confirmable=True)
+                    confirmable=True, confirma='mes_incompleto')
+            # Plazo vencido con el bloqueo de la compañía activo (D7): exige confirmar el envío extemporáneo.
+            if company.l10n_co_ne_bloquear_extemporaneo:
+                plazo = self._ne_plazo_del_grupo(grupo)
+                if plazo and fields.Date.context_today(self) > plazo:
+                    alerta('extemporaneo', 'warning', _(
+                        'El plazo de transmisión venció el %s y la compañía exige confirmar el envío extemporáneo.',
+                        plazo), confirmable=True, confirma='extemporaneo')
         return alertas
+
+    @api.model
+    def _ne_plazo_del_grupo(self, grupo):
+        """Fecha límite del grupo: la del documento si existe; si no, la que tendría (registro virtual, sin crear
+        nada). Un documento migrado no tiene plazo."""
+        doc = grupo['documento']
+        if doc:
+            return doc.fecha_limite
+        contrato = grupo['recibos'].sorted('date_to').contract_id[-1:]
+        virtual = self.env['l10n.co.ne.documento'].new({
+            'company_id': grupo['company'].id, 'employee_id': grupo['employee'].id,
+            'contract_id': contrato.id, 'period': grupo['period']})
+        return virtual.fecha_limite
 
     @api.model
     def _ne_resumen(self, grupos):
@@ -130,6 +152,7 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
     @api.model
     def _ne_exigir_cron_activo(self):
         cron = self.env.ref(self.env['l10n.co.ne.documento']._CRON_ENVIO_XMLID, raise_if_not_found=False)
+        cron = cron.sudo() if cron else cron      # ir.cron solo lo lee el administrador del sistema
         if cron and not cron.active:
             mensaje = _('La acción planificada de envío de nómina electrónica está archivada: sin ella los envíos '
                         'quedarían en la cola sin salir.')
@@ -140,7 +163,7 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
             raise UserError(mensaje + ' ' + _('Pida a un administrador que la active.'))
 
     @api.model
-    def _ne_procesar(self, recibos, documentos, enviar, confirma):
+    def _ne_procesar(self, recibos, documentos, enviar, confirma, confirma_ext=False):
         """Prepara (y, si ``enviar``, genera el XML y encola) cada grupo. Un grupo bloqueado no aborta a los demás: se
         lista. Devuelve ``{'preparados', 'encolados', 'bloqueados': [texto]}``."""
         Documento = self.env['l10n.co.ne.documento']
@@ -155,8 +178,11 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
             if peligros:
                 bloqueados.append('%s: %s' % (nombre.strip(), ' '.join(peligros)))
                 bloqueo[id(grupo)] = True
-            elif enviar and not confirma and any(a['confirmable'] for a in alertas):
+            elif enviar and not confirma and any(a['confirma'] == 'mes_incompleto' for a in alertas):
                 bloqueados.append(_('%s: requiere confirmar el mes incompleto.', nombre.strip()))
+                bloqueo[id(grupo)] = 'preparar'
+            elif enviar and not confirma_ext and any(a['confirma'] == 'extemporaneo' for a in alertas):
+                bloqueados.append(_('%s: requiere confirmar el envío extemporáneo (plazo vencido).', nombre.strip()))
                 bloqueo[id(grupo)] = 'preparar'
         # Preparar: crea o actualiza el documento (no envía). Los bloqueados por fecha o no confirmados no se preparan.
         docs = Documento.browse()
@@ -185,9 +211,10 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
                                 # Sin envío previo: se (re)genera el XML vigente (reutiliza el consecutivo no usado, no
                                 # gasta otro); un envío fallido se reintenta con el MISMO XML y no se regenera.
                                 doc.action_generar_xml()
-                            doc._ne_encolar()
+                            doc._ne_encolar(confirmo_extemporaneo=confirma_ext)
                             encolados.append(doc.id)
-                            if confirma and any(a['confirmable'] for a in doc.alertas or []):
+                            if confirma and any(a.get('confirmable') and a.get('key') != 'extemporaneo'
+                                                for a in doc.alertas or []):
                                 doc.message_post(
                                     body=_('Mes incompleto confirmado por %(usuario)s el %(fecha)s.',
                                            usuario=self.env.user.name, fecha=fields.Date.context_today(self)),

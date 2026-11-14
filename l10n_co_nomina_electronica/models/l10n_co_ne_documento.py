@@ -17,7 +17,7 @@ import pytz
 from markupsafe import Markup
 
 from odoo import _, api, fields, models, modules
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 from ..services import (
     cune as cune_service, dian_message, dian_respuesta, dian_utils, documento_merge, ne_xml_utils, nomina_xml_builder,
@@ -887,8 +887,27 @@ class L10nCoNeDocumento(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # Enviar a la DIAN (doc 53 §23.12 3.1, §23.15)
     # ──────────────────────────────────────────────────────────────────
-    def _ne_precondiciones_envio(self):
-        """UserError local, ANTES de tocar la DIAN: sin intento, sin consecutivo gastado."""
+    def _ne_fuera_de_plazo(self):
+        """True si el plazo de transmisión (``fecha_limite``; para una nota, el de D4) ya venció. Un documento migrado
+        (legacy) no tiene plazo."""
+        self.ensure_one()
+        return bool(self.fecha_limite and not self.legacy and fields.Date.context_today(self) > self.fecha_limite)
+
+    def _ne_exigir_plazo(self, confirmado=False):
+        """Bloqueo por plazo vencido (doc 53 §28.8, D7): política PROPIA de la compañía (apagada por defecto), no un
+        rechazo de la DIAN (el Anexo no valida el plazo). Con el bloqueo activo y el plazo vencido, el documento solo
+        se encola/envía si un administrador de nómina confirmó el envío extemporáneo."""
+        self.ensure_one()
+        if self.company_id.l10n_co_ne_bloquear_extemporaneo and self._ne_fuera_de_plazo() and not confirmado:
+            raise UserError(_(
+                'El plazo de transmisión del documento "%(doc)s" venció el %(fecha)s y la compañía exige confirmar el '
+                'envío extemporáneo: marque "Confirmo envío extemporáneo" en Enviar y Procesar (solo el administrador de '
+                'nómina puede confirmarlo).', doc=self.display_name, fecha=self.fecha_limite))
+
+    def _ne_precondiciones_envio(self, confirmado=None):
+        """UserError local, ANTES de tocar la DIAN: sin intento, sin consecutivo gastado. ``confirmado`` (envío
+        extemporáneo): al encolar lo trae quien confirma; el cron lo lee de la cola (``sending_data``), así no puede
+        saltarse el bloqueo."""
         self.ensure_one()
         nombre_estado = dict(self._fields['state'].selection).get(self.state)
         if self.legacy:
@@ -917,6 +936,9 @@ class L10nCoNeDocumento(models.Model):
                 '(toma un consecutivo nuevo): el mismo XML no se reenvía.', self.display_name))
         if self.etapa != 'ready' or not (self.cune and self.consecutive and self.xml_attachment_id):
             raise UserError(_('Genere el XML del documento "%s" antes de enviarlo.', self.display_name))
+        if confirmado is None:
+            confirmado = bool((self.sending_data or {}).get('extemporaneo_confirmado'))
+        self._ne_exigir_plazo(confirmado)
         self._ne_bloquear_en_habilitacion()
         self.company_id._l10n_co_ne_validar_config()
 
@@ -1008,18 +1030,27 @@ class L10nCoNeDocumento(models.Model):
             self.env.cr.commit()
 
     def _ne_cron_envio(self):
+        # sudo: ``ir.cron`` solo lo lee el administrador del sistema y quien encola es el administrador de NÓMINA
+        # (mismo criterio del nativo ``account.move.send``: consultar/disparar la acción planificada con sudo).
         cron = self.env.ref(self._CRON_ENVIO_XMLID, raise_if_not_found=False)
         if not cron:
             raise UserError(_('Falta la acción planificada del envío de documentos de nómina electrónica '
                               '(%s).', self._CRON_ENVIO_XMLID))
-        return cron
+        return cron.sudo()
 
-    def _ne_encolar(self):
+    def _ne_encolar(self, confirmo_extemporaneo=False):
         """Pone los documentos en la cola de envío. NO envía: lo hace el cron.
 
         Corre las MISMAS precondiciones de ``_ne_enviar_uno`` (el error sale ahora, no horas después) y exige que no
         estén ya en la cola. Es atómico: si uno falla, ninguno se encola. ``sending_data`` lleva autor, hora y el
-        estado de reintentos; se dispara el cron una sola vez."""
+        estado de reintentos; se dispara el cron una sola vez.
+
+        ``confirmo_extemporaneo`` (D7): con el bloqueo por plazo activo, un documento fuera de plazo solo se encola si
+        lo confirma un administrador de nómina; queda constancia (usuario, fecha y plazo vencido) en el chatter y en
+        la cola, y el cron la respeta."""
+        if confirmo_extemporaneo and not (self.env.is_superuser()
+                                          or self.env.user.has_group('hr_payroll.group_hr_payroll_manager')):
+            raise AccessError(_('Solo el administrador de nómina puede confirmar un envío extemporáneo.'))
         cron = self._ne_cron_envio()
         if not cron.active:
             raise UserError(_('La acción planificada de envío de nómina electrónica está archivada: actívela en '
@@ -1027,12 +1058,22 @@ class L10nCoNeDocumento(models.Model):
         for doc in self:
             if doc.is_being_sent:
                 raise UserError(_('El documento "%s" ya está en la cola de envío.', doc.display_name))
-            doc._ne_precondiciones_envio()
+            doc._ne_precondiciones_envio(confirmado=confirmo_extemporaneo)
         ahora = fields.Datetime.to_string(fields.Datetime.now())
         for doc in self:
-            doc.sending_data = {
+            datos = {
                 'author_user_id': self.env.user.id, 'author_partner_id': self.env.user.partner_id.id,
                 'queued_at': ahora, 'intentos': 0, 'proximo': ahora}
+            if confirmo_extemporaneo and doc.company_id.l10n_co_ne_bloquear_extemporaneo and doc._ne_fuera_de_plazo():
+                datos['extemporaneo_confirmado'] = {
+                    'user_id': self.env.user.id, 'fecha': str(fields.Date.context_today(self)),
+                    'plazo': str(doc.fecha_limite)}
+                doc.message_post(
+                    body=_('Envío extemporáneo confirmado por %(usuario)s el %(fecha)s: el plazo de transmisión venció '
+                           'el %(plazo)s.', usuario=self.env.user.name, fecha=fields.Date.context_today(self),
+                           plazo=doc.fecha_limite),
+                    message_type='comment', subtype_xmlid='mail.mt_note')
+            doc.sending_data = datos
         if self:
             cron._trigger()
         return self
@@ -1142,6 +1183,7 @@ class L10nCoNeDocumento(models.Model):
                                 'author_user_id': datos.get('author_user_id'),
                                 'author_partner_id': datos.get('author_partner_id'),
                                 'queued_at': datos.get('queued_at'), 'intentos': intentos,
+                                'extemporaneo_confirmado': datos.get('extemporaneo_confirmado'),
                                 'proximo': fields.Datetime.to_string(fields.Datetime.now() + timedelta(minutes=espera))}
                             contar('reintento')
                         else:

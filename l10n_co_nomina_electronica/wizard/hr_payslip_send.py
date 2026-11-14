@@ -59,6 +59,11 @@ class HrPayslipSend(models.TransientModel):
              'se prepara pero no se encola. Queda constancia en el documento (usuario y fecha).',
     )
     hay_confirmable = fields.Boolean(compute='_compute_resumen')
+    confirmo_envio_extemporaneo = fields.Boolean(
+        string='Confirmo envío extemporáneo',
+        help='Obligatorio si la compañía bloquea el envío fuera de plazo y algún grupo ya venció: sin esta casilla ese '
+             'grupo se prepara pero no se encola. Solo el administrador de nómina; queda constancia en el documento.')
+    hay_extemporaneo = fields.Boolean(compute='_compute_resumen')
     resumen = fields.Html(string='Grupos y alertas', compute='_compute_resumen', sanitize=False)
     checkbox_send_mail = fields.Boolean(
         string='Enviar colilla por correo',
@@ -90,8 +95,9 @@ class HrPayslipSend(models.TransientModel):
             documentos = rec.documento_ids
             grupos = Envio._ne_grupos(produccion, documentos) if (produccion or documentos) else []
             rec.resumen = Envio._ne_resumen(grupos) if grupos else False
-            rec.hay_confirmable = any(
-                a['confirmable'] for g in grupos for a in Envio._ne_alertas_grupo(g))
+            alertas = [a for g in grupos for a in Envio._ne_alertas_grupo(g)]
+            rec.hay_confirmable = any(a['confirma'] == 'mes_incompleto' for a in alertas)
+            rec.hay_extemporaneo = any(a['confirma'] == 'extemporaneo' for a in alertas)
 
     @api.model
     def default_get(self, fields_list):
@@ -139,7 +145,8 @@ class HrPayslipSend(models.TransientModel):
             if self.checkbox_send_dian:
                 Envio._ne_exigir_cron_activo()
             resultado_docs = Envio._ne_procesar(
-                produccion, self.documento_ids, self.checkbox_send_dian, self.confirmo_mes_incompleto)
+                produccion, self.documento_ids, self.checkbox_send_dian, self.confirmo_mes_incompleto,
+                self.confirmo_envio_extemporaneo)
         template = False
         if self.checkbox_send_mail:
             template = self.mail_template_id or self.env['hr.payslip']._ne_plantilla_colilla()

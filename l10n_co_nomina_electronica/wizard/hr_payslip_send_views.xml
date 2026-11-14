@@ -10,6 +10,7 @@
                 <sheet>
                     <field name="mode" invisible="1"/>
                     <field name="hay_confirmable" invisible="1"/>
+                    <field name="hay_extemporaneo" invisible="1"/>
 
                     <!-- Alerta informativa para procesamiento masivo -->
                     <div invisible="mode != 'multi'">
@@ -25,6 +26,7 @@
                         <group string="Canales de Transmisión">
                             <field name="checkbox_send_dian" string="Enviar a la DIAN"/>
                             <field name="confirmo_mes_incompleto" invisible="not hay_confirmable or not checkbox_send_dian"/>
+                            <field name="confirmo_envio_extemporaneo" invisible="not hay_extemporaneo or not checkbox_send_dian"/>
                             <field name="checkbox_send_mail"/>
                         </group>
                         <group string="Configuración de Correo" invisible="not checkbox_send_mail">

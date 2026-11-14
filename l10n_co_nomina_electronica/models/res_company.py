@@ -606,6 +606,13 @@ class ResCompany(models.Model):
              'febrero incluido, cuenta 30. No afecta el sueldo mensual ni los días de PILA.',
     )
 
+    l10n_co_ne_bloquear_extemporaneo = fields.Boolean(
+        string='Bloquear envío fuera de plazo', default=False,
+        help='Si está marcado, un documento mensual (o nota de ajuste) cuyo plazo de transmisión ya venció no se encola '
+             'sin que un administrador de nómina confirme "envío extemporáneo" en Enviar y Procesar; queda constancia en '
+             'el documento. Apagado por defecto: no cambia nada hasta activarlo. Es una política de la compañía, no una '
+             'regla de la DIAN (el Anexo no valida el plazo).')
+
     l10n_co_ne_fuente_fecha_pago = fields.Selection(
         selection=[
             ('contabilidad', 'Pagos de Contabilidad'),
