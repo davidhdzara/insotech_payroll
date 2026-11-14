@@ -91,7 +91,6 @@ class ResConfigSettings(models.TransientModel):
     # UGPP
     l10n_co_ugpp_legal_nature = fields.Selection(related='company_id.l10n_co_ugpp_legal_nature', readonly=False)
     l10n_co_ugpp_contributor_type = fields.Selection(related='company_id.l10n_co_ugpp_contributor_type', readonly=False)
-    l10n_co_ugpp_special_autoretention = fields.Boolean(related='company_id.l10n_co_ugpp_special_autoretention', readonly=False)
 
     # Parámetros Nómina Colombia
     l10n_co_ne_exoneration_1607 = fields.Boolean(related='company_id.l10n_co_ne_exoneration_1607', readonly=False)

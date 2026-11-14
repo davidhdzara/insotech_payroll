@@ -415,30 +415,39 @@ class ResCompany(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # Campos UGPP – Clasificación del aportante
     # ──────────────────────────────────────────────────────────────────
+    # Listas de la Guía UGPP V-20.1 (p. 15): el código de cada opción sale de ``_UGPP_NATURALEZA`` / ``_UGPP_TIPO_APORTANTE``
+    # en models/l10n_co_nomina_ugpp.py (formulario 7001, columnas 16 y 20).
     l10n_co_ugpp_legal_nature = fields.Selection(
         selection=[
             ('publica', 'Pública'),
             ('privada', 'Privada'),
             ('mixta', 'Mixta'),
-            ('otra', 'Otra'),
+            ('organismo_multilateral', 'Organismos multilaterales'),
+            ('publica_extranjera', 'Entidades de derecho público no sometidas a la legislación colombiana'),
         ],
         string='Naturaleza Jurídica',
-        help='Naturaleza jurídica de la empresa según clasificación UGPP.',
+        help='Naturaleza jurídica del aportante según la Guía UGPP V-20.1 (formulario nómina-aportante, campo 16). '
+             'Obligatoria para el reporte UGPP.',
     )
     l10n_co_ugpp_contributor_type = fields.Selection(
         selection=[
             ('empleador', 'Empleador'),
-            ('independiente', 'Independiente'),
-            ('cooperativa', 'Cooperativa de Trabajo Asociado'),
+            ('entidad_publica_especial', 'Entidades o universidades públicas de los regímenes especial y de excepción'),
+            ('agremiacion', 'Agremiaciones, asociaciones o congregaciones religiosas'),
+            ('cooperativa', 'Cooperativas y precooperativas de trabajo asociado'),
+            ('mision_diplomatica', 'Misiones diplomáticas, consulares o de organismos multilaterales no sometidos a '
+                                   'la legislación colombiana'),
+            ('hogares_bienestar', 'Organizaciones administradoras del programa de hogares de bienestar'),
+            ('pagador_concejales', 'Pagador de aportes de los concejales municipales o distritales o de los ediles '
+                                   'de las juntas administradoras locales'),
+            ('pagador_sindical', 'Pagador de aportes contrato sindical'),
+            ('pagador_reincorporacion', 'Pagador programa de reincorporación'),
+            ('pagador_magisterio', 'Pagador aportes parafiscales del Magisterio'),
+            ('pagador_humanitaria', 'Pagador prestación humanitaria'),
         ],
         string='Tipo de Aportante',
-        help='Tipo de aportante al Sistema de Seguridad Social según UGPP.',
-    )
-    l10n_co_ugpp_special_autoretention = fields.Boolean(
-        string='Autorretención Especial',
-        default=False,
-        help='Indica si la empresa tiene la calidad de autorretenedor '
-             'especial ante la UGPP.',
+        help='Tipo de aportante según la Guía UGPP V-20.1 (formulario nómina-aportante, campo 20). Obligatorio para '
+             'el reporte UGPP.',
     )
 
     # ──────────────────────────────────────────────────────────────────
@@ -449,7 +458,9 @@ class ResCompany(models.Model):
         default=False,
         help='Si la empresa es persona jurídica del régimen contributivo, '
              'queda exonerada de aportes a SENA e ICBF para empleados '
-             'con salario inferior a 10 SMMLV (Art. 114-1 ET).',
+             'con salario inferior a 10 SMMLV (Art. 114-1 ET). También alimenta la '
+             'columna "Autorretención especial" del formato de pagos UGPP (Guía V-20.1: '
+             '"SI" si está exonerado del pago de aportes parafiscales según el art. 114-1 ET).',
     )
 
     l10n_co_ne_pension_patronal_sln = fields.Boolean(

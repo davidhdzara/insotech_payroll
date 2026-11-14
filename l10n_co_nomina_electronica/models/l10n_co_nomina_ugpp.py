@@ -65,7 +65,21 @@ _UGPP_COD_CONCEPTO_1 = 276
 _UGPP_PRIMERA_FILA = 11
 
 
-# Mapeo de tipo de documento DIAN → código corto UGPP
+# Listas de la Guía UGPP V-20.1 para el formulario del aportante (7001). Clave = valor del campo de la compañía.
+_UGPP_NATURALEZA = {
+    'publica': 1, 'privada': 2, 'mixta': 3, 'organismo_multilateral': 4, 'publica_extranjera': 5,
+}
+_UGPP_TIPO_APORTANTE = {
+    'empleador': 1, 'entidad_publica_especial': 3, 'agremiacion': 4, 'cooperativa': 5, 'mision_diplomatica': 6,
+    'hogares_bienestar': 7, 'pagador_concejales': 8, 'pagador_sindical': 9, 'pagador_reincorporacion': 10,
+    'pagador_magisterio': 11, 'pagador_humanitaria': 12,
+}
+# Tipo de documento del aportante (Guía p. 14): código DIAN del tipo de identificación del contacto de la compañía →
+# código UGPP. Los códigos CD y SC no tienen equivalente en el catálogo DIAN del módulo: no se mapean por conjetura.
+_UGPP_DOC_APORTANTE = {'31': 'NI', '13': 'CC', '22': 'CE', '12': 'TI', '41': 'PA', '47': 'PE'}
+
+
+# Mapeo de tipo de documento DIAN → código corto UGPP (columna del trabajador; U5 lo alinea con la lista de la Guía)
 _DOC_TYPE_UGPP_MAP = {
     '13': 'CC',
     '22': 'CE',
@@ -374,69 +388,69 @@ class L10nCoNominaUgpp(models.Model):
             if isinstance(valor, float):
                 cell.number_format = '#,##0.00'
 
+    def _ugpp_datos_aportante(self):
+        """Los 6 valores del aportante (formulario 7001) a partir de la compañía. Todos son obligatorios para la
+        UGPP: lo que falte se pide con un error que nombra la compañía y dónde completarlo (sin valores por
+        defecto)."""
+        self.ensure_one()
+        company = self.company_id
+        faltan = []
+        tipo_id = company.partner_id.l10n_latam_identification_type_id
+        codigo_dian = tipo_id.l10n_co_ne_dian_document_code or ''
+        tipo_doc = _UGPP_DOC_APORTANTE.get(codigo_dian)
+        if not tipo_doc:
+            faltan.append(_('un tipo de identificación del contacto de la compañía que tenga equivalente en la UGPP '
+                            '(NIT, cédula, extranjería, tarjeta de identidad, pasaporte o PEP)'))
+        numero = dian_utils.clean_nit(company.vat, strip_dv=(tipo_doc == 'NI'))
+        if not numero:
+            faltan.append(_('el número de identificación (NIT) de la compañía'))
+        if company.l10n_co_ugpp_legal_nature not in _UGPP_NATURALEZA:
+            faltan.append(_('la naturaleza jurídica'))
+        if company.l10n_co_ugpp_contributor_type not in _UGPP_TIPO_APORTANTE:
+            faltan.append(_('el tipo de aportante'))
+        if faltan:
+            raise UserError(_(
+                'Para el reporte UGPP de la compañía "%(compania)s" falta: %(faltan)s. Complételo en Nómina > '
+                'Configuración > Ajustes (bloque UGPP) o en el contacto de la compañía.',
+                compania=company.display_name, faltan='; '.join(faltan)))
+        return [
+            tipo_doc,
+            int(numero) if numero.isdigit() and tipo_doc in ('NI', 'CC', 'CE') else numero,
+            company.name or '',
+            _UGPP_NATURALEZA[company.l10n_co_ugpp_legal_nature],
+            _UGPP_TIPO_APORTANTE[company.l10n_co_ugpp_contributor_type],
+            self._ugpp_autoretencion(),
+        ]
+
+    def _ugpp_autoretencion(self):
+        """'SI' o 'NO' del campo 28 del aportante (Guía p. 15: 'exonerado del pago de aportes parafiscales según el
+        artículo 114-1 del ET'). Misma fuente que la exoneración de SENA/ICBF de la nómina y la PILA."""
+        self.ensure_one()
+        return 'SI' if self.company_id.l10n_co_ne_exoneration_1607 else 'NO'
+
     def _generate_sheet_aportante(
         self, ws, header_font, header_fill, header_alignment, thin_border
     ):
         """
-        Genera la hoja 'nomina-aportante' con información de la empresa.
+        Genera la hoja del aportante (formulario 7001) con información de la empresa.
 
         Columnas:
         - Tipo Documento, Número Documento, Razón Social
         - Naturaleza Jurídica, Tipo Aportante
-        - Dirección, Municipio, Departamento, Teléfono, Correo
-        - Autorretención Especial
+        - Autorretención Especial (exoneración del art. 114-1 ET)
         """
-        # (código de columna de la plantilla, encabezado). Las columnas sin código no existen en el formato: U2 las retira.
+        # Los 6 campos del formulario 7001 (Guía V-20.1 §1.3.1) con el código de columna de la plantilla.
         headers = [
-            (4, 'Tipo Documento'),
-            (8, 'Número Documento'),
-            (None, 'DV'),
-            (12, 'Razón Social'),
-            (16, 'Naturaleza Jurídica'),
-            (20, 'Tipo Aportante'),
-            (None, 'Dirección'),
-            (None, 'Municipio'),
-            (None, 'Departamento'),
-            (None, 'Teléfono'),
-            (None, 'Correo Electrónico'),
-            (28, 'Autorretención Especial'),
-            (None, 'Período Año'),
-            (None, 'Período Mes'),
+            (4, 'TIPO DOCUMENTO APORTANTE'),
+            (8, 'NÚMERO DOCUMENTO APORTANTE'),
+            (12, 'RAZÓN SOCIAL'),
+            (16, 'NATURALEZA JURÍDICA'),
+            (20, 'TIPO DE APORTANTE'),
+            (28, 'AUTORRETENCIÓN ESPECIAL'),
         ]
         fila_datos = self._ugpp_marco(
             ws, 'aportante', headers, header_font, header_fill, header_alignment, thin_border)
-
-        company = self.company_id
-
-        # Mapeo de naturaleza jurídica
-        nature_map = {
-            'publica': 'Pública',
-            'privada': 'Privada',
-            'mixta': 'Mixta',
-            'otra': 'Otra',
-        }
-        contrib_map = {
-            'empleador': 'Empleador',
-            'independiente': 'Independiente',
-            'cooperativa': 'Cooperativa de Trabajo Asociado',
-        }
-
-        row_data = [
-            'NIT',  # Tipo Documento
-            (company.vat or '').replace('-', ''),
-            '',  # DV - se puede computar
-            company.name or '',
-            nature_map.get(company.l10n_co_ugpp_legal_nature, ''),
-            contrib_map.get(company.l10n_co_ugpp_contributor_type, ''),
-            company.street or '',
-            company.city or '',
-            company.state_id.name if company.state_id else '',
-            company.phone or '',
-            company.email or '',
-            'Sí' if company.l10n_co_ugpp_special_autoretention else 'No',
-            self.year,
-            dict(self._fields['month'].selection).get(self.month, ''),
-        ]
+        row_data = self._ugpp_datos_aportante()
 
         self._ugpp_escribir_fila(ws, fila_datos, row_data, thin_border)
 

@@ -23,6 +23,8 @@ class TestUgppMarco(TransactionCase):
         cls.company = cls.env['res.company'].create({
             'name': 'Empresa Marco UGPP', 'country_id': cls.env.ref('base.co').id, 'vat': '900123456-8',
             'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN'})
+        cls.company.partner_id.l10n_latam_identification_type_id = cls.env.ref('l10n_co.rut')
+        cls.company.write({'l10n_co_ugpp_legal_nature': 'privada', 'l10n_co_ugpp_contributor_type': 'empleador'})
         cls.reporte = cls.env['l10n_co_nomina.ugpp'].create({
             'year': 2026, 'month': '9', 'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30),
             'company_id': cls.company.id})
@@ -50,10 +52,10 @@ class TestUgppMarco(TransactionCase):
         self._preambulo(ws, 7001, 'Formulario Nómina - Aportante')
         self.assertEqual(ws['B8'].value, '0 Formulario Nómina - Aportante')
         codigos = {c.column_letter: c.value for c in ws[9] if c.value is not None}
-        self.assertEqual(codigos, {'C': 4, 'D': 8, 'F': 12, 'G': 16, 'H': 20, 'N': 28})
-        self.assertEqual(ws['C10'].value, 'Tipo Documento')
+        self.assertEqual(codigos, {'C': 4, 'D': 8, 'E': 12, 'F': 16, 'G': 20, 'H': 28})
+        self.assertEqual(ws['C10'].value, 'TIPO DOCUMENTO APORTANTE')
         self.assertEqual((ws['A11'].value, ws['B11'].value), (1, 'FILA_1'))
-        self.assertEqual(ws['F11'].value, 'Empresa Marco UGPP')   # los datos empiezan en la columna C
+        self.assertEqual(ws['E11'].value, 'Empresa Marco UGPP')   # los datos empiezan en la columna C
         self.assertIsNone(ws['A12'].value)
 
     def test_hoja_conceptos_lleva_el_marco_y_un_concepto_por_fila(self):
