@@ -833,7 +833,6 @@ result_rate = payslip._rule_parameter('l10n_co_pct_salud_empleado', payslip.date
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">Salud</field>
-            <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
         <record id="hr_salary_rule_co_pension_emp" model="hr.salary.rule">
@@ -856,7 +855,6 @@ result_rate = payslip._rule_parameter('l10n_co_pct_pension_empleado', payslip.da
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">FondoPension</field>
-            <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
         <record id="hr_salary_rule_co_fsp" model="hr.salary.rule">
@@ -911,7 +909,6 @@ result_rate = pct * 100
             </field>
             <field name="appears_on_payslip" eval="True"/>
             <field name="l10n_co_ne_dian_concept">FondoSP</field>
-            <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
         <!-- ==================== BASE IBC SS (invisible, acumulador H-017a) ==================== -->
@@ -1417,7 +1414,6 @@ ibc = result_rules['CO_IBC_SP']['total']
 result = ibc * payslip._rule_parameter('l10n_co_pct_salud_empleador', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
-            <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
         <record id="hr_salary_rule_co_pension_cia" model="hr.salary.rule">
@@ -1438,7 +1434,6 @@ if not employee.company_id.l10n_co_ne_pension_patronal_sln:
 result = ibc * payslip._rule_parameter('l10n_co_pct_pension_empleador', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
-            <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
         <record id="hr_salary_rule_co_arl_cia" model="hr.salary.rule">
@@ -1458,7 +1453,6 @@ ibc = result_rules['CO_IBC_ARL']['total']  # IBC unico del recibo (H-017b)
 result = ibc * payslip._ne_pct_arl() / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
-            <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
         <record id="hr_salary_rule_co_ccf_cia" model="hr.salary.rule">
@@ -1474,7 +1468,6 @@ ibc = result_rules['CO_IBC_PARAF']['total']  # IBC unico del recibo (H-017b)
 result = ibc * payslip._rule_parameter('l10n_co_pct_ccf', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
-            <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
         <record id="hr_salary_rule_co_sena_cia" model="hr.salary.rule">
@@ -1499,7 +1492,6 @@ ibc = result_rules['CO_IBC_PARAF']['total']  # IBC unico del recibo (H-017b)
 result = ibc * payslip._rule_parameter('l10n_co_pct_sena', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
-            <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
         <record id="hr_salary_rule_co_icbf_cia" model="hr.salary.rule">
@@ -1524,7 +1516,6 @@ ibc = result_rules['CO_IBC_PARAF']['total']  # IBC unico del recibo (H-017b)
 result = ibc * payslip._rule_parameter('l10n_co_pct_icbf', payslip.date_from) / 100
             </field>
             <field name="appears_on_payslip" eval="False"/>
-            <field name="l10n_co_ugpp_payment_type">tp_salarial</field>
         </record>
 
         <!-- ============================================================ -->

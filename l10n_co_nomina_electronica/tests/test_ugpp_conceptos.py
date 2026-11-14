@@ -139,3 +139,19 @@ class TestUgppConceptos(TransactionCase):
         self.assertIn('Regla U3B_FALTA', str(exc.exception))
         self.assertNotIn('Regla U3B_NOMBRE_NO', str(exc.exception))
         self.assertIn('con valor en el periodo', str(exc.exception))
+
+    # ── U5b: aportes y descuentos no son pagos al trabajador ───────────────────────────────────────────
+    def test_los_aportes_y_descuentos_de_seguridad_social_no_llevan_tipo_ugpp(self):
+        for xmlid in ('salud_emp', 'pension_emp', 'fsp', 'salud_cia', 'pension_cia', 'arl_cia', 'ccf_cia', 'sena_cia',
+                      'icbf_cia'):
+            regla = self.env.ref('l10n_co_nomina_electronica.hr_salary_rule_co_' + xmlid)
+            self.assertFalse(regla.l10n_co_ugpp_payment_type, xmlid)
+
+    def test_ninguna_regla_de_descuento_ni_de_aporte_de_la_empresa_tiene_tipo_ugpp(self):
+        categorias = self.env['hr.salary.rule.category'].search([
+            ('id', 'in', [self.env.ref('l10n_co_nomina_electronica.' + x).id for x in (
+                'hr_salary_rule_category_seguridad_social_emp', 'hr_salary_rule_category_seguridad_social_cia')])])
+        reglas = self.env['hr.salary.rule'].search([
+            ('category_id', 'in', categorias.ids), ('l10n_co_ugpp_payment_type', '!=', False)])
+        self.assertFalse(reglas.mapped('code'))
+
