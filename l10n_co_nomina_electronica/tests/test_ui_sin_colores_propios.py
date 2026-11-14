@@ -93,3 +93,8 @@ class TestUiSinColoresPropios(TransactionCase):
     def test_ajustes_y_asistente_de_envio_sin_estilos_propios(self):
         self._sin_estilo_propio('l10n_co_nomina_electronica.res_config_settings_view_form')
         self._sin_estilo_propio('l10n_co_nomina_electronica.hr_payslip_send_view_form')
+
+    def test_la_colilla_y_sus_bloques_comunes_sin_estilos_propios(self):
+        for xmlid in ('report_payslip_ne', 'ne_comprobante_encabezado', 'ne_comprobante_conceptos'):
+            self._sin_estilo_propio('l10n_co_nomina_electronica.' + xmlid)
+

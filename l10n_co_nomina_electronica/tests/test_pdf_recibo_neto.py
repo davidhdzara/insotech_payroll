@@ -55,7 +55,8 @@ class TestPdfReciboNeto(TransactionCase):
 
     def _html(self, slip):
         html, _tipo = self.env['ir.actions.report']._render_qweb_html(REPORTE, [slip.id])
-        return html.decode()
+        # el importe monetario nativo usa espacio de no separación entre el símbolo y el valor
+        return html.decode().replace('\xa0', ' ')
 
     def _con_nativas(self, slip):
         """Las lineas que Odoo agrega a toda estructura, con el valor de las categorias
