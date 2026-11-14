@@ -80,7 +80,7 @@ class TestHistoriaHabilitacion(DocumentoFixture, TransactionCase):
     def test_recibos_del_mes_excluye_notas_por_recibo_legacy_y_habilitacion(self):
         normal = self.a
         nota, legacy, prueba = self.b, self._nuevo(), self._nuevo()
-        nota.l10n_co_ne_is_adjustment = True
+        nota.write({'l10n_co_ne_is_adjustment': True, 'l10n_co_ne_adjustment_ref_cune': 'a' * 96})
         doc_legacy = self.Doc.create({'company_id': self.company.id, 'employee_id': self.empleado.id,
                                       'period': date(2026, 3, 1), 'legacy': True})
         legacy.l10n_co_ne_documento_id = doc_legacy
@@ -89,7 +89,7 @@ class TestHistoriaHabilitacion(DocumentoFixture, TransactionCase):
         self.assertEqual(del_mes, normal)
 
     def test_preparar_ignora_con_motivo_los_recibos_que_no_entran(self):
-        self.b.l10n_co_ne_is_adjustment = True
+        self.b.write({'l10n_co_ne_is_adjustment': True, 'l10n_co_ne_adjustment_ref_cune': 'a' * 96})
         self.doc.payslip_ids.write({'l10n_co_ne_documento_id': False})
         self.doc.unlink()
         resultado = self.Doc._ne_preparar(self.b)
@@ -100,7 +100,8 @@ class TestHistoriaHabilitacion(DocumentoFixture, TransactionCase):
 
     def test_la_alerta_de_recibos_que_faltan_no_cuenta_notas_ni_pruebas(self):
         # el documento tiene solo la primera quincena; la segunda es una nota por recibo y hay otra de pruebas
-        self.b.write({'l10n_co_ne_documento_id': False, 'l10n_co_ne_is_adjustment': True})
+        self.b.write({'l10n_co_ne_documento_id': False, 'l10n_co_ne_is_adjustment': True,
+                      'l10n_co_ne_adjustment_ref_cune': 'a' * 96})
         prueba = self._nuevo('done', False)
         prueba.l10n_co_ne_hab_set_id = 'SET1'
         pendiente = self._nuevo('done', False)
@@ -113,7 +114,7 @@ class TestHistoriaHabilitacion(DocumentoFixture, TransactionCase):
         self.assertNotIn(prueba.display_name, alerta[0]['message'])
 
     def test_el_asistente_agrupa_aparte_lo_que_no_entra(self):
-        self.b.l10n_co_ne_is_adjustment = True
+        self.b.write({'l10n_co_ne_is_adjustment': True, 'l10n_co_ne_adjustment_ref_cune': 'a' * 96})
         grupos = self.env['l10n.co.ne.documento.send']._ne_grupos(self.a | self.b, self.Doc)
         motivos = [m for g in grupos for m in g['motivos']]
         self.assertTrue([m for m in motivos if 'nota de ajuste por recibo' in m])
