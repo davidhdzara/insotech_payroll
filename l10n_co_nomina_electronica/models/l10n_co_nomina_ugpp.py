@@ -750,7 +750,12 @@ class L10nCoNominaUgpp(models.Model):
         calendarios = sorted({periodicidad.get(c.schedule_pay or c.structure_type_id.default_schedule_pay, '')
                               for c in recibos.contract_id} - {''})
         meses = dict(self._fields['month'].selection)
+        # Fechas de pago REALES de los recibos del reporte: la periodicidad nativa (``schedule_pay``) no puede expresar
+        # "los días 5 y 20" ni "todos los viernes". Misma fuente de la fecha de pago del documento DIAN; un recibo sin
+        # fecha de pago es un error que lo nombra (no se omite en silencio).
+        fechas_pago = sorted({self._ugpp_fecha_pago(slip) for slip in recibos})
         return {
+            'fechas_pago': [fecha.strftime('%d/%m/%Y') for fecha in fechas_pago],
             'nit': dian_utils.clean_nit(partner.vat, strip_dv=False),
             'direccion': ', '.join(filter(None, [partner.street, partner.city, partner.state_id.name])),
             'correo': partner.email or '',

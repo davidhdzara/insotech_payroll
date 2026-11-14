@@ -32,6 +32,8 @@
                         <p t-if="d['calendarios']">La nómina de la compañía se paga con la siguiente periodicidad:
                             <span t-out="', '.join(d['calendarios'])"/>. El formato informa el valor mensual por concepto y
                             trabajador.</p>
+                        <p t-if="d['fechas_pago']">Fechas de pago de los recibos del periodo:
+                            <span t-out="', '.join(d['fechas_pago'])"/>.</p>
                         <p><strong>Ajustes de nómina (borrador a validar por el representante legal):</strong>
                             <span t-out="d['texto_ajustes']"/></p>
                         <p><strong>Base de liquidación:</strong> <span t-out="d['nota_360']"/></p>

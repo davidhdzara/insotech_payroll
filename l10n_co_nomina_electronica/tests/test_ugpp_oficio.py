@@ -18,7 +18,8 @@ class TestUgppOficio(TransactionCase):
         cls.company = cls.env['res.company'].create({
             'name': 'Empresa Oficio UGPP', 'country_id': cls.env.ref('base.co').id, 'vat': '900123456-8',
             'email': 'notificaciones@oficio.example.com', 'street': 'Calle 1 # 2-3', 'city': 'Bogotá',
-            'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN'})
+            'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN',
+            'l10n_co_ne_fuente_fecha_pago': 'recibo'})
         cls.representante = cls.env['res.partner'].create({
             'name': 'Representante Legal Prueba', 'vat': '1020304050',
             'l10n_latam_identification_type_id': cls.env.ref('l10n_co.national_citizen_id').id})
@@ -38,7 +39,7 @@ class TestUgppOficio(TransactionCase):
             'company_id': cls.company.id,
             'struct_id': cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina').id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30)})
-        cls.recibo.state = 'done'
+        cls.recibo.write({'state': 'done', 'paid_date': date(2026, 9, 30)})
         cls.reporte = cls.env['l10n_co_nomina.ugpp'].create({
             'year': 2026, 'month': '9', 'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30),
             'company_id': cls.company.id, 'requerimiento_radicado': '2026-RAD-123',
@@ -87,3 +88,19 @@ class TestUgppOficio(TransactionCase):
         accion = self.reporte.action_imprimir_oficio()
         self.assertEqual(accion['report_name'], 'l10n_co_nomina_electronica.report_ugpp_oficio')
         self.assertEqual(accion['type'], 'ir.actions.report')
+
+    def test_el_oficio_lista_las_fechas_de_pago_reales_de_los_recibos(self):
+        # Pagos los 5 y 20 (no caben en la periodicidad nativa): se leen de los recibos, sin campo nuevo.
+        segundo = self.env['hr.payslip'].create({
+            'name': 'Recibo Oficio 2', 'employee_id': self.empleado.id, 'contract_id': self.contrato.id,
+            'company_id': self.company.id, 'struct_id': self.recibo.struct_id.id,
+            'date_from': date(2026, 9, 6), 'date_to': date(2026, 9, 20)})
+        segundo.write({'state': 'done', 'paid_date': date(2026, 9, 20)})
+        self.recibo.paid_date = date(2026, 9, 5)
+        self.assertEqual(self.reporte._ugpp_datos_oficio()['fechas_pago'], ['05/09/2026', '20/09/2026'])
+
+    def test_un_recibo_sin_fecha_de_pago_hace_fallar_el_oficio_nombrandolo(self):
+        self.recibo.paid_date = False
+        with self.assertRaisesRegex(UserError, 'Recibo Oficio'):
+            self.reporte._ugpp_datos_oficio()
+
