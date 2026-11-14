@@ -21,6 +21,8 @@ Referencia: Manual Storm User – UGPP.
 import base64
 import io
 import logging
+import re
+import zipfile
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
@@ -124,6 +126,10 @@ _UGPP_NOTA_360 = ('Las prestaciones sociales (prima, cesantías e intereses) se 
                   'conforme a los artículos 249 y 306 del Código Sustantivo del Trabajo.')
 # Las columnas de concepto de la plantilla son 133 (CONCEPTO 1 a 133).
 _UGPP_MAX_CONCEPTOS = 133
+# Documentos adicionales (Guía V-20.1 §2.3, Res. 858 art. 3): PDF, nombre de archivo de máx. 50 caracteres y el conjunto
+# de máx. 100 MB (un archivo por enlace de Storm Web).
+_UGPP_MAX_NOMBRE_ARCHIVO = 50
+_UGPP_MAX_BYTES_SOPORTES = 100 * 1024 * 1024
 # Oficio de respuesta (9006): párrafo sobre los ajustes. BORRADOR a validar por el representante legal / David (la Guía
 # pide "explicar cómo se realizan los ajustes" y no trae modelo).
 _UGPP_TEXTO_AJUSTES = ('Los ajustes de nómina se registran en el mes en que se conocen, mediante recibos de ajuste '
@@ -182,6 +188,9 @@ class L10nCoNominaUgpp(models.Model):
         required=True,
         help='Fecha de fin del período de reporte.',
     )
+    soportes_file = fields.Binary(string='Soportes por trabajador (ZIP)', attachment=True)
+    soportes_filename = fields.Char(string='Nombre del ZIP de soportes')
+    soportes_resumen = fields.Text(string='Soportes: qué hay y qué falta', readonly=True)
     requerimiento_radicado = fields.Char(
         string='Radicado del requerimiento',
         help='Número de radicado del requerimiento de información de la UGPP que se responde. Solo para el oficio de '
@@ -544,6 +553,88 @@ class L10nCoNominaUgpp(models.Model):
                 'Nómina > Configuración > Cuentas Contables por Regla y en la regla (Tipo de pago UGPP).',
                 '; '.join(problemas)))
         return filas
+
+    def _ugpp_soportes(self, payslips):
+        """Por empleado del reporte, los PDF de soporte que YA existen (adjuntos del contrato, del empleado y de su
+        contacto de trabajo, más los de las planillas PILA del mes) y lo que falta. Lo que falta NO es un error: es la
+        lista de lo pendiente por conseguir. ``[{'empleado', 'adjuntos': [(tipo, ir.attachment)], 'faltan': [texto]}]``"""
+        self.ensure_one()
+        Adjunto = self.env['ir.attachment']
+        resultado = []
+        for empleado in payslips.employee_id.sorted('name'):
+            contratos = payslips.filtered(lambda s: s.employee_id == empleado).contract_id | empleado.contract_ids
+            fuentes = (('contrato', 'hr.contract', contratos.ids), ('empleado', 'hr.employee', empleado.ids),
+                       ('contacto', 'res.partner', empleado.work_contact_id.ids))
+            adjuntos = []
+            for tipo, modelo, ids in fuentes:
+                if ids:
+                    for adjunto in Adjunto.search([('res_model', '=', modelo), ('res_id', 'in', ids),
+                                                   ('mimetype', '=', 'application/pdf')], order='id'):
+                        adjuntos.append((tipo, adjunto))
+            faltan = []
+            if not adjuntos:
+                faltan.append(_('falta el contrato laboral: ningún PDF adjunto al contrato, al empleado ni a su contacto'))
+            consolidados = self.env['l10n.co.ibc.mensual'].search([
+                ('company_id', '=', self.company_id.id), ('employee_id', '=', empleado.id),
+                ('period', '=', self.date_from)])
+            planillas = consolidados.planilla_id
+            if not planillas:
+                faltan.append(_('sin planilla PILA registrada en el mes'))
+            for planilla in planillas:
+                for adjunto in Adjunto.search([('res_model', '=', 'l10n.co.pila.planilla'),
+                                               ('res_id', '=', planilla.id), ('mimetype', '=', 'application/pdf')]):
+                    adjuntos.append(('planilla', adjunto))
+            resultado.append({'empleado': empleado, 'adjuntos': adjuntos, 'faltan': faltan})
+        return resultado
+
+    def _ugpp_nombre_soporte(self, empleado, tipo, indice):
+        """Nombre de archivo del soporte: la identificación del trabajador + el tipo (máx. 50 caracteres, sin
+        caracteres especiales)."""
+        base = re.sub(r'[^A-Za-z0-9]', '', empleado.identification_id or '') or 'SIN_IDENTIFICACION'
+        nombre = '%s_%s%s' % (base, tipo, '_%d' % indice if indice > 1 else '')
+        return nombre[:_UGPP_MAX_NOMBRE_ARCHIVO - 4] + '.pdf'
+
+    def action_generar_soportes(self):
+        """ZIP con los PDF de soporte que existen, nombrados con la identificación del trabajador, y el resumen de lo
+        que falta por empleado. Es una comodidad para subirlos de a uno a Storm Web (un archivo por enlace): el ZIP no
+        se envía."""
+        self.ensure_one()
+        payslips = self._ugpp_recibos()
+        if not payslips:
+            raise UserError(_(
+                'No se encontraron nóminas confirmadas para el período %s - %s en la empresa %s.',
+                self.date_from, self.date_to, self.company_id.name))
+        soportes = self._ugpp_soportes(payslips)
+        salida = io.BytesIO()
+        lineas = []
+        total_bytes = 0
+        with zipfile.ZipFile(salida, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for item in soportes:
+                empleado = item['empleado']
+                contador = {}
+                for tipo, adjunto in item['adjuntos']:
+                    contador[tipo] = contador.get(tipo, 0) + 1
+                    zf.writestr(self._ugpp_nombre_soporte(empleado, tipo, contador[tipo]), adjunto.raw or b'')
+                    total_bytes += adjunto.file_size or 0
+                estado = '; '.join(item['faltan']) if item['faltan'] else _('completo')
+                lineas.append('%s (%s): %d PDF; %s' % (
+                    empleado.name, empleado.identification_id or _('sin identificación'), len(item['adjuntos']), estado))
+        if total_bytes > _UGPP_MAX_BYTES_SOPORTES:
+            lineas.append(_('AVISO: los soportes suman más de 100 MB (el límite de Storm Web); envíelos por partes.'))
+        encabezado = _(
+            'Que falten contratos no es un error del módulo: significa que no hay PDF adjuntos en Odoo (contrato, '
+            'empleado o contacto). Adjúntelos y vuelva a generar. Soportes que existen y que se incluyen en el ZIP: '
+            'solo PDF.')
+        resumen = '\n'.join([encabezado, ''] + lineas)
+        nombre = 'Soportes_UGPP_%s_%s_%s.zip' % (
+            dian_utils.clean_nit(self.company_id.vat) or 'NIT', self.month, self.year)
+        self.write({'soportes_file': base64.b64encode(salida.getvalue()), 'soportes_filename': nombre,
+                    'soportes_resumen': resumen})
+        return {
+            'type': 'ir.actions.act_url',
+            'url': '/web/content/%s/%s/soportes_file/%s?download=true' % (self._name, self.id, nombre),
+            'target': 'new',
+        }
 
     def _ugpp_datos_oficio(self):
         """Datos del oficio de respuesta a la UGPP (código 9006, Guía V-20.1 §2.2). Todo sale de Contactos, de la
