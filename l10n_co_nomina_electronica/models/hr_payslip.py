@@ -133,10 +133,26 @@ class HrPayslip(models.Model):
         intercambios = self.l10n_co_ne_exchange_ids
         return bool(intercambios) and not any(op == 'send_sync' for op in intercambios.mapped('operation'))
 
-    def _ne_bloquear_si_va_en_documento(self):
-        """El ciclo DIAN por recibo (generar, enviar, regenerar, consultar, ajustar) no corre para un recibo que se
-        reporta en un documento mensual no migrado: sin esto el mismo pago se transmitiría dos veces, solo y dentro del
-        mes (doc 53 §23.6). Un recibo sin documento o con documento *legacy* (ya transmitido por recibo) sigue igual."""
+    l10n_co_ne_en_produccion = fields.Boolean(
+        string='Compañía en producción (nómina electrónica)', compute='_compute_ne_en_produccion',
+        help='Solo para las vistas: en producción el recibo no se transmite por su cuenta, se reporta en el documento '
+             'mensual.')
+
+    @api.depends('company_id.l10n_co_ne_environment', 'company_id.l10n_co_ne_certification_process')
+    def _compute_ne_en_produccion(self):
+        for slip in self:
+            slip.l10n_co_ne_en_produccion = slip.company_id._ne_en_produccion() if slip.company_id else False
+
+    def _ne_bloquear_si_va_en_documento(self, consulta=False):
+        """El ciclo DIAN por recibo (generar, enviar, regenerar, consultar, ajustar) no corre en estos casos:
+
+        1. El recibo se reporta en un documento mensual no migrado: sin esto el mismo pago se transmitiría dos veces,
+           solo y dentro del mes (doc 53 §23.6).
+        2. La compañía está en PRODUCCIÓN (D-5h/D-26c, doc 53 §27.1): en producción se reporta por documento mensual;
+           el ciclo por recibo queda solo para habilitación. Excepción (D-R1): ``consulta=True`` (solo consultar, no
+           transmite) se permite para un recibo de un documento *legacy* (ya transmitido por recibo) que siga pendiente.
+
+        Un recibo sin documento o con documento *legacy* en habilitación sigue igual."""
         for slip in self:
             doc = slip.l10n_co_ne_documento_id
             if doc and not doc.legacy:
@@ -144,6 +160,11 @@ class HrPayslip(models.Model):
                     'El recibo "%(recibo)s" se reporta en el documento mensual "%(doc)s": se genera, se envía y se '
                     'consulta desde el documento, no por recibo.',
                     recibo=slip.display_name, doc=doc.display_name))
+            if slip.company_id._ne_en_produccion() and not (consulta and doc and doc.legacy):
+                raise UserError(_(
+                    'La compañía "%(compania)s" está en Producción: la nómina electrónica se reporta por documento '
+                    'mensual (acción "Enviar y Procesar" desde el documento), no por recibo. El recibo "%(recibo)s" no '
+                    'se transmite por su cuenta.', compania=slip.company_id.name, recibo=slip.display_name))
 
     @api.constrains('l10n_co_ne_documento_id', 'company_id', 'employee_id', 'credit_note')
     def _check_documento_coherente(self):

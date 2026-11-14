@@ -382,7 +382,8 @@ class TestDocumentoModelo(TransactionCase):
             def oculto(documento, estado_recibo, _condicion=condicion):
                 return bool(safe_eval(_condicion, {
                     'country_code': 'CO', 'state': 'done', 'l10n_co_ne_is_adjustment': False,
-                    'l10n_co_ne_documento_id': documento, 'l10n_co_ne_state': estado_recibo}))
+                    'l10n_co_ne_documento_id': documento, 'l10n_co_ne_state': estado_recibo,
+                    'l10n_co_ne_en_produccion': False}))
             self.assertFalse(oculto(False, estado), '%s: recibo sin documento debe verlo' % texto)
             if estado == 'draft':
                 self.assertTrue(oculto(1, 'draft'), '%s: recibo con documento no debe verlo' % texto)
@@ -400,7 +401,7 @@ class TestDocumentoModelo(TransactionCase):
         def oculto(documento, estado_recibo, estado_ne='draft'):
             return bool(safe_eval(condicion, {
                 'country_code': 'CO', 'state': estado_recibo, 'l10n_co_ne_documento_id': documento,
-                'l10n_co_ne_state': estado_ne}))
+                'l10n_co_ne_state': estado_ne, 'l10n_co_ne_en_produccion': False}))
         self.assertFalse(oculto(1, 'done'))                 # con documento: visible
         self.assertFalse(oculto(1, 'paid'))
         self.assertTrue(oculto(1, 'draft'))                 # un recibo sin confirmar nunca

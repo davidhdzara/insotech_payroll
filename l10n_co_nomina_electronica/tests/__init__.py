@@ -103,4 +103,5 @@ from . import test_documento_cola
 from . import test_documento_reconsulta
 from . import test_documento_asistente
 from . import test_historia_habilitacion
+from . import test_ciclo_recibo_produccion
 from . import test_migracion_vistas_211

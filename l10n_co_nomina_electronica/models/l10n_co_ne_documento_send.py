@@ -21,7 +21,7 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
     @api.model
     def _ne_es_produccion(self, company):
         """Producción real: el documento mensual solo transmite aquí (D-b); en habilitación el ciclo es por recibo."""
-        return company.l10n_co_ne_environment == '1' and not company.l10n_co_ne_certification_process
+        return company._ne_en_produccion()
 
     # ── grupos y alertas (sin ningún efecto) ──────────────────────────
     @api.model

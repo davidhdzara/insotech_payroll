@@ -127,6 +127,12 @@ class ResCompany(models.Model):
                 company=self.name, campo=self._fields[campo].string))
         return valor
 
+    def _ne_en_produccion(self):
+        """Producción real de nómina electrónica: ambiente 1 y sin proceso de certificación. Aquí se reporta por
+        DOCUMENTO mensual; el ciclo por recibo solo sigue vivo en habilitación (doc 53 §27.1, D-5h)."""
+        self.ensure_one()
+        return self.l10n_co_ne_environment == '1' and not self.l10n_co_ne_certification_process
+
     def _ne_exigir_colombia(self):
         """Error claro si la compania no es colombiana: los asistentes de nomina colombiana (PILA,
         UGPP, habilitacion DIAN, consulta por CUNE) trabajan con la compania del registro y solo para

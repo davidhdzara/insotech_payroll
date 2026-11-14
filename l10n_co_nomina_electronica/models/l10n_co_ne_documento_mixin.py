@@ -865,7 +865,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         """Consulta una vez por ZipKey y distribuye solo resultados inequívocos."""
         if not self:
             return True
-        self._ne_bloquear_si_va_en_documento()
+        self._ne_bloquear_si_va_en_documento(consulta=True)
         companies = self.mapped('company_id')
         if len(companies) != 1:
             raise UserError(_('Seleccione nóminas de una sola compañía para consultar DIAN.'))
