@@ -116,9 +116,10 @@ class L10nCoNeDocumento(models.Model):
                                  'queda fuera de la unicidad por mes y del plazo.')
     fecha_limite = fields.Date(
         string='Fecha límite', compute='_compute_fecha_limite', store=True, readonly=True,
-        help='10.º día hábil del mes siguiente al del documento (Res. DIAN 000013/2021 art. 8). Día hábil = día con '
-             'jornada en el calendario del contrato (o de la compañía) y no festivo (D10). Solo alerta, no bloquea. '
-             'No aplica a documentos migrados ni a notas de ajuste.')
+        help='10.º día hábil del mes siguiente al del documento (Res. DIAN 000013/2021 art. 8); en una nota de ajuste, '
+             'del mes siguiente al conocimiento del error. Día hábil = día con jornada en el calendario del contrato '
+             '(o de la compañía) y no festivo (D10). Solo alerta, no bloquea (sin sanción automática). No aplica a '
+             'documentos migrados.')
 
     # Reconsulta automática (doc 53 §23.17, 7c / D-B): una consulta por documento por intervalo y espera creciente tras
     # fallos de transporte seguidos. Solo técnicos (sin vista).
@@ -227,20 +228,28 @@ class L10nCoNeDocumento(models.Model):
 
     def _ne_calcular_fecha_limite(self):
         """10.º día hábil del mes siguiente, o False si no se puede calcular (sin calendario o sin 10 días hábiles
-        en ~45 días: falta cargar jornada o hay festivos de más)."""
+        en ~45 días: falta cargar jornada o hay festivos de más).
+
+        Original: el mes siguiente al del documento. NOTA de ajuste (doc 53 §28.4, doctrina que entregó David: oficios
+        DIAN 914809/2021 y 901476/2022; NO verificada contra el texto primario): el mes siguiente al CONOCIMIENTO del
+        error (``error_conocido_el``); sin esa fecha no hay plazo."""
         self.ensure_one()
-        primero = (self.period.replace(day=28) + timedelta(days=4)).replace(day=1)
+        base = self.error_conocido_el if self.is_adjustment else self.period
+        if not base:
+            return False
+        primero = (base.replace(day=28) + timedelta(days=4)).replace(day=1)
         dias = int(self.env['hr.rule.parameter']._get_parameter_from_code(
             'l10n_co_ne_dias_plazo_transmision', primero))   # Res. DIAN 000013/2021 art. 8 (versionado)
         habiles = sorted(self._ne_dias_habiles(primero, primero + timedelta(days=44)))
         return habiles[dias - 1] if len(habiles) >= dias else False
 
     @api.depends('period', 'contract_id.resource_calendar_id', 'company_id.resource_calendar_id',
-                 'legacy', 'is_adjustment')
+                 'legacy', 'is_adjustment', 'error_conocido_el')
     def _compute_fecha_limite(self):
         for doc in self:
             doc.fecha_limite = (doc._ne_calcular_fecha_limite()
-                                if doc.period and not doc.legacy and not doc.is_adjustment else False)
+                                if doc.period and not doc.legacy and (not doc.is_adjustment or doc.error_conocido_el)
+                                else False)
 
     # ──────────────────────────────────────────────────────────────────
     # Preparar: agrupar recibos, crear/reutilizar el documento y validarlo (doc 53 §17.2, §20.2, §22.2)
@@ -565,11 +574,13 @@ class L10nCoNeDocumento(models.Model):
         if self.fecha_limite and hoy > self.fecha_limite and self.state in (
                 False, 'invoice_sending_failed'):
             alerta('plazo_vencido', 'warning', _(
-                'El plazo de transmisión venció el %(fecha)s (10 días hábiles del mes siguiente).',
-                fecha=self.fecha_limite))
-        elif not self.fecha_limite and not self.legacy and not self.is_adjustment:
+                'El plazo de transmisión venció el %(fecha)s (10 días hábiles del mes siguiente%(base)s). Se puede '
+                'transmitir igual: es una advertencia, no un bloqueo.', fecha=self.fecha_limite,
+                base=_(' al conocimiento del error') if self.is_adjustment else ''))
+        elif not self.fecha_limite and not self.legacy:
             alerta('plazo_sin_calcular', 'warning', _(
-                'No se pudo calcular el plazo de transmisión: revise el calendario laboral y los festivos.'))
+                'No se pudo calcular el plazo de transmisión: revise el calendario laboral y los festivos%(nota)s.',
+                nota=_(' y la fecha en que se conoció el error') if self.is_adjustment else ''))
         alertas += self._ne_validar_xml()
         self.alertas = alertas
         bloqueos = [a for a in alertas if a['level'] == 'danger']

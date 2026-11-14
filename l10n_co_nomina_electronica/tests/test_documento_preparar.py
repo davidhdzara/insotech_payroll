@@ -225,10 +225,48 @@ class TestDocumentoPreparar(TransactionCase):
         doc = self._preparar(a1 | a2)['documentos']
         self.assertEqual(doc.fecha_limite, date(2026, 4, 14))
 
-    def test_legacy_y_ajuste_no_tienen_plazo(self):
+    def test_legacy_no_tiene_plazo(self):
         legacy = self.env['l10n.co.ne.documento'].create({
             'company_id': self.company.id, 'employee_id': self.emp_a.id, 'period': date(2026, 3, 1), 'legacy': True})
         self.assertFalse(legacy.fecha_limite)
+
+    # ── Plazo de las notas de ajuste (doc 53 §28.4): mes siguiente al CONOCIMIENTO del error ──
+    def _nota(self, error_conocido_el, **vals):
+        datos = {'company_id': self.company.id, 'employee_id': self.emp_a.id, 'contract_id': self.contract_a.id,
+                 'period': date(2026, 3, 1), 'is_adjustment': True, 'adjustment_type': '1',
+                 'adjustment_ref_cune': 'x' * 96, 'error_conocido_el': error_conocido_el}
+        datos.update(vals)
+        return self.env['l10n.co.ne.documento'].create(datos)
+
+    def test_la_nota_tiene_plazo_desde_el_mes_siguiente_al_error(self):
+        # error conocido en marzo -> abril 2026 (lun-vie sin festivos): el 10.º día hábil es el 14, como el original
+        self.assertEqual(self._nota(date(2026, 3, 20)).fecha_limite, date(2026, 4, 14))
+
+    def test_el_plazo_de_la_nota_no_sigue_al_mes_del_documento_original(self):
+        # mismo documento de marzo, pero el error se conoció en febrero -> marzo 2026: 2,3,4,5,6,9,10,11,12,13 -> 13
+        self.assertEqual(self._nota(date(2026, 2, 10)).fecha_limite, date(2026, 3, 13))
+
+    def test_el_plazo_de_la_nota_se_recalcula_si_cambia_la_fecha_del_error(self):
+        nota = self._nota(date(2026, 3, 20))
+        nota.error_conocido_el = date(2026, 2, 10)
+        self.assertEqual(nota.fecha_limite, date(2026, 3, 13))
+
+    def test_una_nota_sin_fecha_de_error_no_tiene_plazo_y_avisa(self):
+        nota = self._nota(False)
+        self.assertFalse(nota.fecha_limite)
+        nota._ne_validar()
+        claves = [a['key'] for a in nota.alertas]
+        self.assertIn('plazo_sin_calcular', claves)
+        self.assertIn('fecha en que se conoció el error',
+                      [a['message'] for a in nota.alertas if a['key'] == 'plazo_sin_calcular'][0])
+
+    def test_plazo_vencido_de_una_nota_es_advertencia_no_bloqueo(self):
+        nota = self._nota(date(2026, 3, 20))            # vencía el 14-abr-2026: hoy es posterior
+        nota._ne_validar()
+        vencido = [a for a in nota.alertas if a['key'] == 'plazo_vencido']
+        self.assertEqual(len(vencido), 1)
+        self.assertEqual(vencido[0]['level'], 'warning')                # sin sanción automática: no bloquea
+        self.assertIn('conocimiento del error', vencido[0]['message'])
 
     def test_parametro_del_plazo_esta_versionado(self):
         valor = self.env['hr.rule.parameter']._get_parameter_from_code('l10n_co_ne_dias_plazo_transmision', date(2026, 4, 1))
