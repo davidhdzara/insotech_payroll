@@ -17,7 +17,8 @@ Referencia: Anexo Técnico V1.0, secciones 6.2.12 (Devengados) y 6.2.13
 (Deducciones).
 """
 
-from odoo import api, fields, models
+from odoo import _, api, fields, models
+from odoo.exceptions import ValidationError
 
 # ──────────────────────────────────────────────────────────────────────────
 # Constantes: conceptos de deducción según el XML DIAN
@@ -158,8 +159,8 @@ class HrSalaryRule(models.Model):
             ('tp_prestaciones', 'TP Prestaciones'),
         ],
         string='Tipo Pago UGPP',
-        help='Clasificación del tipo de pago según la guía UGPP Storm User V-20.1. '
-             'Los 13 tipos oficiales de la UGPP.',
+        help='Tipo de pago del concepto en el formato de pagos UGPP (Guía Storm User V-20.1, campo 19). El código '
+             'de cada tipo sale de la lista de la plantilla; los tipos 12 a 15 son de independientes y no se cargan.',
     )
     l10n_co_ugpp_non_salary_class = fields.Selection(
         selection=[
@@ -170,14 +171,17 @@ class HrSalaryRule(models.Model):
         ],
         string='Clasificación TP NO SALARIAL',
         help='Subclasificación obligatoria cuando Tipo Pago = TP NO Salarial. '
-             'Según guía UGPP Storm User V-20.1.',
+             'Según guía UGPP Storm User V-20.1. La cuenta contable del concepto sale de las cuentas de la regla '
+             '(pestaña Asiento Contable): no se digita aparte.',
     )
-    l10n_co_ugpp_accounts = fields.Char(
-        string='Cuentas UGPP (separadas por ;)',
-        help='Cuentas contables asociadas al concepto para el reporte '
-             'UGPP, separadas por punto y coma (;). Ejemplo: '
-             '"510506;510527;520506".',
-    )
+
+    @api.constrains('l10n_co_ugpp_payment_type', 'l10n_co_ugpp_non_salary_class')
+    def _check_ugpp_clasificacion_no_salarial(self):
+        for rule in self:
+            if rule.l10n_co_ugpp_payment_type == 'tp_no_salarial' and not rule.l10n_co_ugpp_non_salary_class:
+                raise ValidationError(_(
+                    'La regla "%(regla)s" es TP NO Salarial para la UGPP: indique su clasificación (mera liberalidad, '
+                    'pacto colectivo, contrato u otrosí).', regla=rule.display_name))
 
     # ──────────────────────────────────────────────────────────────────
     # Tercero del asiento contable (contacto al que se paga lo causado)

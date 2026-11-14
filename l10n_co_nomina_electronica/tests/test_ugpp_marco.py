@@ -3,6 +3,7 @@
 preámbulo, título, fila de códigos, encabezados en la fila 10 y datos desde la 11. Nivel de verificación: estructura
 leída de la plantilla; que Storm User acepte el libro generado solo se prueba con Storm real (piloto)."""
 from datetime import date
+from unittest.mock import patch
 
 from odoo.tests.common import TransactionCase, tagged
 
@@ -59,7 +60,9 @@ class TestUgppMarco(TransactionCase):
         self.assertIsNone(ws['A12'].value)
 
     def test_hoja_conceptos_lleva_el_marco_y_un_concepto_por_fila(self):
-        ws = self._hoja('_generate_sheet_conceptos')
+        # Las cuentas de las reglas se prueban en test_ugpp_conceptos: aquí solo el marco de la hoja.
+        with patch.object(type(self.reporte), '_ugpp_cuentas_regla', lambda _self, _regla: '510506'):
+            ws = self._hoja('_generate_sheet_conceptos')
         self._preambulo(ws, 7003, 'Formulario Nómina - Concepto Pago Aportante ')
         self.assertEqual(ws['B8'].value, '0 Formulario Nómina - Concepto Pago Aportante')
         self.assertEqual([c.value for c in ws[9] if c.value is not None], [4, 8, 12, 19, 20])

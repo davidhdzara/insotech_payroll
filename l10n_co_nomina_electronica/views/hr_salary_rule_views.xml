@@ -30,11 +30,8 @@
                             <field name="l10n_co_ugpp_payment_type"
                                    string="Tipo de Pago UGPP"/>
                             <field name="l10n_co_ugpp_non_salary_class"
-                                   string="Clase Pago No Salarial"/>
-                        </group>
-                        <group>
-                            <field name="l10n_co_ugpp_accounts"
-                                   string="Cuentas UGPP"/>
+                                   string="Clase Pago No Salarial"
+                                   required="l10n_co_ugpp_payment_type == 'tp_no_salarial'"/>
                         </group>
                     </group>
 

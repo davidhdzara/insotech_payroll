@@ -78,6 +78,34 @@ _UGPP_TIPO_APORTANTE = {
 # código UGPP. Los códigos CD y SC no tienen equivalente en el catálogo DIAN del módulo: no se mapean por conjetura.
 _UGPP_DOC_APORTANTE = {'31': 'NI', '13': 'CC', '22': 'CE', '12': 'TI', '41': 'PA', '47': 'PE'}
 
+# Tipo de pago (formulario 7003, columna 19) y clasificación de pagos no salariales (columna 20): texto EXACTO de las
+# listas de la plantilla ``Anexo_1.xlsx`` (número + nombre). Los tipos 12 a 15 (ingreso bruto, independiente, contratista,
+# contratista ARL) son de independientes y no se cargan.
+_UGPP_TIPO_PAGO = {
+    'tp_salarial': '1 TP SALARIAL',
+    'tp_no_salarial': '2 TP NO SALARIAL',
+    'tp_compensacion_ord': '3 TP COMPENSACIÓN ORDINARIA',
+    'tp_compensacion_ext': '4 TP COMPENSACIÓN EXTRAORDINARIA',
+    'tp_no_compensacion': '5 TP NO COMPENSACIÓN',
+    'tp_descanso_anual': '6 TP DESCANSO ANUAL',
+    'tp_incapacidad': '7 TP INCAPACIDAD',
+    'tp_vacaciones': '8 TP VACACIONES',
+    'tp_vacaciones_terminacion': '9 TP VACACIONES TERMINACION DE CONTRATO',
+    'tp_licencia_remunerada': '10 TP LICENCIA REMUNERADA',
+    'tp_estudiantes': '11 TP A ESTUDIANTES O APRENDICES',
+    'tp_licencia_mat_pat': '16 TP LICENCIA MAT O PAT',
+    'tp_prestaciones': '17 TP PRESTACIONES',
+}
+_UGPP_CLASE_NO_SALARIAL = {
+    'mera_liberalidad': '1 Mera liberalidad',
+    'pacto_colectivo': '2 Pacto colectivo',
+    'contrato': '3 Contrato',
+    'otrosi': '4 Otrosí',
+}
+# Guía §1.3: "No utilice caracteres especiales (¡!"#$%&) en ninguno de los campos".
+_UGPP_CARACTERES_PROHIBIDOS = dict.fromkeys(map(ord, '¡!"”“#$%&'), None)
+_UGPP_MAX_CUENTAS = 200      # largo máximo del campo "cuenta contable" en la plantilla
+
 
 # Mapeo de tipo de documento DIAN → código corto UGPP (columna del trabajador; U5 lo alinea con la lista de la Guía)
 _DOC_TYPE_UGPP_MAP = {
@@ -463,6 +491,58 @@ class L10nCoNominaUgpp(models.Model):
                 min(max_length + 2, 40)
             )
 
+    def _ugpp_cuentas_regla(self, rule):
+        """Códigos de las cuentas contables de la regla (débito y crédito, sin repetir) para la compañía del reporte,
+        separados por ';'. Misma fuente que el asiento de nómina: no hay un campo aparte."""
+        rule = rule.with_company(self.company_id)
+        codigos = []
+        for cuenta in (rule.account_debit, rule.account_credit):
+            codigo = cuenta.with_company(self.company_id).code
+            if codigo and codigo not in codigos:
+                codigos.append(codigo)
+        return ';'.join(codigos)
+
+    def _ugpp_filas_conceptos(self, salary_rules):
+        """Filas ``[concepto, nombre, cuentas, tipo de pago, clasificación]`` del formulario 7003. Todos los campos son
+        obligatorios para la UGPP: las reglas a las que les falte algo se listan juntas en un solo error (sin valores
+        por defecto)."""
+        self.ensure_one()
+        sin_cuenta, sin_clase, cuentas_largas = [], [], []
+        filas = []
+        for idx, rule in enumerate(salary_rules, 1):
+            cuentas = self._ugpp_cuentas_regla(rule)
+            if not cuentas:
+                sin_cuenta.append(rule.display_name)
+            elif len(cuentas) > _UGPP_MAX_CUENTAS:
+                cuentas_largas.append(rule.display_name)
+            clase = ''
+            if rule.l10n_co_ugpp_payment_type == 'tp_no_salarial':
+                clase = _UGPP_CLASE_NO_SALARIAL.get(rule.l10n_co_ugpp_non_salary_class, '')
+                if not clase:
+                    sin_clase.append(rule.display_name)
+            filas.append([
+                idx,
+                (rule.name or '').translate(_UGPP_CARACTERES_PROHIBIDOS),
+                cuentas,
+                _UGPP_TIPO_PAGO[rule.l10n_co_ugpp_payment_type],
+                clase,
+            ])
+        problemas = []
+        if sin_cuenta:
+            problemas.append(_('sin cuenta contable (débito o crédito) para la compañía "%(compania)s": %(reglas)s',
+                               compania=self.company_id.display_name, reglas=', '.join(sin_cuenta)))
+        if cuentas_largas:
+            problemas.append(_('con las cuentas contables más largas de %(max)s caracteres: %(reglas)s',
+                               max=_UGPP_MAX_CUENTAS, reglas=', '.join(cuentas_largas)))
+        if sin_clase:
+            problemas.append(_('TP NO Salarial sin clasificación: %s', ', '.join(sin_clase)))
+        if problemas:
+            raise UserError(_(
+                'No se puede generar la hoja de conceptos del reporte UGPP. Reglas salariales %s. Corríjalo en '
+                'Nómina > Configuración > Cuentas Contables por Regla y en la regla (Tipo de pago UGPP).',
+                '; '.join(problemas)))
+        return filas
+
     def _get_ugpp_salary_rules(self):
         """Retorna las reglas salariales con tipo de pago UGPP, ordenadas."""
         return self.env['hr.salary.rule'].search([
@@ -473,7 +553,7 @@ class L10nCoNominaUgpp(models.Model):
         self, ws, header_font, header_fill, header_alignment, thin_border
     ):
         """
-        Genera la hoja 'nomina-conceptos de pago' según UGPP V-20.1.
+        Genera la hoja de conceptos de pago (formulario 7003) según la Guía UGPP V-20.1.
 
         Columnas:
         1. Concepto (auto-numerado)
@@ -492,36 +572,9 @@ class L10nCoNominaUgpp(models.Model):
         fila_datos = self._ugpp_marco(
             ws, 'conceptos', headers, header_font, header_fill, header_alignment, thin_border)
 
-        # Buscar reglas salariales con tipo de pago UGPP configurado
         salary_rules = self._get_ugpp_salary_rules()
-
-        payment_type_map = dict(
-            self.env['hr.salary.rule']._fields[
-                'l10n_co_ugpp_payment_type'
-            ].selection
-        )
-        non_salary_map = dict(
-            self.env['hr.salary.rule']._fields[
-                'l10n_co_ugpp_non_salary_class'
-            ].selection
-        )
-
-        for idx, rule in enumerate(salary_rules, 1):
-            tp_label = payment_type_map.get(
-                rule.l10n_co_ugpp_payment_type, ''
-            )
-            ns_label = (
-                non_salary_map.get(rule.l10n_co_ugpp_non_salary_class, '')
-                if rule.l10n_co_ugpp_payment_type == 'tp_no_salarial'
-                else ''
-            )
-            row_data = [
-                idx,                                  # Concepto (auto-numbered)
-                rule.name or '',                      # Nombre concepto
-                rule.l10n_co_ugpp_accounts or '',     # Cuenta contable
-                tp_label,                             # Tipo pago
-                ns_label,                             # Clasificación TP NO SALARIAL
-            ]
+        filas = self._ugpp_filas_conceptos(salary_rules)
+        for idx, row_data in enumerate(filas, 1):
             self._ugpp_escribir_fila(ws, fila_datos + idx - 1, row_data, thin_border)
 
         # Ajustar anchos
