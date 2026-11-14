@@ -87,11 +87,11 @@ class TestUgppMarco(TransactionCase):
         self.assertEqual(ws['B8'].value, '0 Formulario Nómina')
         codigos = [c.value for c in ws[9] if c.value is not None]
         self.assertEqual(codigos[:3], [8, 12, 16])
-        self.assertEqual(codigos[31:34], [144, 184, 276])         # fin de las fijas, observaciones, concepto 1
+        self.assertEqual(codigos[31:37], [144, 148, 152, 156, 184, 276])   # fechas nuevas, observaciones, concepto 1
         self.assertEqual(len(set(codigos)), len(codigos))          # sin repetidos
         self.assertEqual(codigos, sorted(codigos))
         n_conceptos = len(self._reglas_de_prueba(self.reporte, self.env['hr.payslip']))
-        self.assertEqual(codigos[33:], [276 + 4 * i for i in range(n_conceptos)])
+        self.assertEqual(codigos[36:], [276 + 4 * i for i in range(n_conceptos)])
         self.assertEqual(ws['C10'].value, 'Tipo cotizante')
         self.assertFalse(ws['C11'].value)                          # sin recibos no hay filas de datos
 

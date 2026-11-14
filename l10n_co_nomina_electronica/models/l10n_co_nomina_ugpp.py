@@ -24,6 +24,7 @@ import logging
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
+from odoo.tools import float_round
 
 from ..services import dian_utils
 
@@ -55,11 +56,10 @@ _UGPP_HOJAS = {
                   '0 Formulario Nómina - Concepto Pago Aportante'),
     'nomina': ('Formulario Nómina', 7002, 'Formulario Nómina', '0 Formulario Nómina'),
 }
-# Código de columna (fila 9) de la hoja ``nomina`` para las 32 primeras columnas fijas; las 3 siguientes de la
-# plantilla (fechas de permiso, suspensión y huelga: 148/152/156) las agrega U5. Observaciones = 184; el concepto N
-# de la plantilla = 276 + 4 × (N - 1).
+# Código de columna (fila 9) de la hoja ``nomina`` para las 35 columnas fijas (las 3 últimas son las fechas de inicio de
+# permiso, suspensión y huelga). Observaciones = 184; el concepto N de la plantilla = 276 + 4 × (N - 1).
 _UGPP_COD_NOMINA = (8, 12, 16, 24, 28, 32, 36, 40, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108,
-                    112, 116, 120, 124, 128, 132, 136, 140, 144)
+                    112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156)
 _UGPP_COD_OBSERVACIONES = 184
 _UGPP_COD_CONCEPTO_1 = 276
 _UGPP_PRIMERA_FILA = 11
@@ -109,21 +109,21 @@ _UGPP_TIPOS_VACACIONES = ('tp_vacaciones', 'tp_vacaciones_terminacion')
 _UGPP_MAX_CUENTAS = 200      # largo máximo del campo "cuenta contable" en la plantilla
 
 
-# Mapeo de tipo de documento DIAN → código corto UGPP (columna del trabajador; U5 lo alinea con la lista de la Guía)
-_DOC_TYPE_UGPP_MAP = {
-    '13': 'CC',
-    '22': 'CE',
-    '12': 'TI',
-    '41': 'PA',
-    '11': 'RC',
-    '21': 'TE',
-    '31': 'NIT',
-    '42': 'DIE',
-    '47': 'PEP',
-    '48': 'PPT',
-    '50': 'NITP',
-    '91': 'NUIP',
-}
+# Tipo de documento del trabajador (Guía V-20.1 p. 14; formulario 7002, columna 36): código DIAN del tipo de identificación
+# de Contactos → código UGPP. Sin equivalente (registro civil, tarjeta de extranjería, DIE, PPT, NUIP, NIT) no se asume
+# otro: error que nombra al empleado (PPT y DIE están como pregunta abierta para la UGPP, doc 48).
+_UGPP_DOC_TRABAJADOR = {'13': 'CC', '22': 'CE', '12': 'TI', '41': 'PA', '47': 'PE'}
+# Tipo y subtipo de cotizante: tabla PILA del contrato → lista UGPP (Guía p. 19-21). El 21 de PILA (Estudiante, Ley 789
+# de 2002) es el 20 de la UGPP; el 21 de la UGPP es otro (estudiantes de postgrado en salud).
+_UGPP_TIPO_COTIZANTE = {'01': 1, '02': 2, '03': 3, '04': 4, '12': 12, '19': 19, '21': 20, '22': 22, '30': 30,
+                        '31': 31, '51': 51}
+_UGPP_SUBTIPO_COTIZANTE = {'00': 0, '01': 1, '02': 2}
+# Declaración voluntaria (no es un requisito de la Guía, que pide informar solo si se liquida sobre 365 días; David,
+# 2026-11-14). Va en "Observaciones aportante" (máx. 800 caracteres en la plantilla).
+_UGPP_NOTA_360 = ('Las prestaciones sociales (prima, cesantías e intereses) se liquidan sobre un año de 360 días, '
+                  'conforme a los artículos 249 y 306 del Código Sustantivo del Trabajo.')
+# Las columnas de concepto de la plantilla son 133 (CONCEPTO 1 a 133).
+_UGPP_MAX_CONCEPTOS = 133
 
 
 class L10nCoNominaUgpp(models.Model):
@@ -534,6 +534,70 @@ class L10nCoNominaUgpp(models.Model):
                 '; '.join(problemas)))
         return filas
 
+    def _ugpp_cotizante(self, employee, contract):
+        """``(tipo, subtipo)`` de cotizante de la lista UGPP, desde los campos PILA del contrato (la misma fuente que
+        la planilla PILA). Sin dato o sin equivalente: error que nombra al empleado (sin valores por defecto)."""
+        tipo = _UGPP_TIPO_COTIZANTE.get(contract.l10n_co_pila_tipo_cotizante)
+        subtipo = _UGPP_SUBTIPO_COTIZANTE.get(contract.l10n_co_pila_subtipo_cotizante)
+        if tipo is None or subtipo is None:
+            raise UserError(_(
+                'El contrato de %(empleado)s no tiene tipo y subtipo de cotizante con equivalente en la UGPP. '
+                'Complételos en el contrato (pestaña PILA).', empleado=employee.display_name))
+        return tipo, subtipo
+
+    def _ugpp_documento_trabajador(self, employee):
+        """``(tipo UGPP, número)`` del documento del trabajador, del tipo de identificación de su contacto."""
+        codigo = employee.work_contact_id.l10n_latam_identification_type_id.l10n_co_ne_dian_document_code or ''
+        tipo = _UGPP_DOC_TRABAJADOR.get(codigo)
+        numero = (employee.identification_id or '').strip()
+        if not tipo or not numero:
+            raise UserError(_(
+                'El documento de %(empleado)s no tiene equivalente en la lista de la UGPP (CC, CE, TI, PA o PE) o '
+                'falta el número.', empleado=employee.display_name))
+        if tipo in ('CC', 'CE') and not (numero.isdigit() and len(numero) <= 10):
+            raise UserError(_(
+                'El número de documento de %(empleado)s debe tener hasta 10 dígitos para %(tipo)s.',
+                empleado=employee.display_name, tipo=tipo))
+        return tipo, numero
+
+    def _ugpp_entero(self, valor, employee, rule):
+        """Valor de un concepto como entero ≥ 0 (el formato UGPP lo exige): redondeo al peso del mismo método que usa
+        Odoo para importes (mitad hacia arriba). Un valor negativo no es un pago y se rechaza nombrando al empleado y la
+        regla."""
+        if valor < 0:
+            raise UserError(_(
+                'El concepto "%(regla)s" de %(empleado)s suma un valor negativo (%(valor)s) en el periodo: el formato '
+                'UGPP solo admite enteros mayores o iguales a cero. Revise los recibos del mes.',
+                regla=rule.display_name, empleado=employee.display_name, valor=valor))
+        return int(float_round(valor, precision_digits=0))
+
+    def _ugpp_codigos_vacaciones(self):
+        return ('CO_VAC',)
+
+    def _ugpp_codigos_suspension(self):
+        """Mismos tipos de ausencia que ``hr.payslip._ne_dias_sln`` (SLN): los 'unpaid' y CO_LIC_NR."""
+        unpaid = self.env['hr.leave.type'].search([('unpaid', '=', True)])
+        codigos = set(unpaid.mapped('work_entry_type_id.code')) - {False}
+        codigos.add('CO_LIC_NR')
+        return tuple(sorted(codigos - {'CO_VAC', 'CO_LIC_REM'}))
+
+    def _ugpp_fechas_ausencia(self, employee, codigos, recortar=True):
+        """``(inicio, fin)`` como 'dd/mm/aaaa' de las ausencias validadas del empleado con esos tipos de entrada de
+        trabajo que tocan el mes del reporte; ('', '') si no hay. Permiso y suspensión van recortadas al mes (la
+        plantilla pide que "la fecha corresponda al mes que se está registrando"); las vacaciones llevan las fechas
+        reales de la ausencia (la plantilla no impone el mes)."""
+        hojas = self.env['hr.leave'].search([
+            ('employee_id', '=', employee.id), ('state', '=', 'validate'),
+            ('holiday_status_id.work_entry_type_id.code', 'in', list(codigos)),
+            ('request_date_from', '<=', self.date_to), ('request_date_to', '>=', self.date_from)])
+        if not hojas:
+            return '', ''
+        inicio = min(hojas.mapped('request_date_from'))
+        fin = max(hojas.mapped('request_date_to'))
+        if recortar:
+            inicio, fin = max(inicio, self.date_from), min(fin, self.date_to)
+        return inicio.strftime('%d/%m/%Y'), fin.strftime('%d/%m/%Y')
+
     def _ugpp_fecha_pago(self, slip):
         """Primera fecha de pago del recibo (la misma fuente del documento DIAN). Sin fecha no se supone ninguna: el
         error nombra el recibo y dice cómo corregirlo; solo afecta a los reportes que incluyen ese recibo."""
@@ -705,9 +769,8 @@ class L10nCoNominaUgpp(models.Model):
         Genera la hoja 'nomina' según la guía UGPP Storm User V-20.1.
 
         Estructura de columnas:
-        - 33 columnas fijas (datos del cotizante, novedades, días, fechas)
-        - N columnas dinámicas (una por regla salarial con tipo UGPP)
-        - 4 columnas IBC (Salud, Pensión, ARL, CCF)
+        - 36 columnas fijas (datos del cotizante, novedades, días, fechas, observaciones)
+        - N columnas dinámicas (una por regla salarial con tipo UGPP y valor en el periodo)
         """
         # ── Columnas fijas ───────────────────────────────────────────
         fixed_headers = [
@@ -743,21 +806,27 @@ class L10nCoNominaUgpp(models.Model):
             'Fecha retiro',                             # 30
             'Fecha inicio vacaciones',                  # 31
             'Fecha terminación vacaciones',             # 32
-            'Observaciones aportante',                  # 33
+            'Fecha inicio permiso o licencia remunerada',  # 33
+            'Fecha inicio suspensión o licencia no remunerada',  # 34
+            'Fecha inicio huelga',                      # 35
+            'Observaciones aportante',                  # 36
         ]
 
         # ── Columnas dinámicas (conceptos de pago) ───────────────────
         ugpp_rules = self._get_ugpp_salary_rules(payslips)
         concept_headers = [rule.name or rule.code or '' for rule in ugpp_rules]
 
-        # ── Columnas IBC ─────────────────────────────────────────────
-        ibc_headers = ['IBC Salud', 'IBC Pensión', 'IBC ARL', 'IBC CCF']
+        if len(concept_headers) > _UGPP_MAX_CONCEPTOS:
+            raise UserError(_(
+                'El formato UGPP admite %(max)s conceptos de pago y este periodo tiene %(n)s reglas con valor. '
+                'Agrupe conceptos (reglas con el mismo tipo de pago) antes de generar el reporte.',
+                max=_UGPP_MAX_CONCEPTOS, n=len(concept_headers)))
 
-        all_headers = fixed_headers + concept_headers + ibc_headers
-        # Códigos de columna de la plantilla; None = columna que el formato no tiene (las 4 de IBC: U5 las retira).
+        # El formato no tiene columnas de IBC (la UGPP las rechaza): el IBC vive en PILA.
+        all_headers = fixed_headers + concept_headers
+        # Códigos de columna de la plantilla (fila 9).
         codigos = (list(_UGPP_COD_NOMINA) + [_UGPP_COD_OBSERVACIONES]
-                   + [_UGPP_COD_CONCEPTO_1 + 4 * i for i in range(len(concept_headers))]
-                   + [None] * len(ibc_headers))
+                   + [_UGPP_COD_CONCEPTO_1 + 4 * i for i in range(len(concept_headers))])
         fila_datos = self._ugpp_marco(
             ws, 'nomina', list(zip(codigos, all_headers)), header_font, header_fill, header_alignment, thin_border)
 
@@ -785,11 +854,8 @@ class L10nCoNominaUgpp(models.Model):
                         'recibo confirmado trae las lineas de IBC. Recalcule y confirme '
                         'la nomina.',
                         empleado=employee.name, mes=self.date_from.strftime('%Y-%m')))
-                ibc_data = [consolidado.ibc_sp, consolidado.ibc_sp,
-                            consolidado.ibc_arl, consolidado.ibc_paraf]
                 dias = self._dias_ugpp(consolidado)
             else:
-                ibc_data = [0.0, 0.0, 0.0, 0.0]
                 dias = dict.fromkeys(
                     ('trabajados', 'incapacidad', 'lic_mat', 'lic_rem', 'suspension',
                      'vacaciones', 'huelga', 'total'), 0)
@@ -819,16 +885,11 @@ class L10nCoNominaUgpp(models.Model):
                 name_parts.get('otros_nombres', ''),
             ]))
 
-            # -- Tipo documento → código corto UGPP --------------------
-            # UX-02 (2026-10-11): el código DIAN ya no sale de un Selection propio --
-            # sale del tipo de identificación nativo de Contactos (work_contact_id),
-            # igual que HrPayslip._ne_tipo_documento() (sin el UserError de ahí: este
-            # reporte tolera un tipo vacío/sin equivalente, igual que antes).
-            dian_code = (
-                employee.work_contact_id.l10n_latam_identification_type_id
-                .l10n_co_ne_dian_document_code or ''
-            )
-            tipo_doc_ugpp = _DOC_TYPE_UGPP_MAP.get(dian_code, '')
+            # -- Tipo y número de documento (lista UGPP) -------------------
+            tipo_doc_ugpp, numero_doc = self._ugpp_documento_trabajador(employee)
+
+            # -- Tipo y subtipo de cotizante (tabla PILA del contrato → lista UGPP) --
+            tipo_cotizante, subtipo_cotizante = self._ugpp_cotizante(employee, contract)
 
             # -- Ingreso / Retiro en el período ------------------------
             es_ingreso = False
@@ -845,10 +906,15 @@ class L10nCoNominaUgpp(models.Model):
                     es_retiro = True
                     fecha_retiro = contract.date_end.strftime('%d/%m/%Y')
 
-            # -- Vacaciones: fechas (simplificado) ---------------------
-            fecha_ini_vac = ''
-            fecha_fin_vac = ''
-            # Futuro: extraer de hr.leave si se requiere detalle.
+            # -- Fechas de las novedades (desde Ausencias validadas) ---------
+            fecha_ini_vac, fecha_fin_vac = (
+                self._ugpp_fechas_ausencia(employee, self._ugpp_codigos_vacaciones(), recortar=False)
+                if dias_vacaciones else ('', ''))
+            fecha_ini_lic_rem = (
+                self._ugpp_fechas_ausencia(employee, ('CO_LIC_REM',))[0] if dias_lic_remunerada else '')
+            fecha_ini_suspension = (
+                self._ugpp_fechas_ausencia(employee, self._ugpp_codigos_suspension())[0] if dias_suspension else '')
+            fecha_ini_huelga = ''      # sin fuente en el módulo (huelga queda en 0 días)
 
             # -- Cargo del trabajador ----------------------------------
             cargo = (
@@ -868,14 +934,14 @@ class L10nCoNominaUgpp(models.Model):
             # Construir fila de datos fijos (33 columnas)
             # ═════════════════════════════════════════════════════════
             fixed_data = [
-                employee.l10n_co_ne_worker_type or '',              # 1
-                employee.l10n_co_ne_worker_subtype or '',           # 2
+                tipo_cotizante,                                     # 1
+                subtipo_cotizante,                                  # 2
                 '',                                                 # 3  Condición especial empresa
                 'X' if employee.l10n_co_ne_foreigner_no_pension else '',  # 4
                 'X' if employee.l10n_co_ne_colombian_abroad else '',      # 5
                 'X' if employee.l10n_co_ne_high_risk_pension else '',     # 6
                 tipo_doc_ugpp,                                      # 7
-                employee.identification_id or '',                   # 8
+                numero_doc,                                         # 8
                 nombre_cotizante,                                   # 9
                 cargo,                                              # 10
                 self.year,                                          # 11
@@ -900,20 +966,23 @@ class L10nCoNominaUgpp(models.Model):
                 fecha_retiro,                                       # 30
                 fecha_ini_vac,                                      # 31
                 fecha_fin_vac,                                      # 32
-                '',                                                 # 33 Observaciones
+                fecha_ini_lic_rem,                                  # 33
+                fecha_ini_suspension,                               # 34
+                fecha_ini_huelga,                                   # 35
+                _UGPP_NOTA_360,                                     # 36 Observaciones
             ]
 
             # ═════════════════════════════════════════════════════════
             # Columnas dinámicas: monto por regla salarial UGPP
             # ═════════════════════════════════════════════════════════
             concept_data = [
-                rule_totals.get(rule.id, 0.0) for rule in ugpp_rules
+                self._ugpp_entero(rule_totals.get(rule.id, 0.0), employee, rule) for rule in ugpp_rules
             ]
 
             # ═════════════════════════════════════════════════════════
             # Escribir fila completa
             # ═════════════════════════════════════════════════════════
-            row_data = fixed_data + concept_data + ibc_data
+            row_data = fixed_data + concept_data
 
             self._ugpp_escribir_fila(ws, row_num, row_data, thin_border)
 
@@ -930,7 +999,7 @@ class L10nCoNominaUgpp(models.Model):
 
         _logger.info(
             'Hoja "nomina" generada con %d filas (%d columnas: '
-            '%d fijas + %d conceptos + 4 IBC)',
+            '%d fijas + %d conceptos)',
             row_num - fila_datos,
             len(all_headers),
             len(fixed_headers),
