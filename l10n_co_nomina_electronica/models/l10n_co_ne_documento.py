@@ -779,7 +779,52 @@ class L10nCoNeDocumento(models.Model):
             alertas.append({'key': 'sin_seguridad_social', 'level': 'warning', 'message': _(
                 'El documento queda sin Salud o sin FondoPension (por ejemplo, un mes solo con prima): revíselo '
                 'antes de enviarlo.')})
+        diferencias = self._ne_conciliar_comprobantes()
+        if diferencias:
+            alertas.append({'key': 'conciliacion_comprobantes', 'level': 'warning', 'message': _(
+                'Los comprobantes de pago no cuadran con los totales del documento en: %s. Suele deberse a líneas del '
+                'recibo sin nodo en el XML de la DIAN; revíselas. El XML no se modifica.',
+                '; '.join(self._ne_texto_diferencia(d) for d in diferencias))})
         return alertas
+
+    # Conciliación comprobante de pago ↔ documento mensual (Frente 5, C4): el comprobante (desglose del recibo, lo que
+    # se le muestra al empleado) debe cuadrar con los valores del recibo que viajan al XML (devengados, deducciones y
+    # su diferencia). Solo ALERTA: no bloquea y no toca el XML.
+    _NE_UMBRAL_CONCILIACION = 1.0       # un peso: el XML lleva 2 decimales y las líneas pueden traer fracciones
+
+    def _ne_conciliar_comprobantes(self):
+        """Recibos del documento cuyo desglose del comprobante no cuadra con los totales que van al XML:
+        ``[{'recibo', 'dev', 'ded', 'neto', 'motivo'}]`` con la diferencia (comprobante - XML) de devengado,
+        deducciones y neto. Vacío si todo cuadra. Un recibo sin línea de neto se informa con su motivo (no falla).
+        Solo lee: no escribe ni cambia el XML."""
+        self.ensure_one()
+        diferencias = []
+        for recibo in self._ne_recibos_para_xml().sorted('date_to'):
+            datos = recibo._collect_payslip_data()
+            dev_xml = float(datos.get('devengados_total') or 0.0)
+            ded_xml = float(datos.get('deducciones_total') or 0.0)
+            try:
+                desglose = recibo._ne_desglose()
+            except UserError as error:
+                diferencias.append({'recibo': recibo, 'dev': 0.0, 'ded': 0.0, 'neto': 0.0, 'motivo': str(error)})
+                continue
+            dev = desglose['devengado'] - dev_xml
+            ded = desglose['deducciones'] - ded_xml
+            neto = desglose['neto'] - (dev_xml - ded_xml)
+            if max(abs(dev), abs(ded), abs(neto)) >= self._NE_UMBRAL_CONCILIACION:
+                diferencias.append({'recibo': recibo, 'dev': dev, 'ded': ded, 'neto': neto, 'motivo': False})
+        return diferencias
+
+    @api.model
+    def _ne_texto_diferencia(self, diferencia):
+        """Texto de una diferencia de conciliación (nombra el recibo y los importes)."""
+        recibo = diferencia['recibo']
+        if diferencia['motivo']:
+            return '%s (%s)' % (recibo.display_name, diferencia['motivo'])
+        moneda = recibo.company_id.currency_id
+        return _('%(recibo)s (devengado %(dev)s, deducciones %(ded)s, neto %(neto)s)', recibo=recibo.display_name,
+                 dev=moneda.format(diferencia['dev']), ded=moneda.format(diferencia['ded']),
+                 neto=moneda.format(diferencia['neto']))
 
     # ──────────────────────────────────────────────────────────────────
     # Generar y firmar (etapa 3b): consecutivo, CUNE, firma y adjunto

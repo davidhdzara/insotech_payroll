@@ -119,14 +119,16 @@ class TestDocumentoXml(DocumentoFixture, TransactionCase):
             datos['deducciones_total'] = 0.00
             return datos
         with patch.object(type(self.env['hr.payslip']), '_collect_payslip_data', lambda s: solo_prima()), \
-                patch.object(dian_utils, 'compute_software_security_code', lambda *a: 'SC'):
+                patch.object(dian_utils, 'compute_software_security_code', lambda *a: 'SC'), \
+                patch.object(type(doc), '_ne_conciliar_comprobantes', lambda s: []):    # la conciliación va aparte (C4)
             alertas = doc._ne_validar_xml()
         self.assertEqual([(a['key'], a['level']) for a in alertas], [('sin_seguridad_social', 'warning')])
 
     def test_sin_alertas_con_salud_y_pension(self):
         doc = self._documento(date(2024, 3, 1))
         with patch.object(type(self.env['hr.payslip']), '_collect_payslip_data', lambda s: _datos_recibo()), \
-                patch.object(dian_utils, 'compute_software_security_code', lambda *a: 'SC'):
+                patch.object(dian_utils, 'compute_software_security_code', lambda *a: 'SC'), \
+                patch.object(type(doc), '_ne_conciliar_comprobantes', lambda s: []):    # la conciliación va aparte (C4)
             self.assertEqual(doc._ne_validar_xml(), [])
 
     def test_error_de_fusion_es_bloqueo(self):
