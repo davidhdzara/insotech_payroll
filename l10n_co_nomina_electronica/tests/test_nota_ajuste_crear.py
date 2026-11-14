@@ -105,11 +105,100 @@ class TestNotaAjusteCrear(DocumentoFixture, TransactionCase):
         with self.assertRaisesRegex(UserError, 'en curso'):
             self.padre.action_crear_ajuste('1')
 
-    def test_eliminar_con_notas_aceptadas_da_error(self):
-        nota = self.padre.action_crear_ajuste('1')
-        self._aceptar(nota, 'd' * 96, datetime(2026, 4, 10))
-        with self.assertRaisesRegex(UserError, 'aceptadas'):
-            self.padre.action_crear_ajuste('2')
+    # ── Eliminar la última nota aceptada (David, 2026-11-14; doc 53 §28.3) ──
+    def _cadena_con_dos_notas_aceptadas(self):
+        n1 = self.padre.action_crear_ajuste('1')
+        self._aceptar(n1, 'e' * 96, datetime(2026, 4, 10))
+        n2 = self.padre.action_crear_ajuste('1')
+        self._aceptar(n2, 'f' * 96, datetime(2026, 4, 20))
+        return n1, n2
+
+    def _aceptar_eliminacion(self, nota, cune, fecha):
+        self._aceptar(nota, cune, fecha)
+        nota._ne_aplicar_eliminacion()
+
+    def test_eliminar_la_ultima_nota_aceptada_se_permite_y_apunta_a_ella(self):
+        _n1, n2 = self._cadena_con_dos_notas_aceptadas()
+        eliminar = self.padre.action_crear_ajuste('2')
+        self.assertEqual(eliminar.parent_id, n2)
+        self.assertEqual(eliminar.adjustment_ref_cune, n2.cune)
+        self.assertFalse(eliminar.payslip_ids)
+
+    def test_al_aceptarse_la_eliminacion_vuelve_a_ser_vigente_la_anterior(self):
+        n1, n2 = self._cadena_con_dos_notas_aceptadas()
+        eliminar = self.padre.action_crear_ajuste('2')
+        self.assertEqual(self.padre._ne_ultimo_aceptado(), n2)           # aún vigente mientras no se acepte
+        self._aceptar_eliminacion(eliminar, 'a1' * 48, datetime(2026, 4, 25))
+        self.assertTrue(n2.eliminado)
+        self.assertEqual(n2.eliminado_por_id, eliminar)
+        self.assertFalse(n1.eliminado or self.padre.eliminado)            # el resto de la cadena intacto
+        self.assertEqual(self.padre._ne_ultimo_aceptado(), n1)           # vuelve a ser vigente la nota previa
+        self.assertEqual(n2.cune, 'f' * 96)                               # el CUNE de la eliminada no se reutiliza
+
+    def test_la_siguiente_reemplazar_cuelga_de_la_nota_previa_no_de_la_eliminada(self):
+        n1, n2 = self._cadena_con_dos_notas_aceptadas()
+        eliminar = self.padre.action_crear_ajuste('2')
+        self._aceptar_eliminacion(eliminar, 'a1' * 48, datetime(2026, 4, 25))
+        nueva = self.padre.action_crear_ajuste('1')
+        self.assertEqual(nueva.parent_id, n1)
+        self.assertEqual(nueva.adjustment_ref_cune, n1.cune)
+        self.assertNotEqual(nueva.adjustment_ref_cune, n2.cune)
+
+    def test_la_eliminacion_vuelve_al_original_si_no_hay_nota_previa(self):
+        n1 = self.padre.action_crear_ajuste('1')
+        self._aceptar(n1, 'e' * 96, datetime(2026, 4, 10))
+        eliminar = self.padre.action_crear_ajuste('2')
+        self._aceptar_eliminacion(eliminar, 'a1' * 48, datetime(2026, 4, 25))
+        self.assertEqual(self.padre._ne_ultimo_aceptado(), self.padre)
+        self.assertEqual(self.padre.action_crear_ajuste('1').parent_id, self.padre)
+
+    def test_d_s_la_nueva_reemplazar_adopta_los_recibos_de_la_nota_eliminada(self):
+        n1 = self.padre.action_crear_ajuste('1')
+        self._aceptar(n1, 'e' * 96, datetime(2026, 4, 10))
+        tardio = self._recibo_nuevo(self.padre)
+        n2 = self.padre.action_crear_ajuste('1')
+        self.assertEqual(n2.payslip_ids, tardio)                          # N2 lo adoptó
+        self._aceptar(n2, 'f' * 96, datetime(2026, 4, 20))
+        eliminar = self.padre.action_crear_ajuste('2')
+        self._aceptar_eliminacion(eliminar, 'a1' * 48, datetime(2026, 4, 25))
+        nueva = self.padre.action_crear_ajuste('1')
+        self.assertEqual(nueva.payslip_ids, tardio)                       # pasa a la nueva: no queda sin reportar
+        self.assertIn(tardio, nueva.recibo_xml_ids)
+        self.assertNotIn(tardio, n2.payslip_ids)
+
+    def test_d_s_preparar_con_nota_abierta_tambien_adopta_los_de_la_eliminada(self):
+        n1 = self.padre.action_crear_ajuste('1')
+        self._aceptar(n1, 'e' * 96, datetime(2026, 4, 10))
+        tardio = self._recibo_nuevo(self.padre)
+        n2 = self.padre.action_crear_ajuste('1')
+        self._aceptar(n2, 'f' * 96, datetime(2026, 4, 20))
+        eliminar = self.padre.action_crear_ajuste('2')
+        self._aceptar_eliminacion(eliminar, 'a1' * 48, datetime(2026, 4, 25))
+        nueva = self.padre.action_crear_ajuste('1')
+        tardio.write({'l10n_co_ne_documento_id': n2.id})                  # sigue ligado a la nota ELIMINADA
+        self.env['l10n.co.ne.documento']._ne_preparar(tardio)
+        self.assertEqual(tardio.l10n_co_ne_documento_id, nueva)
+
+    def test_se_puede_eliminar_nota_por_nota_hasta_el_original(self):
+        n1, n2 = self._cadena_con_dos_notas_aceptadas()
+        for cune, fecha, objetivo in (('a1' * 48, datetime(2026, 4, 25), n2), ('a2' * 48, datetime(2026, 4, 26), n1)):
+            eliminar = self.padre.action_crear_ajuste('2')
+            self.assertEqual(eliminar.parent_id, objetivo)
+            self._aceptar_eliminacion(eliminar, cune, fecha)
+            self.assertTrue(objetivo.eliminado)
+        ultima = self.padre.action_crear_ajuste('2')
+        self.assertEqual(ultima.parent_id, self.padre)
+        self._aceptar_eliminacion(ultima, 'a3' * 48, datetime(2026, 4, 27))
+        self.assertTrue(self.padre.eliminado)
+        with self.assertRaisesRegex(UserError, 'eliminado'):
+            self.padre.action_crear_ajuste('1')
+
+    def test_no_se_crea_otra_nota_mientras_la_eliminacion_esta_en_curso(self):
+        self._cadena_con_dos_notas_aceptadas()
+        self.padre.action_crear_ajuste('2')
+        for tipo in ('1', '2'):
+            with self.assertRaisesRegex(UserError, 'en curso'):
+                self.padre.action_crear_ajuste(tipo)
 
     # ── Cadena y padre ───────────────────────────────────────────────
     def test_reemplazar_sobre_el_original(self):

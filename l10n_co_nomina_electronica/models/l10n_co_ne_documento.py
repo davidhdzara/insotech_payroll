@@ -326,8 +326,7 @@ class L10nCoNeDocumento(models.Model):
                 nota = doc._ne_nota_abierta()
                 if nota:
                     mes = self._ne_recibos_del_mes(company, employee, period)
-                    nota._ne_componer_adoptados(mes.filtered(
-                        lambda s: not s.l10n_co_ne_documento_id or s.l10n_co_ne_documento_id == nota))
+                    nota._ne_componer_adoptados(doc._ne_adoptables(mes, nota))
                     nota._ne_validar()
                     resultado['documentos'] |= nota
             doc._ne_validar()
@@ -456,10 +455,9 @@ class L10nCoNeDocumento(models.Model):
         if self.state != 'invoice_accepted':
             raise UserError(_('Solo se crean notas de ajuste para documentos aceptados por la DIAN; "%s" no lo está.',
                               self.display_name))
-        cadena = self._ne_cadena()
-        if tipo == '2' and cadena.filtered(lambda d: d.is_adjustment and d.state == 'invoice_accepted'):
-            raise UserError(_('El documento "%s" ya tiene notas de ajuste aceptadas: por ahora no se crea una nota '
-                              'Eliminar sobre ellas (pendiente de definición normativa).', self.display_name))
+        # Eliminar la última nota aceptada SÍ se permite (David, 2026-11-14): la nota Eliminar toma como padre el
+        # último aceptado de la cadena (``_ne_ultimo_aceptado``); al aceptarse, ese queda eliminado y vuelve a ser
+        # vigente el anterior (nota previa u original).
         en_curso = self._ne_nota_en_curso()
         if en_curso:
             raise UserError(_('Ya hay una nota de ajuste en curso para este documento: "%s". Termínela antes de crear '
@@ -470,10 +468,18 @@ class L10nCoNeDocumento(models.Model):
             'contract_id': self.contract_id.id, 'is_adjustment': True, 'adjustment_type': tipo,
             'parent_id': padre.id, 'adjustment_ref_cune': padre.cune, 'error_conocido_el': fecha, 'etapa': 'draft'})
         if tipo == '1':
-            nota._ne_componer_adoptados(
-                self._ne_recibos_del_mes(self.company_id, self.employee_id, self.period).filtered(
-                    lambda s: not s.l10n_co_ne_documento_id))
+            nota._ne_componer_adoptados(self._ne_adoptables(
+                self._ne_recibos_del_mes(self.company_id, self.employee_id, self.period)))
         return nota
+
+    def _ne_adoptables(self, recibos, nota=None):
+        """De ``recibos`` (los pagados del mes), los que una nota de esta cadena puede adoptar: los que no están en
+        ningún documento, los que ya son de ``nota`` y (D-S, doc 53 §28.3) los de las notas ELIMINADAS de la cadena:
+        al eliminar una nota sus recibos quedan sin reportar y la siguiente Reemplazar debe llevarlos."""
+        self.ensure_one()
+        eliminadas = self._ne_cadena().filtered(lambda d: d.is_adjustment and d.eliminado)
+        return recibos.filtered(lambda s: not s.l10n_co_ne_documento_id or s.l10n_co_ne_documento_id in eliminadas
+                                or (nota and s.l10n_co_ne_documento_id == nota))
 
     def _ne_abrir_nota(self, tipo):
         nota = self.action_crear_ajuste(tipo)
