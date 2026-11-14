@@ -149,6 +149,21 @@ class TestDocumentoPreparar(TransactionCase):
         self.assertTrue(alerta['confirmable'])
         self.assertEqual(doc.etapa, 'ready')   # una advertencia no bloquea
 
+    def test_un_recibo_pagado_en_otro_mes_no_dispara_faltan_recibos(self):
+        # H-F3-1 (doc 58 §12): periodo de marzo pagado en abril (pagos los 5 y 20, mensual pagado el mes siguiente...):
+        # pertenece al documento de abril y no "falta" en el de marzo.
+        a1, a2, _b1 = self._marzo()
+        a2.paid_date = date(2026, 4, 5)
+        doc = self._preparar(a1)['documentos']
+        self.assertNotIn('faltan_recibos', self._claves(doc))
+        self.assertNotIn(a2, doc.payslip_ids)
+
+    def test_un_recibo_sin_fecha_de_pago_sigue_disparando_faltan_recibos(self):
+        a1, a2, _b1 = self._marzo()
+        a2.write({'state': 'done', 'paid_date': False})
+        doc = self._preparar(a1)['documentos']
+        self.assertIn('faltan_recibos', self._claves(doc))
+
     def test_alerta_mes_en_curso_y_liquidacion(self):
         hoy = fields.Date.context_today(self.env.user)
         inicio = hoy.replace(day=1)

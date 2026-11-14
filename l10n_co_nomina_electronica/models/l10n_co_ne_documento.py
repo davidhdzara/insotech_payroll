@@ -287,14 +287,28 @@ class L10nCoNeDocumento(models.Model):
 
     @api.model
     def _ne_recibos_que_faltan(self, company, employee, period, entran):
-        """Recibos del mes (no cancelados, no notas de crédito) que NO entraron al documento: sin pagar, sin fecha de
-        pago o pagados en otro mes. Excluye notas de ajuste por recibo, legacy y habilitación (no faltan: no aplican)."""
+        """Recibos del mes (no cancelados, no notas de crédito) que NO entraron al documento: **sin pagar o sin fecha de
+        pago**. Un recibo con fecha de pago en OTRO mes no falta: pertenece al documento de ese mes (con pagos los 5 y 20,
+        mensual pagado el mes siguiente o semanal que cruza el mes, el periodo y el pago caen en meses distintos y eso es
+        lo normal, doc 58 §12 H-F3-1). Excluye notas de ajuste por recibo, legacy y habilitación (no faltan: no
+        aplican)."""
         fin = (period.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
         faltan = self.env['hr.payslip'].search([
             ('company_id', '=', company.id), ('employee_id', '=', employee.id),
             ('credit_note', '=', False), ('state', '!=', 'cancel'), ('l10n_co_ne_is_adjustment', '=', False),
             ('date_to', '>=', period), ('date_to', '<=', fin), ('id', 'not in', entran.ids)])
-        return faltan.filtered(lambda s: not self._ne_motivo_no_entra(s))
+        return faltan.filtered(lambda s: not self._ne_motivo_no_entra(s) and not self._ne_tiene_fecha_pago(s))
+
+    @api.model
+    def _ne_tiene_fecha_pago(self, slip):
+        """True si el recibo está hecho o pagado y su fecha de pago se puede resolver (``_ne_fechas_pago``); sin fecha, o
+        sin la fuente de la fecha configurada, es False (se trata como "sin fecha de pago")."""
+        if slip.state not in ('done', 'paid'):
+            return False
+        try:
+            return bool(slip._ne_fechas_pago())
+        except UserError:
+            return False
 
     @api.model
     def _ne_preparar(self, recibos):
@@ -743,7 +757,8 @@ class L10nCoNeDocumento(models.Model):
 
     def _ne_validar_xml(self):
         """Alertas que dependen del XML (se llaman desde ``_ne_validar``): la fusión debe ser posible y, D4, un
-        documento sin Salud ni FondoPension solo avisa (la prima va siempre con la quincena; sin bloqueo)."""
+        documento sin Salud ni FondoPension solo avisa (p. ej. un mes con un solo pago de prima, que no lleva salud ni
+        pensión; sin bloqueo)."""
         self.ensure_one()
         alertas = []
         if not self._ne_recibos_para_xml():
