@@ -24,9 +24,11 @@ class TestUgppInfoNomina(TransactionCase):
         base = {'category_id': cls.env['hr.salary.rule.category'].search([], limit=1).id,
                 'struct_id': cls.estructura.id, 'amount_select': 'fix', 'amount_fix': 0.0}
         Regla = cls.env['hr.salary.rule']
-        cls.salario = Regla.create({**base, 'name': 'Salario 237', 'code': 'I237_SAL',
+        # El número de concepto sigue el orden (sequence, code) de las reglas del reporte: se fija ``sequence`` para
+        # que Salario sea el concepto 1 y Prima el 2 (sin ``sequence`` empataba y desempataba el código: Prima < Salario).
+        cls.salario = Regla.create({**base, 'name': 'Salario 237', 'code': 'I237_SAL', 'sequence': 10,
                                     'l10n_co_ugpp_payment_type': 'tp_salarial'})
-        cls.prima = Regla.create({**base, 'name': 'Prima 237', 'code': 'I237_PRI',
+        cls.prima = Regla.create({**base, 'name': 'Prima 237', 'code': 'I237_PRI', 'sequence': 20,
                                   'l10n_co_ugpp_payment_type': 'tp_prestaciones'})
         cls.salario.with_company(cls.company).write({'account_debit': cls.gasto.id, 'account_credit': cls.por_pagar.id})
         cls.prima.with_company(cls.company).write({'account_credit': cls.por_pagar.id})      # solo crédito
