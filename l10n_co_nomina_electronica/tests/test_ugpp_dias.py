@@ -147,13 +147,15 @@ class TestUgppDias(TransactionCase):
         self.assertEqual(len(fila), 2 + 36 + len(reglas))             # A, B, 36 fijas y conceptos: sin IBC
 
     def test_tipo_de_cotizante_pila_21_es_20_en_la_ugpp_y_sin_equivalente_es_error_con_nombre(self):
-        employee, contract = self._empleado()
+        # Contratos virtuales (``new``): un contrato abierto no admite quedarse sin tipo de cotizante (validación nativa).
+        employee, _contract = self._empleado()
         reporte = self.Ugpp.new({})
-        contract.l10n_co_pila_tipo_cotizante = '21'
-        self.assertEqual(reporte._ugpp_cotizante(employee, contract), (20, 0))
-        contract.l10n_co_pila_tipo_cotizante = False
+        contrato = self.env['hr.contract'].new({
+            'l10n_co_pila_tipo_cotizante': '21', 'l10n_co_pila_subtipo_cotizante': '00'})
+        self.assertEqual(reporte._ugpp_cotizante(employee, contrato), (20, 0))
+        sin_tipo = self.env['hr.contract'].new({'l10n_co_pila_subtipo_cotizante': '00'})
         with self.assertRaisesRegex(UserError, 'Ana Gómez'):
-            reporte._ugpp_cotizante(employee, contract)
+            reporte._ugpp_cotizante(employee, sin_tipo)
 
     def test_documento_del_trabajador_sin_equivalente_o_con_numero_invalido_es_error(self):
         employee, _contract = self._empleado()
