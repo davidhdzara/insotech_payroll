@@ -141,9 +141,9 @@ class TestUgppDias(TransactionCase):
         self.assertEqual(fila[2:4], [1, 0])                           # PILA 01/00 -> UGPP 1/0 (columna C en adelante)
         self.assertEqual(fila[8:10], ['CC', '1020304050'])
         self.assertEqual(fila[2 + 35], ugpp._UGPP_NOTA_360)           # observaciones
-        reglas = self.Ugpp.create({
-            'year': 2026, 'month': '9', 'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30),
-            'company_id': self.company.id})._get_ugpp_salary_rules(slip)
+        # ``_filas`` ya creó el reporte de septiembre de la compañía (único por compañía y mes): se reutiliza.
+        reporte = self.Ugpp.search([('company_id', '=', self.company.id), ('year', '=', 2026), ('month', '=', '9')])
+        reglas = reporte._get_ugpp_salary_rules(slip)
         self.assertEqual(len(fila), 2 + 36 + len(reglas))             # A, B, 36 fijas y conceptos: sin IBC
 
     def test_tipo_de_cotizante_pila_21_es_20_en_la_ugpp_y_sin_equivalente_es_error_con_nombre(self):
