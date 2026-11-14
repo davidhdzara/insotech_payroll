@@ -191,6 +191,8 @@ class L10nCoNominaUgpp(models.Model):
     soportes_file = fields.Binary(string='Soportes por trabajador (ZIP)', attachment=True)
     soportes_filename = fields.Char(string='Nombre del ZIP de soportes')
     soportes_resumen = fields.Text(string='Soportes: qué hay y qué falta', readonly=True)
+    info_nomina_file = fields.Binary(string='Información del módulo de nómina (2.3.7)', attachment=True)
+    info_nomina_filename = fields.Char(string='Nombre del archivo 2.3.7')
     requerimiento_radicado = fields.Char(
         string='Radicado del requerimiento',
         help='Número de radicado del requerimiento de información de la UGPP que se responde. Solo para el oficio de '
@@ -633,6 +635,87 @@ class L10nCoNominaUgpp(models.Model):
         return {
             'type': 'ir.actions.act_url',
             'url': '/web/content/%s/%s/soportes_file/%s?download=true' % (self._name, self.id, nombre),
+            'target': 'new',
+        }
+
+    def _ugpp_filas_info_nomina(self, payslips):
+        """Filas de la "Información módulo de nómina" (Res. 858 de 2021, art. 2.3.7, p. 4): cuenta contable asociada al
+        concepto, nombre de la cuenta, código y nombre del concepto, documento y nombre del trabajador, año, mes y
+        valor. Una fila por empleado y concepto con valor, del mismo agrupador de la hoja nómina (``_ugpp_valores``):
+        mismo mes, mismas vacaciones por fecha de pago y mismo CONCEPTO N. La cuenta es la de DÉBITO de la regla (la
+        norma no distingue cuenta de gasto o de pasivo: validar con Contabilidad/UGPP en el piloto); la de crédito solo
+        si la regla no tiene débito. Sin cuenta: error que lista las reglas con valor."""
+        self.ensure_one()
+        reglas = self._get_ugpp_salary_rules(payslips)
+        cuentas = {}
+        sin_cuenta = []
+        for regla in reglas:
+            regla_cia = regla.with_company(self.company_id)
+            cuenta = regla_cia.account_debit or regla_cia.account_credit
+            if cuenta:
+                cuentas[regla.id] = cuenta.with_company(self.company_id)
+            else:
+                sin_cuenta.append(regla.display_name)
+        if sin_cuenta:
+            raise UserError(_(
+                'No se puede generar la información del módulo de nómina: reglas salariales con valor en el periodo '
+                'sin cuenta contable (débito o crédito) para la compañía "%(compania)s": %(reglas)s. Corríjalo en '
+                'Nómina > Configuración > Cuentas Contables por Regla.',
+                compania=self.company_id.display_name, reglas=', '.join(sin_cuenta)))
+        valores = self._ugpp_valores(payslips)
+        filas = []
+        for empleado in payslips.employee_id.sorted('name'):
+            por_regla = valores.get(empleado.id, {})
+            documento = (empleado.identification_id or '').strip()
+            for numero, regla in enumerate(reglas, 1):
+                valor = por_regla.get(regla.id, 0.0)
+                if not valor:
+                    continue
+                cuenta = cuentas[regla.id]
+                filas.append([
+                    int(cuenta.code) if (cuenta.code or '').isdigit() else cuenta.code,
+                    cuenta.name,
+                    numero,
+                    (regla.name or '').translate(_UGPP_CARACTERES_PROHIBIDOS),
+                    int(documento) if documento.isdigit() else documento,
+                    empleado.name,
+                    self.year,
+                    int(self.month),
+                    self._ugpp_entero(valor, empleado, regla),
+                ])
+        return filas
+
+    def action_generar_info_nomina(self):
+        """Excel de una hoja con la información del módulo de nómina (art. 2.3.7), para los aportantes que no llevan en la
+        contabilidad el detalle de los pagos por trabajador."""
+        self.ensure_one()
+        if not openpyxl:
+            raise UserError(_('La librería openpyxl no está instalada. Ejecute: pip install openpyxl'))
+        payslips = self._ugpp_recibos()
+        if not payslips:
+            raise UserError(_(
+                'No se encontraron nóminas confirmadas para el período %s - %s en la empresa %s.',
+                self.date_from, self.date_to, self.company_id.name))
+        filas = self._ugpp_filas_info_nomina(payslips)
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Informacion modulo de nomina'
+        encabezados = ['Cuenta contable', 'Nombre de cuenta contable', 'Código del concepto de pago',
+                       'Nombre del concepto de pago', 'Número de documento del trabajador',
+                       'Nombre del trabajador', 'Año', 'Mes', 'Valor']
+        ws.append(encabezados)
+        for celda in ws[1]:
+            celda.font = Font(bold=True)
+        for fila in filas:
+            ws.append(fila)
+        salida = io.BytesIO()
+        wb.save(salida)
+        nombre = 'Informacion_modulo_nomina_%s_%s_%s.xlsx' % (
+            dian_utils.clean_nit(self.company_id.vat) or 'NIT', self.month, self.year)
+        self.write({'info_nomina_file': base64.b64encode(salida.getvalue()), 'info_nomina_filename': nombre})
+        return {
+            'type': 'ir.actions.act_url',
+            'url': '/web/content/%s/%s/info_nomina_file/%s?download=true' % (self._name, self.id, nombre),
             'target': 'new',
         }
 
