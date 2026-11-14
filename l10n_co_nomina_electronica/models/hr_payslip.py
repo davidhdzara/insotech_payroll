@@ -1151,6 +1151,53 @@ class HrPayslip(models.Model):
         except UserError:
             return False
 
+    def _ne_grupo_de_pago(self):
+        """Todos los recibos del MISMO pago que este: misma compañía, mismo empleado y misma primera fecha de pago
+        (Frente 5, C2). No supone calendarios ni origen: quincena, prima, bonificación y liquidación pagadas el mismo
+        día van juntas; pagadas otro día, aparte. Excluye notas de crédito y notas de ajuste por recibo (no son
+        pagos). Un recibo sin fecha de pago no pertenece a ningún grupo."""
+        self.ensure_one()
+        fecha = self._ne_fecha_pago_o_falso()
+        if not fecha:
+            return self.browse()
+        dominio = [('company_id', '=', self.company_id.id), ('employee_id', '=', self.employee_id.id),
+                   ('state', 'in', ('done', 'paid')), ('credit_note', '=', False),
+                   ('l10n_co_ne_is_adjustment', '=', False)]
+        if self.company_id.l10n_co_ne_fuente_fecha_pago == 'recibo':
+            candidatos = self.search(dominio + [('paid_date', '=', fecha)])
+        else:
+            candidatos = self.search(dominio)
+        return candidatos.filtered(lambda s: s._ne_fecha_pago_o_falso() == fecha).sorted(
+            lambda s: (s.date_to, s.id))
+
+    @api.model
+    def _ne_comprobantes(self, recibos):
+        """Agrupa ``recibos`` en comprobantes de pago por (compañía, empleado, primera fecha de pago): cada grupo trae
+        TODOS los recibos de ese pago, no solo los seleccionados (imprimir desde cualquiera trae el grupo completo).
+        Devuelve ``{'grupos': [{'empleado', 'fecha_pago', 'recibos'}], 'sin_fecha': [(recibo, motivo)]}``: los recibos
+        sin confirmar o sin fecha de pago no tienen comprobante agrupado (no se inventa una fecha; su colilla
+        individual sí se imprime)."""
+        resultado = {'grupos': [], 'sin_fecha': []}
+        vistos = set()
+        for recibo in recibos.sorted(lambda s: (s.company_id.id, s.employee_id.name or '', s.date_to, s.id)):
+            if recibo.state not in ('done', 'paid'):
+                resultado['sin_fecha'].append((recibo, _('El recibo "%s" no está confirmado (hecho o pagado).',
+                                                         recibo.display_name)))
+                continue
+            fecha = recibo._ne_fecha_pago_o_falso()
+            if not fecha:
+                resultado['sin_fecha'].append((recibo, _(
+                    'El recibo "%(recibo)s" (%(empleado)s) no tiene fecha de pago: registre la fecha de pago o '
+                    'imprima su colilla individual.', recibo=recibo.display_name, empleado=recibo.employee_id.name)))
+                continue
+            clave = (recibo.company_id.id, recibo.employee_id.id, fecha)
+            if clave in vistos:
+                continue
+            vistos.add(clave)
+            resultado['grupos'].append({
+                'empleado': recibo.employee_id, 'fecha_pago': fecha, 'recibos': recibo._ne_grupo_de_pago()})
+        return resultado
+
     def _ne_desglose(self):
         """Desglose del recibo (Frente 5, C1): ``{recibo, origen, paid_date, devengado, deducciones, salud, pension, fsp,
         retencion, otras_deducciones, neto, diferencia}``. Todo sale de las líneas YA calculadas que imprime la colilla
