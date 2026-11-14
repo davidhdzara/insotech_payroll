@@ -103,8 +103,10 @@ class TestHistoriaHabilitacion(DocumentoFixture, TransactionCase):
         self.b.write({'l10n_co_ne_documento_id': False, 'l10n_co_ne_is_adjustment': True,
                       'l10n_co_ne_adjustment_ref_cune': 'a' * 96})
         prueba = self._nuevo('done', False)
-        prueba.l10n_co_ne_hab_set_id = 'SET1'
+        prueba.write({'l10n_co_ne_hab_set_id': 'SET1', 'name': 'Recibo de prueba de habilitacion'})
         pendiente = self._nuevo('done', False)
+        pendiente.name = 'Recibo pendiente real'     # nombres DISTINTOS: el assertNotIn compara por nombre
+        self.assertNotEqual(prueba.display_name, pendiente.display_name)
         faltan = self.Doc._ne_recibos_que_faltan(self.company, self.empleado, date(2026, 3, 1), self.a)
         self.assertEqual(faltan, pendiente)                # la nota y la de pruebas no faltan; la pendiente sí
         self.doc._ne_validar()
