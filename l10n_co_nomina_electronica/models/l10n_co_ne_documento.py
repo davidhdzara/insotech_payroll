@@ -128,6 +128,12 @@ class L10nCoNeDocumento(models.Model):
 
     # Cola de envío y alertas (patrón de account.move.send; los llena el asistente y el cron, etapas 2 y 4).
     sending_data = fields.Json(string='Datos de envío en cola', copy=False, readonly=True)
+    entregar_representacion = fields.Boolean(
+        string='Entregar representación al empleado', copy=False, readonly=True,
+        help='Intención registrada desde Enviar y Procesar (casilla "Correo: representación gráfica y XML"): cuando la '
+             'DIAN acepte el documento se envía al empleado un ZIP con la representación gráfica (PDF) y el XML '
+             'validado. Es una comodidad de este módulo, no un contenedor definido por la DIAN. No es parte de la cola '
+             'de envío a la DIAN: un documento puede tener la intención sin estar en la cola.')
     is_being_sent = fields.Boolean(string='En cola', compute='_compute_is_being_sent')
     alertas = fields.Json(string='Alertas', copy=False,
                           help='Lista de {"key", "level" (danger/warning), "message"} calculada al validar el documento.')
@@ -1083,11 +1089,101 @@ class L10nCoNeDocumento(models.Model):
         if zip_key:
             vals['zip_key'] = zip_key
         self.write(vals)
-        self._ne_aplicar_eliminacion()
+        self._ne_tras_veredicto()
         self.message_post(
             body=_('Envío a la DIAN: %s.', dict(intento._fields['state'].selection).get(estado)),
             message_type='comment', subtype_xmlid='mail.mt_note')
         return intento
+
+    # Entrega de la representación gráfica y el XML al empleado (Frente 5, C6c). Solo tras la aceptación de la DIAN (patrón
+    # de facturación: el correo sale después de la DIAN y solo si fue aceptado). Un fallo de correo NO cambia el estado DIAN.
+    NE_MARCA_REPRESENTACION = 'Representación gráfica y XML enviados por correo'
+    NE_PLANTILLA_REPRESENTACION_XMLID = 'l10n_co_nomina_electronica.mail_template_representacion_grafica'
+    NE_REPORTE_REPRESENTACION_XMLID = 'l10n_co_nomina_electronica.action_report_representacion_grafica'
+
+    def _ne_tras_veredicto(self):
+        """Lo que sigue a un veredicto de la DIAN (envío síncrono, reconsulta o consulta por CUNE): aplicar la eliminación
+        de una nota y, si se pidió, entregar la representación al empleado."""
+        self._ne_aplicar_eliminacion()
+        self._ne_entregar_representacion_si_acepta()
+
+    def _ne_entregar_representacion_si_acepta(self):
+        """Para cada documento con la intención registrada y ya ACEPTADO por la DIAN, envía la representación. Nunca
+        lanza: un fallo (sin correo, sin plantilla, error de render o de cola) queda como nota en el chatter y no cambia
+        el estado DIAN; la intención se consume en ambos casos (se reintenta marcando de nuevo la casilla)."""
+        for doc in self.filtered(lambda d: d.entregar_representacion and d.state == 'invoice_accepted'):
+            try:
+                with self.env.cr.savepoint():
+                    doc._ne_enviar_representacion()
+            except Exception as error:   # no se traga: queda en el chatter y en el log
+                _logger.error('Fallo al enviar la representación del documento %s: %s', doc.display_name, error)
+                doc.message_post(
+                    body=_('Fallo al enviar la representación gráfica y el XML por correo: %s', error),
+                    message_type='comment', subtype_xmlid='mail.mt_note')
+            doc.entregar_representacion = False
+
+    def _ne_zip_representacion(self):
+        """Adjunto ZIP del documento: la representación gráfica (PDF) y el XML validado, con
+        ``ir.attachment._build_zip_from_attachments`` (helper nativo). Se REUTILIZA el existente (mismo nombre). No es un
+        contenedor definido por la DIAN: es una comodidad de este módulo."""
+        self.ensure_one()
+        self._ne_datos_representacion()          # solo para un documento aceptado, con XML y QR
+        nombre = 'Nomina_electronica_%s.zip' % self.consecutive
+        existente = self.env['ir.attachment'].search([
+            ('res_model', '=', self._name), ('res_id', '=', self.id), ('name', '=', nombre)], limit=1)
+        if existente:
+            return existente
+        reporte = self.env.ref(self.NE_REPORTE_REPRESENTACION_XMLID, raise_if_not_found=False)
+        if not reporte:
+            raise UserError(_('No se encontró el reporte de la representación gráfica (%s).',
+                              self.NE_REPORTE_REPRESENTACION_XMLID))
+        pdf, _tipo = self.env['ir.actions.report'].sudo()._render_qweb_pdf(reporte.id, self.ids)
+        Adjunto = self.env['ir.attachment']
+        piezas = Adjunto.create([
+            {'name': 'Representacion_grafica_%s.pdf' % self.consecutive, 'raw': pdf, 'mimetype': 'application/pdf'},
+            {'name': '%s.xml' % self.consecutive, 'raw': self.xml_attachment_id.raw, 'mimetype': 'application/xml'}])
+        try:
+            contenido = piezas._build_zip_from_attachments()
+        finally:
+            piezas.unlink()
+        return Adjunto.create({
+            'name': nombre, 'raw': contenido, 'mimetype': 'application/zip', 'res_model': self._name,
+            'res_id': self.id})
+
+    def _ne_enviar_representacion(self, template=None):
+        """Envía al correo del contacto de trabajo del empleado el ZIP (PDF de la representación + XML validado), por la
+        cola nativa de correo. Solo para un documento aceptado. Deja nota en el chatter."""
+        self.ensure_one()
+        correo = self.employee_id.work_contact_id.email
+        if not correo:
+            raise UserError(_('El empleado %s no tiene correo en su contacto de trabajo.', self.employee_id.name))
+        template = template or self.env.ref(self.NE_PLANTILLA_REPRESENTACION_XMLID, raise_if_not_found=False)
+        if not template:
+            raise UserError(_('No se encontró la plantilla de correo "%s".', self.NE_PLANTILLA_REPRESENTACION_XMLID))
+        adjunto = self._ne_zip_representacion()
+        mail_id = template.send_mail(self.id, force_send=False, email_values={
+            'email_to': correo, 'attachment_ids': [(6, 0, adjunto.ids)]})
+        if not self.env['mail.mail'].sudo().browse(mail_id).exists():
+            raise UserError(_('La plantilla "%s" no generó el correo.', template.display_name))
+        self.message_post(
+            body=_('%(marca)s a %(correo)s.', marca=self.NE_MARCA_REPRESENTACION, correo=correo),
+            message_type='comment', subtype_xmlid='mail.mt_note')
+        return True
+
+    def _ne_solicitar_entrega_representacion(self):
+        """Desde Enviar y Procesar: si el documento ya está aceptado, envía la representación al momento; si no, registra
+        la intención y la envía el cron/consulta que reciba la aceptación. Devuelve un texto de aviso o False."""
+        self.ensure_one()
+        if self.legacy or self.eliminado:
+            raise UserError(_('El documento "%s" está migrado o eliminado: no tiene representación gráfica.',
+                              self.display_name))
+        ya_enviada = any(self.NE_MARCA_REPRESENTACION in str(m.body or '') for m in self.message_ids)
+        aviso = _('%s: ya se había enviado la representación gráfica y el XML por correo antes.',
+                  self.display_name) if ya_enviada else False
+        self.entregar_representacion = True
+        if self.state == 'invoice_accepted':
+            self._ne_entregar_representacion_si_acepta()
+        return aviso
 
     def _ne_aplicar_eliminacion(self):
         """Una nota Eliminar ACEPTADA marca a su padre como eliminado (``eliminado_por_id`` = la nota). Rechazada o
@@ -1383,7 +1479,7 @@ class L10nCoNeDocumento(models.Model):
         message_json = dian_message.build_message_json(respuesta)
         if veredicto in (dian_respuesta.ACEPTADO, dian_respuesta.RECHAZADO):
             intento.write({'state': _ESTADO_INTENTO_POR_VEREDICTO[veredicto], 'message_json': message_json})
-            self._ne_aplicar_eliminacion()
+            self._ne_tras_veredicto()
             if self.incierto:
                 self.incierto = False                    # el veredicto concilió el envío incierto
             self.message_post(
@@ -1478,7 +1574,7 @@ class L10nCoNeDocumento(models.Model):
                 'message_json': message_json, 'exchange_id': exchange.id or False,
                 'test_environment': company.l10n_co_ne_environment == '2',
                 'certification_process': bool(company.l10n_co_ne_certification_process)})
-        self._ne_aplicar_eliminacion()
+        self._ne_tras_veredicto()
         if self.incierto:
             self.incierto = False
         self.message_post(

@@ -65,6 +65,12 @@ class HrPayslipSend(models.TransientModel):
              'grupo se prepara pero no se encola. Solo el administrador de nómina; queda constancia en el documento.')
     hay_extemporaneo = fields.Boolean(compute='_compute_resumen')
     resumen = fields.Html(string='Grupos y alertas', compute='_compute_resumen', sanitize=False)
+    checkbox_send_representacion = fields.Boolean(
+        string='Correo: representación gráfica y XML', default=False,
+        help='Si está marcado, cuando la DIAN acepte el documento mensual se envía al empleado un ZIP con la '
+             'representación gráfica (PDF con código QR) y el XML validado; si el documento ya está aceptado, se envía '
+             'al momento. Es una comodidad de este módulo: el ZIP no es un contenedor definido por la DIAN, y la '
+             'entrega de la representación no es obligatoria.')
     checkbox_send_mail = fields.Boolean(
         string='Correo: comprobante de pago',
         help='Si está marcado, se envía UN correo por empleado y fecha de pago con el comprobante de pago (PDF) de los '
@@ -153,6 +159,18 @@ class HrPayslipSend(models.TransientModel):
             template = self.mail_template_id or self.env['hr.payslip']._ne_plantilla_colilla()
         problemas, avisos = [], []
         transmitidos = enviados = 0
+        # Representación gráfica y XML por correo: solo documentos mensuales (producción), tras la aceptación de la DIAN.
+        if self.checkbox_send_representacion:
+            for documento in (produccion.l10n_co_ne_documento_id | self.documento_ids).filtered(
+                    lambda d: not d.legacy and not d.eliminado):
+                try:
+                    aviso = documento._ne_solicitar_entrega_representacion()
+                except Exception as error:
+                    problemas.append(_('%(doc)s: no se pidió la representación gráfica (%(error)s).',
+                                       doc=documento.display_name, error=error))
+                    continue
+                avisos.append(aviso or _('%s: la representación gráfica y el XML se envían al empleado cuando la DIAN '
+                                         'acepte el documento (si ya está aceptado, se envió).', documento.display_name))
 
         for payslip in self.payslip_ids:
             nombre = payslip.number or payslip.name

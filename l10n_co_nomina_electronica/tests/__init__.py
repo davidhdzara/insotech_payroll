@@ -67,6 +67,7 @@ from . import test_comprobante_pago
 from . import test_conciliacion_comprobantes
 from . import test_representacion_grafica
 from . import test_representacion_grafica_informe
+from . import test_representacion_entrega
 from . import test_recibos_solapados
 from . import test_sln_aportes
 from . import test_ajustes_generales
