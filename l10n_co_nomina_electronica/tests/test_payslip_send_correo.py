@@ -196,3 +196,71 @@ class TestPayslipSendCorreo(DocumentoFixture, TransactionCase):
         campos = self.env['hr.payslip.send']._fields
         self.assertNotIn('enable_send_mail', campos)
         self.assertIn('checkbox_send_mail', campos)
+
+    # ── Regla de negocio de David (2026-11-14): el empleado recibe SU colilla quincenal (una por recibo) y la DIAN un
+    #    documento MENSUAL por empleado. La colilla sale aunque el recibo ya vaya dentro del documento. ──
+    def _quincenales_en_el_documento(self):
+        """Los dos recibos quincenales del mismo empleado y mes, ya dentro de un documento mensual no legacy."""
+        self.recibos.write({'l10n_co_ne_documento_id': self.doc.id})
+        self.assertEqual(len(self.recibos), 2)
+        self.assertEqual(len(self.recibos.employee_id), 1)
+        return self.recibos
+
+    def _correos_de(self, recibos):
+        return self.env['mail.mail'].search([('model', '=', 'hr.payslip'), ('res_id', 'in', recibos.ids)])
+
+    def _afirmar_un_correo_por_recibo_con_su_pdf(self, recibos, esperados=1):
+        for slip in recibos:
+            correos = self._correos_de(slip)
+            self.assertEqual(len(correos), esperados, 'Recibo %s: un correo por envío' % slip.display_name)
+            for correo in correos:
+                pdfs = correo.attachment_ids.filtered(lambda a: a.mimetype == 'application/pdf')
+                self.assertEqual(len(pdfs), 1)
+                self.assertEqual((pdfs.res_model, pdfs.res_id), ('hr.payslip', slip.id))   # SU colilla, no la del otro
+
+    def test_dos_quincenas_en_un_documento_salen_dos_correos_con_su_pdf_sin_dian(self):
+        recibos = self._quincenales_en_el_documento()
+        self._ejecutar(self._asistente(recibos, checkbox_send_dian=False))
+        self.assertEqual(len(self._correos_de(recibos)), 2)
+        self._afirmar_un_correo_por_recibo_con_su_pdf(recibos)
+
+    def test_dos_quincenas_en_un_documento_con_dian_marcada_en_produccion(self):
+        """Producción con "Enviar a la DIAN" marcada: el documento se prepara y se encola (aquí con el procesamiento
+        simulado) pero NO se transmite por recibo, y la colilla de cada quincena sale igual."""
+        recibos = self._quincenales_en_el_documento()
+        self.company.l10n_co_ne_environment = '1'
+        procesado = []
+        self._patch(type(self.env['l10n.co.ne.documento.send']), '_ne_procesar',
+                    lambda s, *a, **k: procesado.append(1) or {'preparados': [], 'encolados': [], 'bloqueados': []})
+        transmitidos = []
+        self._patch(type(self.env['hr.payslip']), 'action_generate_ne_xml', lambda s: transmitidos.append(s.id))
+        self._patch(type(self.env['hr.payslip']), 'action_send_ne_dian', lambda s: transmitidos.append(s.id))
+        self._ejecutar(self._asistente(recibos, checkbox_send_dian=True))
+        self.assertTrue(procesado)                       # el documento sí se atendió
+        self.assertFalse(transmitidos)                   # ningún recibo se transmitió por su cuenta
+        self._afirmar_un_correo_por_recibo_con_su_pdf(recibos)
+
+    def test_la_colilla_sale_con_el_documento_en_cualquier_estado(self):
+        """El correo no depende del estado del documento: borrador, en cola, pendiente, aceptado y rechazado."""
+        recibos = self._quincenales_en_el_documento()
+        self.doc.write({'cune': 'c' * 96, 'consecutive': 'NE00000099'})
+        intento = self.env['l10n.co.ne.documento.intento']
+        estados = [
+            ('borrador', lambda: None),
+            ('en cola', lambda: self.doc.write({'sending_data': {'author_user_id': self.env.user.id}})),
+            ('pendiente', lambda: intento.create({'documento_id': self.doc.id, 'state': 'invoice_pending',
+                                                  'identifier': self.doc.cune, 'numero': 'NE00000099',
+                                                  'datetime': '2026-04-02 10:00:00'})),
+            ('aceptado', lambda: intento.create({'documento_id': self.doc.id, 'state': 'invoice_accepted',
+                                                 'identifier': self.doc.cune, 'numero': 'NE00000099',
+                                                 'datetime': '2026-04-03 10:00:00'})),
+            ('rechazado', lambda: intento.create({'documento_id': self.doc.id, 'state': 'invoice_rejected',
+                                                  'identifier': self.doc.cune, 'numero': 'NE00000099',
+                                                  'datetime': '2026-04-04 10:00:00'})),
+        ]
+        for orden, (nombre, preparar) in enumerate(estados, start=1):
+            with self.subTest(estado=nombre):
+                preparar()
+                self._ejecutar(self._asistente(recibos, checkbox_send_dian=False))
+                self._afirmar_un_correo_por_recibo_con_su_pdf(recibos, esperados=orden)
+        self.assertEqual(self.doc.state, 'invoice_rejected')   # el último estado probado fue de verdad el rechazo
