@@ -795,6 +795,7 @@ class HrPayslip(models.Model):
         """Envía UN correo con el comprobante de pago del grupo (``self`` = los recibos de UN mismo pago: mismo
         empleado y misma fecha de pago, ver ``_ne_comprobantes``) al correo del contacto de trabajo del empleado, por la
         cola nativa de correo. Independiente del estado DIAN: solo exige los recibos confirmados (hechos o pagados)."""
+        self.company_id._ne_exigir_colombia()
         if len(self.employee_id) != 1:
             raise UserError(_('El comprobante de pago se envía por empleado: los recibos son de %s empleados.',
                               len(self.employee_id)))

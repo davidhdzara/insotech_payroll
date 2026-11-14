@@ -16,6 +16,7 @@ class ReportPayslipNe(models.AbstractModel):
     @api.model
     def _get_report_values(self, docids, data=None):
         docs = self.env['hr.payslip'].browse(docids)
+        docs.company_id._ne_exigir_colombia()   # el informe esta en el menu Imprimir de todo recibo: inerte fuera de CO
         for payslip in docs:
             payslip._ne_pdf_neto()
         return {

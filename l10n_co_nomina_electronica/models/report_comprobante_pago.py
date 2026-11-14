@@ -17,6 +17,7 @@ class ReportComprobantePago(models.AbstractModel):
     @api.model
     def _get_report_values(self, docids, data=None):
         recibos = self.env['hr.payslip'].browse(docids)
+        recibos.company_id._ne_exigir_colombia()   # el informe esta en el menu Imprimir de todo recibo: inerte fuera de CO
         agrupados = self.env['hr.payslip']._ne_comprobantes(recibos)
         if agrupados['sin_fecha']:
             raise UserError(_(
