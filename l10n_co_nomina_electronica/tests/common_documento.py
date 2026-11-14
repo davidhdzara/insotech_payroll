@@ -24,7 +24,8 @@ class DocumentoFixture:
 
     def _documento(self, ingreso, retiro=None, mes=3, pagos=((15, 15), (31, 31))):
         """Documento de ``mes`` de 2026 con un recibo por cada (dia de fin, dia de pago)."""
-        type(self).n += 1
+        propietario = self if isinstance(self, type) else type(self)    # acepta la clase (setUpClass) o la instancia
+        propietario.n += 1
         empleado = self.env['hr.employee'].create({
             'name': 'Empleado Doc %s' % self.n, 'company_id': self.company.id, 'identification_id': '1020304050',
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
