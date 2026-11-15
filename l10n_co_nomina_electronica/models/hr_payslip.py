@@ -138,6 +138,35 @@ class HrPayslip(models.Model):
         help='Solo para las vistas: en producción el recibo no se transmite por su cuenta, se reporta en el documento '
              'mensual.')
 
+    l10n_co_ne_aviso_periodicidad = fields.Char(
+        string='Aviso de periodicidad', compute='_compute_ne_aviso_periodicidad',
+        help='Solo para las vistas: aviso (no bloquea) cuando el recibo cubre 7 días y el contrato no es semanal.')
+
+    @api.depends('date_from', 'date_to', 'struct_id', 'employee_id', 'contract_id.schedule_pay',
+                 'contract_id.structure_type_id.default_schedule_pay', 'company_id')
+    def _compute_ne_aviso_periodicidad(self):
+        """E-2 (doc 59 §19.1): un recibo de la estructura general de exactamente 7 días con un contrato que no es `weekly` se
+        calcularia con dias comerciales (un semanal mal configurado daria 6 dias al cruzar un mes de 31 dias). Aviso sin bloquear,
+        con el nombre del empleado y como corregirlo. Decision de David: el pago semanal cuenta 7 dias calendario (texto
+        normativo NO VERIFICADO)."""
+        general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina', raise_if_not_found=False)
+        for recibo in self:
+            recibo.l10n_co_ne_aviso_periodicidad = False
+            if not (recibo.date_from and recibo.date_to and recibo.struct_id == general and recibo.company_id
+                    and recibo.company_id._ne_es_colombia() and recibo.contract_id):
+                continue
+            if (recibo.date_to - recibo.date_from).days + 1 != 7 or recibo._ne_es_semanal():
+                continue
+            contrato = recibo.contract_id
+            periodicidad = contrato.schedule_pay or contrato.structure_type_id.default_schedule_pay
+            etiqueta = dict(contrato._fields['schedule_pay'].selection).get(periodicidad) or _('(sin periodicidad)')
+            recibo.l10n_co_ne_aviso_periodicidad = _(
+                'El recibo de %(empleado)s cubre exactamente 7 días pero la periodicidad de su contrato es "%(periodicidad)s", no '
+                '"Semanal". Si se le paga por semana, cambie la periodicidad a Semanal en el contrato o en el tipo de estructura '
+                '(Nómina > Configuración > Tipos de estructura) y calcule de nuevo: un semanal sin esa periodicidad se calcula con '
+                'días comerciales y una semana que cruza un mes de 31 días saldría de 6 días.',
+                empleado=recibo.employee_id.name, periodicidad=etiqueta)
+
     @api.depends('company_id.l10n_co_ne_environment', 'company_id.l10n_co_ne_certification_process')
     def _compute_ne_en_produccion(self):
         for slip in self:
