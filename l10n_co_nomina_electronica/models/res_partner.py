@@ -46,7 +46,8 @@ class ResPartner(models.Model):
     def write(self, vals):
         res = super().write(vals)
         if 'vat' in vals:
-            empleados = self.env['hr.employee'].sudo().search([
+            # active_test=False (E-6): un empleado ARCHIVADO (retiro registrado, liquidacion pendiente) tambien sigue a su contacto.
+            empleados = self.env['hr.employee'].sudo().with_context(active_test=False).search([
                 ('work_contact_id', 'in', self.ids),
             ])
             for empleado in empleados._ne_solo_colombia():

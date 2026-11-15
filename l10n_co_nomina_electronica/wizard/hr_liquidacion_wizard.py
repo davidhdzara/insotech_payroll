@@ -48,7 +48,8 @@ class L10nCoHrLiquidacionWizard(models.TransientModel):
         comodel_name='hr.employee',
         string='Empleado',
         required=True,
-        help='Seleccione el empleado cuyo contrato se va a liquidar.',
+        help='Seleccione el empleado cuyo contrato se va a liquidar. Incluye empleados archivados: el retiro se registra '
+             'primero (RRHH archiva al empleado) y despues se liquida.',
     )
     contract_id = fields.Many2one(
         comodel_name='hr.contract',

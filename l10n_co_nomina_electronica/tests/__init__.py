@@ -95,6 +95,7 @@ from . import test_alinear_reglas_nativas
 from . import test_aviso_periodicidad
 from . import test_application_response_adjunto
 from . import test_marcar_lote_pagado
+from . import test_liquidacion_empleado_archivado
 from . import test_vista_partner_entidad_nomina
 from . import test_wizards_compania_del_registro
 from . import test_vistas_por_pais
