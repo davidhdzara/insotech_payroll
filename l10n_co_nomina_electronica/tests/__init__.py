@@ -91,6 +91,7 @@ from . import test_periodos_cruzan_mes
 from . import test_periodos_ibc_semanal
 from . import test_nota_cambio_tipo_documento
 from . import test_guarda_duracion_periodo
+from . import test_alinear_reglas_nativas
 from . import test_vista_partner_entidad_nomina
 from . import test_wizards_compania_del_registro
 from . import test_vistas_por_pais

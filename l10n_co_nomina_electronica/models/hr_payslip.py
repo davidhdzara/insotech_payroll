@@ -1139,6 +1139,7 @@ class HrPayslip(models.Model):
     # Cada estructura propia tiene su regla de neto; solo la general tiene "Total Devengados".
     _NE_NETO_CODES = ('CO_NETO', 'CO_PRIMA_NETO', 'CO_LIQ_NETO', 'CO_BON_NETO')
     _NE_BRUTO_CODES = ('CO_BRUTO',)
+    _NE_BASICO_CODES = ('CO_BASICO', 'CO_LIQ_SALARIOS')     # prima y bonificacion no tienen linea de sueldo: basic_wage queda en el nativo
     # Lineas que Odoo agrega por defecto a cada estructura (BASIC/GROSS/NET); no son conceptos
     # del recibo y su valor es el de las categorias nativas, no el neto real.
     _NE_NATIVOS_SIN_PDF = ('BASIC', 'GROSS', 'NET')
@@ -1277,6 +1278,11 @@ class HrPayslip(models.Model):
             bruto = payslip.line_ids.filtered(lambda l: l.code in self._NE_BRUTO_CODES)
             if bruto:
                 payslip.gross_wage = sum(bruto.mapped('total'))
+            # E-3a (doc 59 §20.2): «Salario basico» de la lista = la linea de sueldo del modulo (convencion de 30 dias), no el
+            # paid_amount nativo (que reparte el salario mensual entre las horas del periodo y solo coincide en un mes completo).
+            sueldo = payslip.line_ids.filtered(lambda l: l.code in self._NE_BASICO_CODES)
+            if sueldo:
+                payslip.basic_wage = sum(sueldo.mapped('total'))
 
     # H-005 (2026-11-09): parámetro hr.rule.parameter de la tarifa ARL por Clase de Riesgo del
     # contrato (l10n_co_pila_clase_riesgo). Los CÓDIGOS de parámetro viven aquí; los
