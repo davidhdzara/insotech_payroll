@@ -41,5 +41,10 @@ class HrPayslipRegistrarPago(models.TransientModel):
                 companias=', '.join(de_contabilidad.company_id.mapped('name')),
                 recibos=', '.join(de_contabilidad.mapped('display_name'))))
         recibos.action_payslip_paid()
+        # Desde «Marcar como pagado» del lote (E-5): el lote pasa a «pagado» con el nativo (marca tambien los recibos de otras
+        # companias o fuentes) y LUEGO se fija la fecha elegida (el nativo pone hoy).
+        lotes = self.env['hr.payslip.run'].browse(self.env.context.get('ne_payslip_run_ids') or [])
+        if lotes:
+            lotes.with_context(ne_fecha_pago_definida=True).action_paid()
         recibos.write({'paid_date': self.fecha})
         return {'type': 'ir.actions.act_window_close'}

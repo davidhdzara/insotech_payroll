@@ -5,6 +5,9 @@
         <field name="model">hr.payslip.registrar.pago</field>
         <field name="arch" type="xml">
             <form string="Registrar fecha de pago">
+                <div class="alert alert-info" role="alert">
+                    La fecha de pago decide el mes del documento de nómina electrónica: use la fecha real en que se pagó al empleado, no la de hoy.
+                </div>
                 <group>
                     <field name="fecha"/>
                     <field name="payslip_ids" widget="many2many_tags" readonly="1"/>

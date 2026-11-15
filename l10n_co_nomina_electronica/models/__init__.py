@@ -32,3 +32,4 @@ from . import report_payslip_ne
 from . import report_comprobante_pago
 from . import report_representacion_grafica
 from . import hr_leave_prorroga
+from . import hr_payslip_run
