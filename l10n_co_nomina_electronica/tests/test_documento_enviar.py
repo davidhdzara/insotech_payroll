@@ -299,6 +299,31 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
         self.assertEqual(exchange.payslip_ids, slip)
         self.assertFalse(self.doc.exchange_ids)
 
+    # ── E-1: el ApplicationResponse decodificado queda como adjunto del intento ──────────────────────
+    APPLICATION_RESPONSE = '<ApplicationResponse><cbc:ID>NE00000015</cbc:ID><cbc:Note>Documento validado por la DIAN</cbc:Note></ApplicationResponse>'
+
+    def test_envio_con_application_response_adjunta_el_xml_decodificado_al_intento(self):
+        intento = self._enviar(dict(ACEPTADA, ApplicationResponse=self.APPLICATION_RESPONSE))
+        adjunto = intento.respuesta_attachment_id
+        self.assertTrue(adjunto)
+        self.assertEqual(adjunto.raw.decode('utf-8'), self.APPLICATION_RESPONSE)
+        self.assertEqual(adjunto.name, 'ApplicationResponse_%s_%s.xml' % (intento.numero, intento.id))
+        self.assertEqual((adjunto.res_model, adjunto.res_id), ('l10n.co.ne.documento.intento', intento.id))
+        self.assertEqual(adjunto.mimetype, 'application/xml')
+
+    def test_envio_sin_application_response_no_crea_adjunto(self):
+        self.assertFalse(self._enviar(ACEPTADA).respuesta_attachment_id)
+
+    def test_el_application_response_de_un_resultado_de_la_lista_tambien_se_adjunta(self):
+        respuesta = dict(ACEPTADA, DianResponses=[{'ApplicationResponse': self.APPLICATION_RESPONSE}])
+        self.assertTrue(self._enviar(respuesta).respuesta_attachment_id)
+
+    def test_la_consulta_que_da_veredicto_adjunta_el_application_response_al_mismo_intento(self):
+        intento = self._pendiente()
+        self.assertFalse(intento.respuesta_attachment_id)
+        self._consultar(dict(self._aceptada_de_este_documento(), ApplicationResponse=self.APPLICATION_RESPONSE))
+        self.assertEqual(intento.respuesta_attachment_id.raw.decode('utf-8'), self.APPLICATION_RESPONSE)
+
     # ── multiempresa ─────────────────────────────────────────────────
     def test_el_envio_usa_la_compania_del_documento_no_la_activa(self):
         otra = self.env['res.company'].create({'name': 'Compañía activa distinta',

@@ -1067,6 +1067,7 @@ class L10nCoNeDocumento(models.Model):
         nit = (company.vat or 'SIN_NIT').replace('-', '').strip()
         filename = 'ne_%s_%s.xml' % (nit, self.consecutive)
         exchange = self.env['l10n.co.ne.exchange']
+        respuesta = {}
         if company.l10n_co_ne_demo_mode:
             # Modo Demo: validación local, sin transmitir (mismo criterio que el ciclo por recibo).
             estado, zip_key = 'invoice_accepted', ''
@@ -1094,6 +1095,7 @@ class L10nCoNeDocumento(models.Model):
             'test_environment': company.l10n_co_ne_environment == '2',
             'certification_process': bool(company.l10n_co_ne_certification_process),
             'exchange_id': exchange.id or False})
+        intento._ne_guardar_application_response(respuesta)           # E-1: constancia de la DIAN legible (.xml)
         vals = {'sending_data': False}
         if zip_key:
             vals['zip_key'] = zip_key
@@ -1492,6 +1494,7 @@ class L10nCoNeDocumento(models.Model):
         message_json = dian_message.build_message_json(respuesta)
         if veredicto in (dian_respuesta.ACEPTADO, dian_respuesta.RECHAZADO):
             intento.write({'state': _ESTADO_INTENTO_POR_VEREDICTO[veredicto], 'message_json': message_json})
+            intento._ne_guardar_application_response(respuesta)       # E-1
             self._ne_tras_veredicto()
             if self.incierto:
                 self.incierto = False                    # el veredicto concilió el envío incierto
@@ -1580,13 +1583,15 @@ class L10nCoNeDocumento(models.Model):
             if respuesta.get('ZipKey') and not ultimo.zip_key:
                 vals['zip_key'] = respuesta['ZipKey']
             ultimo.write(vals)
+            ultimo._ne_guardar_application_response(respuesta)        # E-1
         else:
-            self.env['l10n.co.ne.documento.intento'].create({
+            nuevo = self.env['l10n.co.ne.documento.intento'].create({
                 'documento_id': self.id, 'datetime': fields.Datetime.now(), 'state': estado,
                 'identifier': self.cune, 'numero': self.consecutive, 'zip_key': respuesta.get('ZipKey') or False,
                 'message_json': message_json, 'exchange_id': exchange.id or False,
                 'test_environment': company.l10n_co_ne_environment == '2',
                 'certification_process': bool(company.l10n_co_ne_certification_process)})
+            nuevo._ne_guardar_application_response(respuesta)         # E-1
         self._ne_tras_veredicto()
         if self.incierto:
             self.incierto = False

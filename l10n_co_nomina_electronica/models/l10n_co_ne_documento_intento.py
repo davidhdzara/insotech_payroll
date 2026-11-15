@@ -37,6 +37,10 @@ class L10nCoNeDocumentoIntento(models.Model):
     sha256 = fields.Char(string='SHA-256', copy=False)
     attachment_id = fields.Many2one('ir.attachment', string='Adjunto', copy=False, ondelete='set null')
     message_json = fields.Json(string='Respuesta DIAN (datos)', copy=False)
+    respuesta_attachment_id = fields.Many2one(
+        'ir.attachment', string='Respuesta DIAN (XML)', copy=False, ondelete='set null',
+        help='ApplicationResponse de la DIAN decodificado (constancia de aceptado o rechazado con la regla y el mensaje): evidencia '
+             'legible. El sobre SOAP completo sigue guardado, inmutable, en la evidencia (intercambio) DIAN.')
     message = fields.Html(string='Motivo', compute='_compute_message', sanitize=False)
     test_environment = fields.Boolean(string='Ambiente de pruebas')
     certification_process = fields.Boolean(string='Proceso de habilitación')
@@ -55,3 +59,25 @@ class L10nCoNeDocumentoIntento(models.Model):
         for intento in self:
             intento.show_button_get_status = bool(intento.zip_key) and intento.state in (
                 'invoice_pending', 'invoice_sending_failed')
+
+    def _ne_guardar_application_response(self, respuesta):
+        """E-1 (doc 59 §18.11-18.12): adjunta al intento el ``ApplicationResponse`` de la DIAN YA DECODIFICADO como archivo ``.xml``
+        (``ApplicationResponse_<consecutivo>_<n° de intento>.xml``). El sobre completo ya queda guardado e inmutable en el
+        intercambio; esto lo hace legible para un contador o un auditor (aceptado/rechazado, regla, mensaje, CUNE). Sin
+        ``ApplicationResponse`` en la respuesta no se crea nada. Una reconsulta con otro contenido deja un adjunto nuevo y el campo
+        apunta al ultimo (los anteriores siguen adjuntos al intento)."""
+        self.ensure_one()
+        respuesta = respuesta or {}
+        texto = respuesta.get('ApplicationResponse') or next(
+            (r.get('ApplicationResponse') for r in respuesta.get('DianResponses') or [] if r.get('ApplicationResponse')), '')
+        if not texto:
+            return self.env['ir.attachment']
+        contenido = texto.encode('utf-8') if isinstance(texto, str) else texto
+        actual = self.respuesta_attachment_id
+        if actual and actual.raw == contenido:
+            return actual
+        adjunto = self.env['ir.attachment'].sudo().create({
+            'name': 'ApplicationResponse_%s_%s.xml' % (self.numero or self.documento_id.consecutive or self.id, self.id),
+            'raw': contenido, 'mimetype': 'application/xml', 'res_model': self._name, 'res_id': self.id})
+        self.sudo().respuesta_attachment_id = adjunto
+        return adjunto

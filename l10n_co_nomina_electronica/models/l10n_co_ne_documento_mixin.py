@@ -167,6 +167,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
             queried_zip_key=queried_zip_key, parent_exchange=parent_exchange,
             unidentified_count=unidentified_count,
         )
+        self._ne_guardar_application_response(response, exchange)     # E-1: constancia de la DIAN legible (.xml)
         new_request = self._ne_response_text(response.get('RawRequest'))
         new_response = self._ne_response_text(response.get('RawResponse'))
         changed = self.filtered(
@@ -179,6 +180,22 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
                 'l10n_co_ne_dian_response': new_response,
             })
         return exchange
+
+    def _ne_guardar_application_response(self, respuesta, exchange):
+        """E-1: adjunta al recibo (ciclo por recibo, habilitacion) el ``ApplicationResponse`` decodificado de UN envio o consulta como
+        ``.xml`` (``ApplicationResponse_<consecutivo>_<intercambio>.xml``). Solo cuando el intercambio es de un unico recibo; sin
+        ``ApplicationResponse`` no se crea nada. El sobre completo ya esta guardado en el intercambio."""
+        if len(self) != 1:
+            return self.env['ir.attachment']
+        respuesta = respuesta or {}
+        texto = respuesta.get('ApplicationResponse') or next(
+            (r.get('ApplicationResponse') for r in respuesta.get('DianResponses') or [] if r.get('ApplicationResponse')), '')
+        if not texto:
+            return self.env['ir.attachment']
+        contenido = texto.encode('utf-8') if isinstance(texto, str) else texto
+        return self.env['ir.attachment'].sudo().create({
+            'name': 'ApplicationResponse_%s_%s.xml' % (self.l10n_co_ne_consecutive or self.id, exchange.id or 'x'),
+            'raw': contenido, 'mimetype': 'application/xml', 'res_model': self._name, 'res_id': self.id})
 
     @staticmethod
     def _ne_cune_candidates(result):

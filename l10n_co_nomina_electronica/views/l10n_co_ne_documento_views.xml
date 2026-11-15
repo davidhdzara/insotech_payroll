@@ -84,6 +84,7 @@
                                     <field name="identifier" optional="hide"/>
                                     <field name="zip_key" optional="hide"/>
                                     <field name="attachment_id" optional="hide"/>
+                                    <field name="respuesta_attachment_id" optional="show"/>
                                 </list>
                             </field>
                         </page>
