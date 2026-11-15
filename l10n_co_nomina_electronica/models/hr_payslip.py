@@ -582,7 +582,36 @@ class HrPayslip(models.Model):
         """Los recibos de companias colombianas (ver res.company._ne_es_colombia)."""
         return self.filtered(lambda s: s.company_id._ne_es_colombia())
 
+    # E-4 (doc 59 §21): guarda contra periodos de recibo demasiado largos. Desde M1-1 un periodo regular se paga completo (ya no
+    # se recorta al mes de date_to), asi que un periodo mal digitado (p. ej. 04-ene a 15-abr por dia y mes invertidos) se
+    # pagaria en silencio. Topes ESTRUCTURALES (no valores de decreto) por periodicidad del contrato, en dias calendario; es un
+    # tope, no una igualdad: un periodo mas corto (ingreso o retiro a mitad de periodo) sigue pasando. LIMITE CONOCIDO: un
+    # periodo de mes completo (1 a 30) en un contrato `semi-monthly`/quincenal pasa en un tipo `monthly` por diseno.
+    _NE_MAX_DIAS_PERIODO = {
+        'daily': 1, 'weekly': 7, 'bi-weekly': 16, 'semi-monthly': 16, 'monthly': 31, 'bi-monthly': 62,
+        'quarterly': 92, 'semi-annually': 184, 'annually': 366}
+
+    def _ne_validar_duracion_periodo(self):
+        """UserError si un recibo de la estructura general (compania colombiana) cubre mas dias que el maximo de la
+        periodicidad de su contrato. La liquidacion, la prima y la bonificacion quedan fuera (su periodo es otro)."""
+        general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina', raise_if_not_found=False)
+        for recibo in self._ne_solo_colombia().filtered(lambda s: s.struct_id == general and s.date_from and s.date_to):
+            contrato = recibo.contract_id
+            periodicidad = contrato.schedule_pay or contrato.structure_type_id.default_schedule_pay or 'monthly'
+            maximo = self._NE_MAX_DIAS_PERIODO.get(periodicidad)
+            dias = (recibo.date_to - recibo.date_from).days + 1
+            if maximo and dias > maximo:
+                etiqueta = dict(contrato._fields['schedule_pay'].selection).get(periodicidad, periodicidad)
+                raise UserError(_(
+                    'El recibo "%(recibo)s" de %(empleado)s va del %(desde)s al %(hasta)s (%(dias)s días) y la periodicidad de su '
+                    'contrato es "%(periodicidad)s" (máximo %(maximo)s días por recibo). Revise las fechas "Desde" y "Hasta" del '
+                    'recibo: lo más probable es que el día y el mes estén invertidos. Si el periodo es correcto, cambie la '
+                    'periodicidad en el contrato o en el tipo de estructura.',
+                    recibo=recibo.name or recibo.display_name, empleado=recibo.employee_id.name, desde=recibo.date_from,
+                    hasta=recibo.date_to, dias=dias, periodicidad=etiqueta, maximo=maximo))
+
     def compute_sheet(self):
+        self._ne_validar_duracion_periodo()
         colombia = self._ne_solo_colombia()
         colombia._ne_validar_terceros_attachments()
         # Cada recibo se calcula en el contexto de SU compania: los parametros (hr.rule.parameter,
@@ -703,6 +732,7 @@ class HrPayslip(models.Model):
         temporal PRE-NOM al número del payslip en Odoo.
         """
         colombia = self._ne_solo_colombia()
+        colombia._ne_validar_duracion_periodo()
         colombia._ne_validar_sin_solape()
         res = super(HrPayslip, self).action_payslip_done()
         colombia._ne_aplicar_libranzas()

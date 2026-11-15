@@ -68,9 +68,10 @@ class TestRecibosSolapados(TransactionCase):
     def test_recibo_cancelado_o_borrador_no_cuenta(self):
         self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'cancel')
         self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'draft')
-        self._recibo(date(2026, 9, 10), date(2026, 9, 20))
-        # el borrador de arriba no es 'done': no hay conflicto con ellos
-        self.env['hr.payslip'].search([('state', '=', 'draft')])[-1]._ne_validar_sin_solape()
+        propio = self._recibo(date(2026, 9, 10), date(2026, 9, 20))
+        # los de arriba no son 'done': no hay conflicto con ellos. Se valida SU recibo, no «el ultimo borrador de la base»
+        # (la base de staging es compartida con QA y trae borradores reales que si se solapan).
+        propio._ne_validar_sin_solape()
 
     def test_lote_con_dos_solapados_es_error(self):
         a = self._recibo(date(2026, 9, 1), date(2026, 9, 20))
