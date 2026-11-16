@@ -135,6 +135,31 @@ class TestNetoRedondeo(TransactionCase):
         self.assertAlmostEqual(neto, 2877834.91, places=2)
         self.assertAlmostEqual(float_round(exacto, precision_digits=2), 2877834.90, places=2)   # lo que daba antes
 
+    def _liquidacion_buenanos(self):
+        base = SMMLV_2026 + AUX_TRANSPORTE_2026
+        salarios = SMMLV_2026 / 30 * 10                                          # 10 días de mayo = 583.635
+        return _totales(
+            CO_LIQ_SALARIOS=salarios, CO_LIQ_CESANTIAS=base / 360 * 130, CO_LIQ_PRIMA=base / 360 * 130,
+            CO_LIQ_INT_CES=(base / 360 * 130) * 130 * 12 / 100 / 360, CO_LIQ_VACACIONES=SMMLV_2026 / 720 * 250,
+            CO_LIQ_SALUD=-(salarios * 4 / 100), CO_LIQ_PENSION=-(salarios * 4 / 100))
+
+    def test_buenanos_control_el_neto_que_ya_cuadraba_no_cambia(self):
+        """Caso de CONTROL de QA (empleado 51691, retiro 10-05-2026, 130 días): el neto exacto 2.620.638,0657 y la suma de
+        las líneas guardadas (2.667.328,87 - 46.690,80) dan los dos 2.620.638,07: la corrección no debe alterarlo, y debe
+        seguir verde junto a Acevedo y Orozco (+0,01 cada uno)."""
+        recibo = self._recibo(self.est_liquidacion, 'Buenanos', SMMLV_2026, date(2025, 9, 1), date(2026, 5, 10))
+        reglas = self._liquidacion_buenanos()
+        lineas = {c: recibo._ne_redondear_moneda(r['total']) for c, r in reglas.items()}
+        self.assertEqual(lineas['CO_LIQ_CESANTIAS'], 722222.22)
+        self.assertEqual(lineas['CO_LIQ_INT_CES'], 31296.30)
+        self.assertEqual(lineas['CO_LIQ_VACACIONES'], 607953.13)
+        self.assertEqual(lineas['CO_LIQ_SALARIOS'], 583635.0)
+        self.assertAlmostEqual(lineas['CO_LIQ_SALUD'] + lineas['CO_LIQ_PENSION'], -46690.80, places=2)
+        neto = recibo._ne_neto_redondeado(reglas, 'DEV')
+        self.assertAlmostEqual(neto, 2620638.07, places=2)
+        exacto = float_round(sum(r['total'] for r in reglas.values()), precision_digits=2)
+        self.assertAlmostEqual(neto, exacto, places=2)                              # el neto de antes es el mismo
+
     def test_las_lineas_de_acevedo_y_orozco_no_cambian(self):
         """El cambio no toca el importe de ninguna línea: solo cómo se suma el neto."""
         recibo = self._recibo(self.est_liquidacion, 'Importes', SMMLV_2026, date(2025, 6, 1), date(2026, 1, 30))
