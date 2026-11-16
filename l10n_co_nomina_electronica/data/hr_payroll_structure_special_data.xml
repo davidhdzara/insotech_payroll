@@ -223,7 +223,9 @@ result = -abs(_valor) if _valor &gt; 0 else 0
 # dos veces. Mismo patron correcto que ya usa CO_NETO en la estructura
 # principal (categories['DEV'] + categories['DEDU'], sin SS_CIA/SS_EMP
 # aparte). Hallazgo de Tech Lead depurando un payslip real de Prima.
-result = categories['PREST'] + categories['DEDU']
+# E-8 (H-QA-025): neto = suma de las lineas REDONDEADAS (como las guarda Odoo y las lee el asiento), no la suma
+# exacta de categories: ver HrPayslip._ne_neto_redondeado.
+result = payslip._ne_neto_redondeado(result_rules, 'PREST')
             </field>
             <field name="appears_on_payslip" eval="True"/>
         </record>
@@ -961,7 +963,9 @@ result = -payslip._ne_liq_libranzas_calcular(result_rules, _legal)
 # SS_EMP es categoria hija de DEDU -- categories['DEDU'] ya la incluye,
 # sumarla aparte restaba el descuento de salud/pension dos veces. Ver
 # CO_PRIMA_NETO mas arriba.
-result = categories['DEV'] + categories['DEDU']
+# E-8 (H-QA-025): neto = suma de las lineas REDONDEADAS (como las guarda Odoo y las lee el asiento), no la suma
+# exacta de categories: ver HrPayslip._ne_neto_redondeado.
+result = payslip._ne_neto_redondeado(result_rules, 'DEV')
             </field>
             <field name="appears_on_payslip" eval="True"/>
         </record>
@@ -1112,7 +1116,9 @@ result = -abs(_valor) if _valor &gt; 0 else 0
 # SS_EMP es categoria hija de DEDU -- categories['DEDU'] ya la incluye,
 # sumarla aparte restaba el descuento de salud/pension dos veces. Ver
 # CO_PRIMA_NETO mas arriba.
-result = categories['DEV'] + categories['DEDU']
+# E-8 (H-QA-025): neto = suma de las lineas REDONDEADAS (como las guarda Odoo y las lee el asiento), no la suma
+# exacta de categories: ver HrPayslip._ne_neto_redondeado.
+result = payslip._ne_neto_redondeado(result_rules, 'DEV')
             </field>
             <field name="appears_on_payslip" eval="True"/>
         </record>
