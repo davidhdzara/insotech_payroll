@@ -79,6 +79,7 @@ from . import test_retefuente_config_anio
 from . import test_renta_exenta_tope
 from . import test_retefuente_monto
 from . import test_retefuente_mes
+from . import test_retefuente_procedimiento2_meses
 from . import test_migracion_max_renta_exenta
 from . import test_contrato_integral_piso
 from . import test_multiempresa_inercia
