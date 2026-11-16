@@ -201,7 +201,8 @@ class L10nCoRetefuenteUvt(models.Model):
     # ══════════════════════════════════════════════════════════════════
     def compute_retefuente(self, employee, gross_salary, ibc_pension,
                            ibc_salud, company=None, contract=None,
-                           payslip=None, force_procedure=None, fecha_mes=None):
+                           payslip=None, force_procedure=None, fecha_mes=None,
+                           sin_aportes_voluntarios=False):
         """Calcula la retención en la fuente mensual para un empleado.
 
         Ejecuta la depuración de la base gravable según la normatividad
@@ -237,6 +238,9 @@ class L10nCoRetefuenteUvt(models.Model):
             último día del mes ANTERIOR (no incluye los recibos del mismo mes, que la retención del mes ya recalcula
             completa) y (b) el semestre del Procedimiento 2 se elige con esta fecha. Sin ella, ambos usan
             ``payslip.date_from`` como siempre (liquidación, prima, ejemplo).
+        :param sin_aportes_voluntarios: bool (opcional -- R-2c, doc 59 §25). Con ``contract`` se toma el procedimiento y el
+            porcentaje fijo del contrato pero NO se descuentan la pensión voluntaria ni el AFC mensuales: son aportes del mes
+            sobre el salario y no se descuentan además de la prima (que se retiene aparte, doc 59 §20.9).
         :returns: dict con el detalle de la depuración y el valor final
             de retención en pesos, con la siguiente estructura::
 
@@ -293,8 +297,9 @@ class L10nCoRetefuenteUvt(models.Model):
         #     l10n_co_ne_afc -- la misma fuente que alimenta la deduccion
         #     real del payslip (reglas CO_PENSION_VOL/CO_AFC), no un campo
         #     de empleado desconectado (el que existia antes se eliminó).
-        raw_vol_pension = (contract.l10n_co_ne_pension_voluntaria or 0.0) if contract else 0.0
-        raw_afc = (contract.l10n_co_ne_afc or 0.0) if contract else 0.0
+        _con_voluntarios = bool(contract) and not sin_aportes_voluntarios
+        raw_vol_pension = (contract.l10n_co_ne_pension_voluntaria or 0.0) if _con_voluntarios else 0.0
+        raw_afc = (contract.l10n_co_ne_afc or 0.0) if _con_voluntarios else 0.0
         total_raw_vol_afc = raw_vol_pension + raw_afc
 
         max_combinado_pct = _p('l10n_co_max_vol_pension_afc_combinado_pct')
