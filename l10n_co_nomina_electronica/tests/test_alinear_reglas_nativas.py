@@ -78,3 +78,57 @@ class TestAlinearReglasNativas(TransactionCase):
     def test_salario_basico_de_un_periodo_completo_no_cambia(self):
         recibo = self._recibo(date(2024, 1, 1), date(2026, 6, 1), date(2026, 6, 30))
         self.assertAlmostEqual(recibo.basic_wage, 1750905.0, delta=0.01)
+
+    # ── E-3b (doc 59 §25): BASIC y GROSS nativas tambien leen las lineas del modulo ──
+    def _regla_nativa(self, xmlid, codigo):
+        estructura = self.env.ref('l10n_co_nomina_electronica.%s' % xmlid)
+        return estructura.with_context(active_test=False).rule_ids.filtered(lambda r: r.code == codigo)
+
+    def _regla_del_modulo(self, xmlid, codigo):
+        return self._regla_nativa(xmlid, codigo)
+
+    def test_basic_y_gross_de_la_general_leen_sueldo_y_bruto_del_modulo_y_van_despues_de_ellos(self):
+        for nativa, codigo in (('BASIC', 'CO_BASICO'), ('GROSS', 'CO_BRUTO')):
+            regla = self._regla_nativa('hr_payroll_structure_co_nomina', nativa)
+            self.assertEqual(len(regla), 1, nativa)
+            self.assertIn("result_rules['%s']['total']" % codigo, regla.amount_python_compute)
+            modulo = self._regla_del_modulo('hr_payroll_structure_co_nomina', codigo)
+            self.assertGreater(regla.sequence, modulo.sequence, nativa)
+
+    def test_basic_de_la_liquidacion_lee_la_linea_de_sueldo_de_la_liquidacion(self):
+        regla = self._regla_nativa('hr_payroll_structure_co_liquidacion', 'BASIC')
+        self.assertIn("result_rules['CO_LIQ_SALARIOS']['total']", regla.amount_python_compute)
+        modulo = self._regla_del_modulo('hr_payroll_structure_co_liquidacion', 'CO_LIQ_SALARIOS')
+        self.assertGreater(regla.sequence, modulo.sequence)
+
+    def test_las_estructuras_sin_linea_equivalente_conservan_la_formula_nativa(self):
+        """Prima y bonificacion no tienen linea de sueldo ni de bruto; el bruto de la liquidacion tampoco existe."""
+        for xmlid in ('hr_payroll_structure_co_prima', 'hr_payroll_structure_co_bonificacion'):
+            for nativa in ('BASIC', 'GROSS'):
+                regla = self._regla_nativa(xmlid, nativa)
+                self.assertNotIn('result_rules', regla.amount_python_compute or '', '%s %s' % (xmlid, nativa))
+        gross_liquidacion = self._regla_nativa('hr_payroll_structure_co_liquidacion', 'GROSS')
+        self.assertNotIn('result_rules', gross_liquidacion.amount_python_compute or '')
+
+    def test_basic_y_gross_son_idempotentes_y_respetan_una_formula_editada_a_mano(self):
+        basic = self._regla_nativa('hr_payroll_structure_co_nomina', 'BASIC')
+        gross = self._regla_nativa('hr_payroll_structure_co_nomina', 'GROSS')
+        antes = [(r.amount_python_compute, r.sequence) for r in (basic, gross)]
+        self.env['hr.salary.rule']._ne_alinear_reglas_nativas()
+        self.assertEqual([(r.amount_python_compute, r.sequence) for r in (basic, gross)], antes)
+        basic.amount_python_compute = 'result = 777'
+        self.env['hr.salary.rule']._ne_alinear_reglas_nativas()
+        self.assertEqual(basic.amount_python_compute, 'result = 777')
+        self.assertEqual(gross.amount_python_compute, antes[1][0])
+
+    def test_las_lineas_basic_y_gross_nativas_del_recibo_son_las_del_modulo_en_un_periodo_parcial(self):
+        """Ingreso 12-jun, quincena 1-15: BASIC = CO_BASICO = 233.454,00 (no el paid_amount nativo) y GROSS = CO_BRUTO."""
+        recibo = self._recibo(date(2026, 6, 12), date(2026, 6, 1), date(2026, 6, 15))
+        self.assertAlmostEqual(self._linea(recibo, 'BASIC'), self._linea(recibo, 'CO_BASICO'), delta=0.01)
+        self.assertAlmostEqual(self._linea(recibo, 'BASIC'), 233454.0, delta=0.01)
+        self.assertAlmostEqual(self._linea(recibo, 'GROSS'), self._linea(recibo, 'CO_BRUTO'), delta=0.01)
+
+    def test_las_lineas_basic_y_gross_nativas_de_un_periodo_completo_son_las_del_modulo(self):
+        recibo = self._recibo(date(2024, 1, 1), date(2026, 6, 1), date(2026, 6, 30))
+        self.assertAlmostEqual(self._linea(recibo, 'BASIC'), 1750905.0, delta=0.01)
+        self.assertAlmostEqual(self._linea(recibo, 'GROSS'), self._linea(recibo, 'CO_BRUTO'), delta=0.01)
