@@ -302,39 +302,57 @@ class HrSalaryRule(models.Model):
         return self.account_credit or self.account_debit
 
     # ──────────────────────────────────────────────────────────────────────
-    # E-3a (doc 59 §20.2): la regla nativa NET de nuestras estructuras da el neto real del modulo
+    # E-3a/E-3b (doc 59 §20.2 y §25): las reglas nativas BASIC/GROSS/NET de nuestras estructuras leen las lineas del modulo
     # ──────────────────────────────────────────────────────────────────────
-    # Odoo crea solo, en cada estructura, las reglas BASIC/GROSS/NET (hr.payroll.structure._get_default_rule_ids): sin xmlid. NET =
-    # BASIC + ALW + DED sale del salario por horas del nativo (paid_amount), no del neto real, y el informe nativo «Analisis de
-    # nomina» lee esa linea. Se alinea con la regla de neto del modulo de cada estructura. BASIC y GROSS NO se tocan aqui: la
-    # categoria GROSS alimenta la base de la retencion en la fuente (CO_RETEFUENTE*, categories['GROSS']): cambiarlas modifica el
-    # calculo de la retencion y requiere decision (doc 59 §20.3).
+    # Odoo crea solo, en cada estructura, las reglas BASIC/GROSS/NET (hr.payroll.structure._get_default_rule_ids): sin xmlid.
+    # Su valor sale del salario por horas del nativo (paid_amount), no del recibo real, y el informe nativo «Analisis de
+    # nomina» lee esas lineas. Se alinean con la regla equivalente del modulo de cada estructura y se ordenan DESPUES de ella.
+    # E-3a: NET (las 4 estructuras). E-3b: BASIC (general y liquidacion) y GROSS (general; las demas estructuras no tienen una
+    # linea de bruto del modulo). E-3b estaba bloqueada porque la categoria GROSS alimentaba la base de la retencion en la
+    # fuente (doc 59 §20.3); R-2a (doc 59 §25) la saco de ahi: la retencion lee ahora el devengado del modulo.
     _NE_NETO_POR_ESTRUCTURA = {
         'hr_payroll_structure_co_nomina': 'CO_NETO',
         'hr_payroll_structure_co_liquidacion': 'CO_LIQ_NETO',
         'hr_payroll_structure_co_prima': 'CO_PRIMA_NETO',
         'hr_payroll_structure_co_bonificacion': 'CO_BON_NETO',
     }
+    _NE_BASICO_POR_ESTRUCTURA = {
+        'hr_payroll_structure_co_nomina': 'CO_BASICO',
+        'hr_payroll_structure_co_liquidacion': 'CO_LIQ_SALARIOS',
+    }
+    _NE_BRUTO_POR_ESTRUCTURA = {
+        'hr_payroll_structure_co_nomina': 'CO_BRUTO',
+    }
+    # Formula que Odoo pone por defecto a cada regla nativa: solo esa (o la que puso este metodo) se reemplaza.
+    _NE_FORMULA_NATIVA = {
+        'BASIC': "result = payslip.paid_amount",
+        'GROSS': "result = categories['BASIC'] + categories['ALW']",
+        'NET': "result = categories['BASIC'] + categories['ALW'] + categories['DED']",
+    }
     _NE_FORMULA_NETO = "result = result_rules['%(codigo)s']['total'] if '%(codigo)s' in result_rules else 0.0"
 
     @api.model
     def _ne_alinear_reglas_nativas(self):
-        """Idempotente (corre en cada instalacion y actualizacion): fija la regla NET de cada estructura propia al neto del
-        modulo y la ordena DESPUES de esa regla. Solo toca la formula nativa de Odoo o la que puso este metodo: una formula que un
-        usuario edito a mano no se pisa."""
-        for xmlid, codigo in self._NE_NETO_POR_ESTRUCTURA.items():
-            estructura = self.env.ref('l10n_co_nomina_electronica.%s' % xmlid, raise_if_not_found=False)
-            if not estructura:
-                continue
-            reglas = estructura.with_context(active_test=False).rule_ids
-            neto, regla_modulo = reglas.filtered(lambda r: r.code == 'NET'), reglas.filtered(lambda r: r.code == codigo)
-            if not neto or not regla_modulo:
-                continue
-            formula = self._NE_FORMULA_NETO % {'codigo': codigo}
-            for regla in neto:
-                actual = (regla.amount_python_compute or '').strip()
-                if actual not in (formula, "result = categories['BASIC'] + categories['ALW'] + categories['DED']"):
-                    continue          # editada a mano: se respeta
-                regla.write({
-                    'amount_select': 'code', 'amount_python_compute': formula,
-                    'sequence': max(regla.sequence, max(regla_modulo.mapped('sequence')) + 1)})
+        """Idempotente (corre en cada instalacion y actualizacion): fija las reglas nativas NET, BASIC y GROSS de cada
+        estructura propia a la linea equivalente del modulo y las ordena DESPUES de ella. Solo toca la formula nativa de Odoo o
+        la que puso este metodo: una formula que un usuario edito a mano no se pisa."""
+        for codigo_nativo, por_estructura in (
+                ('NET', self._NE_NETO_POR_ESTRUCTURA), ('BASIC', self._NE_BASICO_POR_ESTRUCTURA),
+                ('GROSS', self._NE_BRUTO_POR_ESTRUCTURA)):
+            for xmlid, codigo in por_estructura.items():
+                estructura = self.env.ref('l10n_co_nomina_electronica.%s' % xmlid, raise_if_not_found=False)
+                if not estructura:
+                    continue
+                reglas = estructura.with_context(active_test=False).rule_ids
+                nativas = reglas.filtered(lambda r: r.code == codigo_nativo)
+                regla_modulo = reglas.filtered(lambda r: r.code == codigo)
+                if not nativas or not regla_modulo:
+                    continue
+                formula = self._NE_FORMULA_NETO % {'codigo': codigo}
+                for regla in nativas:
+                    actual = (regla.amount_python_compute or '').strip()
+                    if actual not in (formula, self._NE_FORMULA_NATIVA[codigo_nativo]):
+                        continue          # editada a mano: se respeta
+                    regla.write({
+                        'amount_select': 'code', 'amount_python_compute': formula,
+                        'sequence': max(regla.sequence, max(regla_modulo.mapped('sequence')) + 1)})
