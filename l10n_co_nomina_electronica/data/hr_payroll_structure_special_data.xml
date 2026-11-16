@@ -191,8 +191,11 @@ _valor_prima = result_rules['CO_PRIMA_VALOR']['total']
 # .164 (CST Art. 307; ET arts. 55-56): la prima no lleva aportes de salud ni pension del
 # empleado, y los aportes obligatorios solo son ingreso no constitutivo cuando se pagan
 # efectivamente -> IBC 0: la base de retencion no resta aportes que no existieron.
+# R-2c (doc 59 20.10 punto 1): el procedimiento (1 o 2) y el % fijo del semestre salen del CONTRATO, no de la configuracion
+# anual compartida; sin aportes voluntarios (son del salario del mes, no de la prima).
 _rete_result = _rete_cfg.compute_retefuente(
-    employee, _valor_prima, 0.0, 0.0, employee.company_id
+    employee, _valor_prima, 0.0, 0.0, employee.company_id,
+    contract=contract, payslip=payslip, fecha_mes=payslip.date_to, sin_aportes_voluntarios=True,
 )
 _valor = _rete_result.get('retencion_pesos', 0)
 result = -abs(_valor) if _valor &gt; 0 else 0
