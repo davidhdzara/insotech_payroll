@@ -86,9 +86,11 @@ class HrContractRetefuenteProcedure(models.Model):
         """Calcula y guarda el % fijo del semestre siguiente (Art. 384 ET).
 
         Botón manual -- RRHH lo presiona cada junio/diciembre para los
-        contratos en Procedimiento 2. Promedia el ingreso bruto/IBC de los
-        últimos 12 payslips confirmados (o los que haya, si hay menos) de
-        Nómina General, aplica la depuración + tabla marginal Art. 383
+        contratos en Procedimiento 2. Promedia el ingreso bruto/IBC MENSUAL
+        de los últimos 12 MESES con nómina confirmada (o los que haya, si
+        hay menos) de Nómina General -- R-2d (doc 59 §25): los recibos se
+        suman por mes calendario de ``date_to`` (regla D4), de modo que un
+        pago quincenal promedia meses y no medias quincenas --, aplica la depuración + tabla marginal Art. 383
         sobre ese promedio (vía ``compute_retefuente(force_procedure='1')``,
         sin importar el procedimiento por defecto de la configuración
         anual) y guarda el % resultante como el fijo vigente para el
@@ -116,8 +118,8 @@ class HrContractRetefuenteProcedure(models.Model):
         payslips = self.env['hr.payslip'].search([
             ('contract_id', '=', self.id),
             ('struct_id', '=', struct.id),
-            ('state', '=', 'done'),
-        ], order='date_from desc', limit=_MAX_MONTHS_AVERAGE)
+            ('state', 'in', ('done', 'paid')),
+        ], order='date_to desc')
         if not payslips:
             raise UserError(_(
                 'No hay nóminas confirmadas de Nómina General para este '
@@ -125,17 +127,20 @@ class HrContractRetefuenteProcedure(models.Model):
                 'que exige el Art. 384 ET.'
             ))
 
-        gross_values = []
-        ibc_values = []
+        # R-2d: la unidad del promedio es el MES calendario (por date_to), no el recibo. Cada recibo guarda su devengado real
+        # (CO_RETEFUENTE_BASE_GROSS, aditivo) y su IBC (CO_RETEFUENTE_BASE_IBC): se suman por mes y se promedian los meses.
+        por_mes = {}
         for payslip in payslips:
             base_gross_line = payslip.line_ids.filtered(lambda l: l.code == _BASE_GROSS_CODE)
             base_ibc_line = payslip.line_ids.filtered(lambda l: l.code == _BASE_IBC_CODE)
-            gross_values.append(base_gross_line.total if base_gross_line else 0.0)
-            ibc_values.append(base_ibc_line.total if base_ibc_line else 0.0)
+            mes = por_mes.setdefault((payslip.date_to.year, payslip.date_to.month), {'gross': 0.0, 'ibc': 0.0})
+            mes['gross'] += base_gross_line.total if base_gross_line else 0.0
+            mes['ibc'] += base_ibc_line.total if base_ibc_line else 0.0
+        meses = sorted(por_mes, reverse=True)[:_MAX_MONTHS_AVERAGE]
 
-        months_considered = len(payslips)
-        avg_gross = sum(gross_values) / months_considered
-        avg_ibc = sum(ibc_values) / months_considered
+        months_considered = len(meses)
+        avg_gross = sum(por_mes[m]['gross'] for m in meses) / months_considered
+        avg_ibc = sum(por_mes[m]['ibc'] for m in meses) / months_considered
 
         RetefuenteUvt = self.env['l10n.co.retefuente.uvt']
         rete_cfg = RetefuenteUvt.get_uvt_for_year(next_semester_start.year, self.company_id)
