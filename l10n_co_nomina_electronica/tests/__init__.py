@@ -138,3 +138,4 @@ from . import test_plazo_bloqueante
 from . import test_hora_bogota
 from . import test_flujo_usuario_real
 from . import test_migracion_vistas_211
+from . import test_neto_redondeo

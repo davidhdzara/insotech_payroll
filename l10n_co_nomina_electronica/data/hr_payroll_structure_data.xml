@@ -1377,7 +1377,9 @@ result = -payslip._ne_embargos_calcular(_salario_neto, _smmlv, _manual)
             <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = categories['DEV'] + categories['DEDU']</field>
+            <field name="amount_python_compute"># E-8 (H-QA-025): neto = suma de las lineas REDONDEADAS (como las guarda Odoo y las lee el asiento), no la suma
+# exacta de categories: ver HrPayslip._ne_neto_redondeado.
+result = payslip._ne_neto_redondeado(result_rules, 'DEV')</field>
             <field name="appears_on_payslip" eval="True"/>
         </record>
 
