@@ -16,6 +16,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from odoo.tools.misc import format_date
 
 from .common_documento import DocumentoFixture
 
@@ -223,13 +224,90 @@ class TestRetefuenteMes(DocumentoFixture, TransactionCase):
         res = segunda._ne_retencion_mes({'DEV_SAL': MEDIO})
         self.assertAlmostEqual(res['retencion'], 321216.0, delta=1.0)
 
-    def test_previo_sin_calcular_en_el_cierre_da_un_error_que_lo_nombra(self):
+    def test_previo_en_borrador_sin_calcular_en_el_cierre_da_un_error_que_nombra_recibo_y_periodo(self):
+        """TL (2026-11-16): el error nombra el recibo que se calcula Y el previo sin calcular, cada uno con su periodo
+        (dos recibos del mismo empleado pueden llamarse igual). El previo está en borrador y sin líneas."""
         contrato = self._contrato()
         previo = self._recibo(contrato, date(2026, 4, 1), date(2026, 4, 15))
+        self.assertEqual(previo.state, 'draft')
+        self.assertFalse(previo.line_ids)
         segunda = self._recibo(contrato, date(2026, 4, 16), date(2026, 4, 30))
         with self.assertRaises(UserError) as error:
             segunda._ne_retencion_mes({'DEV_SAL': MEDIO})
-        self.assertIn(previo.display_name, str(error.exception))
+        mensaje = str(error.exception)
+        self.assertIn(previo._ne_retencion_recibo_con_periodo(), mensaje)
+        self.assertIn(segunda._ne_retencion_recibo_con_periodo(), mensaje)
+        for dia in (date(2026, 4, 1), date(2026, 4, 15), date(2026, 4, 16), date(2026, 4, 30)):
+            self.assertIn(format_date(self.env, dia), mensaje)
+        self.assertIn(contrato.employee_id.display_name, mensaje)
+
+    def test_dos_previos_sin_calcular_se_nombran_todos(self):
+        contrato = self._contrato('weekly')
+        primero = self._recibo(contrato, date(2026, 4, 1), date(2026, 4, 7))
+        segundo = self._recibo(contrato, date(2026, 4, 8), date(2026, 4, 14))
+        cierre = self._recibo(contrato, date(2026, 4, 22), date(2026, 4, 28))
+        with self.assertRaises(UserError) as error:
+            cierre._ne_retencion_mes({'DEV_SAL': 2800000.0})
+        mensaje = str(error.exception)
+        self.assertIn(primero._ne_retencion_recibo_con_periodo(), mensaje)
+        self.assertIn(segundo._ne_retencion_recibo_con_periodo(), mensaje)
+
+    # ── el helper corre en cada compute_sheet: casos sin retención que NO deben fallar ──
+    def _sin_retencion(self, resultado):
+        self.assertEqual(resultado['retencion'], 0.0)
+        self.assertEqual(resultado['reintegro'], 0.0)
+        self.assertEqual(resultado['exento_vol_pension_afc'], 0.0)
+
+    def test_contrato_sin_aportes_voluntarios_ni_dependientes_no_falla(self):
+        """Contrato con los valores por defecto de la retención (Procedimiento 1, sin pensión voluntaria ni AFC) y un
+        empleado sin dependientes: es el caso de casi toda la nómina; solo retiene lo que da la tabla."""
+        contrato = self._contrato('monthly')
+        self.assertEqual(contrato.l10n_co_ne_retention_procedure, '1')
+        self.assertFalse(contrato.l10n_co_ne_pension_voluntaria or contrato.l10n_co_ne_afc)
+        recibo = self._recibo(contrato, date(2026, 4, 1), date(2026, 4, 30))
+        self.assertAlmostEqual(recibo._ne_retencion_mes({'DEV_SAL': SALARIO})['retencion'], 642432.0, delta=1.0)
+
+    def test_recibo_sin_ningun_devengado_no_retiene_ni_falla_en_ninguna_periodicidad(self):
+        """Categorías vacías (recibo sin líneas de devengado, p. ej. todo el periodo en licencia no remunerada). Mensual y
+        quincenal: la proyección de la 1.ª quincena (6.000.000 de salario restante) queda bajo 95 UVT, así que no retiene.
+        Un pago semanal NO entra aquí: su proyección completa el mes al salario y sí daría retención (diseño de R-2a)."""
+        for periodicidad, desde, hasta in (
+                ('monthly', date(2026, 4, 1), date(2026, 4, 30)), ('semi-monthly', date(2026, 4, 1), date(2026, 4, 15)),
+                ('semi-monthly', date(2026, 4, 16), date(2026, 4, 30))):
+            with self.subTest(periodicidad=periodicidad, hasta=hasta):
+                recibo = self._recibo(self._contrato(periodicidad), desde, hasta)
+                resultado = recibo._ne_retencion_mes({})
+                self._sin_retencion(resultado)
+                self.assertEqual(resultado['base_devengado'], 0.0)
+
+    def test_contrato_con_salario_cero_no_retiene_ni_falla(self):
+        for periodicidad, desde, hasta in (
+                ('monthly', date(2026, 4, 1), date(2026, 4, 30)), ('semi-monthly', date(2026, 4, 1), date(2026, 4, 15)),
+                ('semi-monthly', date(2026, 4, 16), date(2026, 4, 30))):
+            with self.subTest(periodicidad=periodicidad, hasta=hasta):
+                recibo = self._recibo(self._contrato(periodicidad, salario=0.0), desde, hasta)
+                self._sin_retencion(recibo._ne_retencion_mes({'DEV_SAL': 0.0}))
+
+    def test_contrato_terminado_antes_del_periodo_no_retiene_ni_falla(self):
+        """Quincena que no cierra, con el contrato ya terminado: 0 días bajo contrato -> no retiene (y no divide por 0)."""
+        contrato = self._contrato(date_end=date(2026, 3, 31))
+        recibo = self._recibo(contrato, date(2026, 4, 1), date(2026, 4, 15))
+        self._sin_retencion(recibo._ne_retencion_mes({'DEV_SAL': 0.0}))
+
+    def test_contrato_que_empieza_despues_del_periodo_no_retiene_ni_falla(self):
+        contrato = self._contrato(ingreso=date(2026, 5, 1))
+        recibo = self._recibo(contrato, date(2026, 4, 1), date(2026, 4, 15))
+        self._sin_retencion(recibo._ne_retencion_mes({'DEV_SAL': 0.0}))
+
+    def test_sin_configuracion_de_retencion_del_año_el_error_es_claro_y_no_una_excepcion_de_codigo(self):
+        """«Sin tablas»: si la compañía no tiene el registro de UVT/retención del año del recibo, hay un UserError claro que
+        nombra el año y la compañía (decisión .167, sin valores por defecto silenciosos: la nómina NO sale sin retención en
+        silencio). Año 2031 para no depender de otra configuración cargada sin compañía."""
+        recibo = self._recibo(self._contrato('monthly'), date(2031, 4, 1), date(2031, 4, 30))
+        with self.assertRaises(UserError) as error:
+            recibo._ne_retencion_mes({'DEV_SAL': SALARIO})
+        self.assertIn('2031', str(error.exception))
+        self.assertIn(self.company.name, str(error.exception))
 
     def test_previo_en_borrador_no_impide_calcular_un_recibo_que_no_cierra(self):
         contrato = self._contrato('weekly')
