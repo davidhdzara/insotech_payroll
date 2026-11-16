@@ -30,6 +30,8 @@ class L10nCoNeExchange(models.Model):
     transport_error = fields.Text(readonly=True)
     request_payload = fields.Binary(attachment=True, readonly=True)
     response_payload = fields.Binary(attachment=True, readonly=True)
+    request_filename = fields.Char(compute='_compute_nombres_descarga', string='Archivo de la solicitud')
+    response_filename = fields.Char(compute='_compute_nombres_descarga', string='Archivo de la respuesta')
     payslip_ids = fields.Many2many('hr.payslip',
         'l10n_co_ne_exchange_payslip_rel', 'exchange_id', 'payslip_id',
         string='Nóminas', readonly=True)
@@ -43,6 +45,16 @@ class L10nCoNeExchange(models.Model):
              '-- no se les pudo asociar un payslip, por lo que no '
              'cambiaron de estado. Requieren conciliación manual.',
     )
+
+    @api.depends('zip_key', 'queried_zip_key')
+    def _compute_nombres_descarga(self):
+        """Nombre con el que se DESCARGAN la solicitud y la respuesta SOAP (E-1, pieza ``.xml``): los payloads son XML y el
+        nombre era el ``zip_key`` a secas, sin extension y igual para los dos archivos. Base: el ZipKey del envio o, en una
+        consulta, el consultado; una consulta por CUNE no trae ninguno y usa el id del intercambio."""
+        for record in self:
+            base = record.zip_key or record.queried_zip_key or 'intercambio_%s' % record.id
+            record.request_filename = '%s_solicitud.xml' % base
+            record.response_filename = '%s_respuesta.xml' % base
 
     def write(self, vals):
         raise AccessError(_('El historial DIAN es evidencia inmutable.'))
