@@ -16,6 +16,7 @@ from datetime import timedelta
 
 from odoo import _, models
 from odoo.exceptions import UserError
+from odoo.tools.misc import format_date
 
 # Categorías cuya suma es la base salarial del mes (David/TL, §20.7): ``HEX`` es hija de ``DEV_SAL`` (ya va dentro);
 # ``VAC`` e ``INC`` son hijas de ``DEV``. ``DEV_NOSAL`` (auxilio de transporte y no salariales) queda FUERA.
@@ -64,6 +65,13 @@ class HrPayslipRetencion(models.Model):
             ('company_id', '=', self.company_id.id), ('date_to', '>=', inicio), ('date_to', '<=', fin),
             ('id', '!=', self.id), ('state', '!=', 'cancel')])
         return candidatos.filtered(lambda s: (s.date_to, s.id) < (self.date_to, self.id))
+
+    def _ne_retencion_recibo_con_periodo(self):
+        """Nombre del recibo con su periodo, para los errores de la retención: «"Recibo X" (del 01/04/2026 al 15/04/2026)»
+        (con la fecha en el formato del idioma del usuario). Dos recibos del mismo empleado pueden llamarse igual."""
+        self.ensure_one()
+        return _('"%(recibo)s" (del %(desde)s al %(hasta)s)', recibo=self.display_name,
+                 desde=format_date(self.env, self.date_from), hasta=format_date(self.env, self.date_to))
 
     def _ne_retencion_dias_del_mes(self):
         """Días comerciales del mes de ``date_to`` en que el contrato estuvo vigente (30 en un mes completo)."""
@@ -125,11 +133,11 @@ class HrPayslipRetencion(models.Model):
         sin_calcular = previos.filtered(lambda s: not s.line_ids)
         if sin_calcular:
             raise UserError(_(
-                'La retención en la fuente de "%(recibo)s" (%(empleado)s) cierra el mes y necesita lo ya retenido en los '
+                'La retención en la fuente de %(recibo)s (%(empleado)s) cierra el mes y necesita lo ya retenido en los '
                 'recibos anteriores del mismo mes, pero todavía no están calculados: %(previos)s. Calcúlelos primero (en '
                 'orden) y vuelva a calcular este recibo.',
-                recibo=self.display_name, empleado=self.employee_id.display_name,
-                previos=', '.join(sin_calcular.mapped('display_name'))))
+                recibo=self._ne_retencion_recibo_con_periodo(), empleado=self.employee_id.display_name,
+                previos='; '.join(sin_calcular.mapped(lambda s: s._ne_retencion_recibo_con_periodo()))))
         lineas = previos.mapped('line_ids')
         categorias_base = self._ne_retencion_categorias_base()
         base_previa = sum(l.total for l in lineas if l.category_id in categorias_base)
