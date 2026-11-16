@@ -263,7 +263,7 @@ class HrSalaryRule(models.Model):
         'CO_CCF_CIA': 'employee_ccf',
         'CO_ARL_CIA': 'company_arl',
         'CO_SENA_CIA': 'company_sena', 'CO_ICBF_CIA': 'company_icbf',
-        'CO_RETEFUENTE': 'company_dian', 'CO_PRIMA_RETE': 'company_dian',
+        'CO_RETEFUENTE': 'company_dian', 'CO_PRIMA_RETE': 'company_dian', 'CO_REINTEGRO_RETE': 'company_dian',
         'CO_LIQ_RETE': 'company_dian', 'CO_BON_RETE': 'company_dian',
         'CO_SINDICATO': 'contract_sindicato', 'CO_AFC': 'contract_afc',
         'CO_PENSION_VOL': 'contract_pension_voluntaria',

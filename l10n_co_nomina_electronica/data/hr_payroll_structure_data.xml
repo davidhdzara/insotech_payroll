@@ -53,6 +53,16 @@
             <field name="note">Incapacidades EPS/ARL y licencias de maternidad/paternidad.</field>
         </record>
 
+        <!-- R-2b (doc 59 25): reintegro de retencion en la fuente. Hija de DEV (suma al neto y a Total Devengados) pero NO de
+             DEV_SAL ni DEV_NOSAL: no entra al IBC, ni a la regla del 40 % de no salariales, ni a la base de la retencion, ni
+             a PILA/UGPP de salario. -->
+        <record id="hr_salary_rule_category_reintegros" model="hr.salary.rule.category">
+            <field name="name">Reintegros</field>
+            <field name="code">REINT</field>
+            <field name="parent_id" ref="hr_salary_rule_category_devengados"/>
+            <field name="note">Valores que la empresa devuelve al trabajador por una deduccion mal practicada (no son salario).</field>
+        </record>
+
         <record id="hr_salary_rule_category_deducciones" model="hr.salary.rule.category">
             <field name="name">Deducciones</field>
             <field name="code">DEDU</field>
@@ -1122,6 +1132,34 @@ result = -abs(_valor) if _valor > 0 else 0
 Configurar en Nomina > Configuracion > Retencion en la Fuente.
 Soporta Procedimiento 1 (tabla marginal) y Procedimiento 2 (porcentaje fijo).
 La depuracion incluye: aportes obligatorios, voluntarios, AFC, dependientes, renta exenta 25%.</field>
+        </record>
+
+        <!-- ==================== REINTEGRO DE RETENCION EN LA FUENTE (R-2b) ==================== -->
+        <record id="hr_salary_rule_co_reintegro_rete" model="hr.salary.rule">
+            <field name="name">Reintegro de Retención en la Fuente</field>
+            <field name="code">CO_REINTEGRO_RETE</field>
+            <!-- Antes de Total Devengados (seq 99) para que el reintegro cuente en el neto y en el total del recibo; despues de
+                 todos los devengados (el mayor es seq 86): la base de la retencion no cambia entre esta regla y CO_RETEFUENTE. -->
+            <field name="sequence">98</field>
+            <field name="category_id" ref="hr_salary_rule_category_reintegros"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">
+# Misma configuracion que CO_RETEFUENTE (error claro si falta la del ano)
+_rete_cfg = payslip._ne_retefuente_config()
+result = bool(_rete_cfg) and payslip._ne_retencion_mes(categories).get('reintegro', 0) > 0
+            </field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">
+# R-2b (doc 59 20.9 y 25): si en el recibo que cierra el mes la retencion del mes real es MENOR que lo ya retenido en los
+# recibos anteriores, este recibo retiene 0 (CO_RETEFUENTE) y devuelve la diferencia al trabajador en su neto. Nunca ambas.
+result = payslip._ne_retencion_mes(categories).get('reintegro', 0)
+            </field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">Reintegro</field>
+            <field name="note">Devolucion de retencion en la fuente retenida de mas en un recibo anterior del mismo mes (Anexo DIAN V1.0
+NIE201 Devengados/Reintegro). Para contabilizar, configure la cuenta de la regla: DEBITO = la cuenta de retencion en la fuente por pagar
+(la misma de CO_RETEFUENTE); el neto por pagar al empleado ya lo acredita. Sin cuenta, el asiento del recibo no cuadra.</field>
         </record>
 
         <!-- ==================== EXENTO PENSION VOLUNTARIA + AFC (invisible, acumulador) ==================== -->
