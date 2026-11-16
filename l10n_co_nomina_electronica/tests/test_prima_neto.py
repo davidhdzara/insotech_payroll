@@ -84,7 +84,7 @@ class TestPrimaNeto(TransactionCase):
     # ── Retención en la fuente de la prima (.164): base SIN descontar salud/pensión ──────────
     # UVT 2026 = 52.374; tabla Art. 383 ET; renta exenta 25 % (tope 790 UVT anuales / 12 = 3.447.955).
     # Sin aportes: subtotal = valor de la prima; base = valor − 25 % del valor.
-    def _prima_con_retencion(self, wage):
+    def _prima_con_retencion(self, wage, contrato_extra=None, antes_de_calcular=None):
         self.env['l10n.co.retefuente.uvt'].create({
             'year': '2026', 'company_id': self.company.id, 'procedure': '1'})
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
@@ -93,7 +93,9 @@ class TestPrimaNeto(TransactionCase):
         contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Prima Rete', 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
-            'wage': wage, 'date_start': date(2024, 3, 1), 'state': 'open'})
+            'wage': wage, 'date_start': date(2024, 3, 1), 'state': 'open', **(contrato_extra or {})})
+        if antes_de_calcular:
+            antes_de_calcular(contract)
         slip = self.env['hr.payslip'].create({
             'name': 'Prima Rete', 'employee_id': employee.id, 'contract_id': contract.id,
             'company_id': self.company.id, 'struct_id': self.est_prima.id,
@@ -133,3 +135,23 @@ class TestPrimaNeto(TransactionCase):
         self.assertAlmostEqual(valor, 20000000.0, delta=0.01)
         self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_RETE'), -2958605.0, delta=0.01)
         self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_NETO'), valor - 2958605.0, delta=0.01)
+
+    # ── R-2c (doc 59 §20.10 punto 1): el procedimiento de la prima sale del contrato ──
+    def test_prima_de_un_contrato_en_procedimiento_2_usa_el_porcentaje_fijo_del_contrato(self):
+        """Prima 10.000.000 (salario 20.000.000), contrato en Procedimiento 2 con 10 % fijo para el semestre que inicia el
+        1-jul-2026: renta exenta 25 % = 2.500.000; base 7.500.000; retención = 7.500.000 x 10 % = 750.000. Antes la regla no
+        pasaba el contrato y aplicaba la tabla del Art. 383 (479.649) sin importar el procedimiento del contrato."""
+        def proc2(contrato):
+            self.env['l10n.co.retefuente.procedure2'].create({
+                'contract_id': contrato.id, 'semester_start': date(2026, 7, 1), 'fixed_percentage': 10.0})
+        slip = self._prima_con_retencion(
+            20000000.0, contrato_extra={'l10n_co_ne_retention_procedure': '2'}, antes_de_calcular=proc2)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_VALOR'), 10000000.0, delta=0.01)
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_RETE'), -750000.0, delta=1.0)
+
+    def test_la_prima_no_descuenta_la_pension_voluntaria_ni_el_afc_del_mes(self):
+        """Mismo caso de 10.000.000 con voluntaria 1.000.000 + AFC 1.000.000 mensuales en el contrato: la retención de la prima
+        no cambia (479.649); esos aportes son del salario del mes y no se descuentan además de la prima."""
+        slip = self._prima_con_retencion(
+            20000000.0, contrato_extra={'l10n_co_ne_pension_voluntaria': 1000000.0, 'l10n_co_ne_afc': 1000000.0})
+        self.assertAlmostEqual(self._total(slip, 'CO_PRIMA_RETE'), -479649.0, delta=0.01)
