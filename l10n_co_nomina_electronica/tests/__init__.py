@@ -140,3 +140,4 @@ from . import test_flujo_usuario_real
 from . import test_migracion_vistas_211
 from . import test_neto_redondeo
 from . import test_exchange_nombre_descarga
+from . import test_salario_mes
