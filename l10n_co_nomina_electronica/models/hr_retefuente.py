@@ -201,7 +201,7 @@ class L10nCoRetefuenteUvt(models.Model):
     # ══════════════════════════════════════════════════════════════════
     def compute_retefuente(self, employee, gross_salary, ibc_pension,
                            ibc_salud, company=None, contract=None,
-                           payslip=None, force_procedure=None):
+                           payslip=None, force_procedure=None, fecha_mes=None):
         """Calcula la retención en la fuente mensual para un empleado.
 
         Ejecuta la depuración de la base gravable según la normatividad
@@ -232,6 +232,11 @@ class L10nCoRetefuenteUvt(models.Model):
             aplicar SIEMPRE la tabla marginal Art. 383 (fuerza '1') sobre
             el ingreso PROMEDIO al derivar el % fijo semestral, sin
             importar qué procedimiento tenga configurado el año en curso.
+        :param fecha_mes: date (opcional -- R-2, doc 59 §25). Cualquier día del MES al que se asigna la retención (el
+            de ``date_to`` del recibo, regla D4). Si se pasa: (a) el acumulado del techo anual de exentos llega hasta el
+            último día del mes ANTERIOR (no incluye los recibos del mismo mes, que la retención del mes ya recalcula
+            completa) y (b) el semestre del Procedimiento 2 se elige con esta fecha. Sin ella, ambos usan
+            ``payslip.date_from`` como siempre (liquidación, prima, ejemplo).
         :returns: dict con el detalle de la depuración y el valor final
             de retención en pesos, con la siguiente estructura::
 
@@ -315,8 +320,9 @@ class L10nCoRetefuenteUvt(models.Model):
         #     ejemplo/demo), se omite el techo anual.
         if payslip is not None:
             techo_anual = _p('l10n_co_max_vol_pension_afc_anual_uvt') * uvt
-            _year_start = payslip.date_from.replace(month=1, day=1)
-            _dia_anterior = payslip.date_from - timedelta(days=1)
+            _corte = fecha_mes.replace(day=1) if fecha_mes else payslip.date_from
+            _year_start = _corte.replace(month=1, day=1)
+            _dia_anterior = _corte - timedelta(days=1)
             if _dia_anterior >= _year_start:
                 acumulado_previo = payslip._sum(
                     'CO_EXENTO_PENSION_AFC', _year_start, _dia_anterior,
@@ -396,7 +402,7 @@ class L10nCoRetefuenteUvt(models.Model):
             # no se ha calculado el semestre todavia.
             pct = self.percentage_procedure2
             if contract:
-                _ref = payslip.date_from if payslip else fields.Date.context_today(self)
+                _ref = fecha_mes or (payslip.date_from if payslip else fields.Date.context_today(self))
                 semester_start = _ref.replace(month=1, day=1) if _ref.month <= 6 else _ref.replace(month=7, day=1)
                 proc2 = self.env['l10n.co.retefuente.procedure2'].search([
                     ('contract_id', '=', contract.id),

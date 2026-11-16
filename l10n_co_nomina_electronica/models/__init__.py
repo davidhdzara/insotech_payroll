@@ -11,6 +11,7 @@ from . import hr_contract
 from . import hr_salary_rule
 from . import l10n_co_ne_documento_mixin
 from . import hr_payslip
+from . import hr_payslip_retencion
 from . import l10n_co_ne_documento_intento
 from . import l10n_co_ne_documento
 from . import l10n_co_ne_documento_send
