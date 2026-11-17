@@ -141,3 +141,4 @@ from . import test_migracion_vistas_211
 from . import test_neto_redondeo
 from . import test_exchange_nombre_descarga
 from . import test_salario_mes
+from . import test_pagar_neto
