@@ -17,7 +17,8 @@ neto guardados: con un centavo de diferencia no cuadra y no se crea. Aquí el ne
 una sola fuente (la línea guardada) para lo que se ve, lo que se suma a mano y lo que se contabiliza.
 """
 
-from odoo import models
+from odoo import _, models
+from odoo.exceptions import UserError
 
 
 class HrPayslipNeto(models.Model):
@@ -27,6 +28,28 @@ class HrPayslipNeto(models.Model):
         """Redondea como Odoo guarda el total de una línea: a los decimales de la moneda de la compañía del recibo."""
         self.ensure_one()
         return self.company_id.currency_id.round(valor)
+
+    def _ne_total_regla(self, result_rules, codigo):
+        """Total SIN redondear que el motor ya calculó para la regla ``codigo``, o 0.0 si no se evaluó. LECTURA SIN MUTAR.
+
+        ``result_rules`` es un ``DefaultDictPayroll`` (``hr_payroll/models/hr_payslip.py:23-27``, instanciado en ``:833``): su
+        ``get(clave, default)`` INSERTA el default cuando la clave falta y el default no es ``None``, así que
+        ``result_rules.get(codigo, {})`` deja un ``{}`` sin ``total`` (causa del ``KeyError: 'total'`` de la regresión bv).
+        Aquí se pregunta con ``in`` (no inserta) y se lee con ``[]`` solo lo presente. El motor guarda siempre
+        ``{'total', 'amount', 'quantity', 'rate'}`` por regla evaluada (``:998``) y ``__missing__`` crea el mismo conjunto; una
+        entrada sin ``total`` significa que otra fórmula la modificó: error claro, no un cero en silencio."""
+        if codigo not in result_rules:
+            return 0.0
+        entrada = result_rules[codigo]
+        if not isinstance(entrada, dict) or 'total' not in entrada:
+            raise UserError(_(
+                'La regla "%(codigo)s" aparece en el resultado del cálculo sin su total (tipo %(tipo)s, claves %(claves)s). '
+                'El motor guarda siempre total, importe, cantidad y tasa de una regla evaluada: otra fórmula modificó '
+                'ese resultado. Revise las fórmulas que lo leen o lo escriben (por ejemplo result_rules.get(código, {}) '
+                'deja una entrada vacía).',
+                codigo=codigo, tipo=type(entrada).__name__,
+                claves=sorted(entrada) if isinstance(entrada, dict) else '-'))
+        return entrada['total']
 
     def _ne_suma_lineas_redondeadas(self, result_rules, codigo_categoria):
         """Suma de las líneas de la categoría ``codigo_categoria`` y de sus descendientes (la misma agrupación de
@@ -49,7 +72,7 @@ class HrPayslipNeto(models.Model):
             if regla.code in vistos or regla.category_id not in categorias or regla.code not in result_rules:
                 continue
             vistos.add(regla.code)          # un código evaluado dos veces deja un solo total (el último)
-            total += self._ne_redondear_moneda(result_rules[regla.code]['total'])
+            total += self._ne_redondear_moneda(self._ne_total_regla(result_rules, regla.code))
         return total
 
     def _ne_neto_redondeado(self, result_rules, categoria_devengado='DEV'):

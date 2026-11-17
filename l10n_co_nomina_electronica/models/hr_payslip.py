@@ -2249,13 +2249,16 @@ class HrPayslip(models.Model):
         Art. 3.2.5.1; decision de David, 2026-11-10). Solo cuenta a salud y pension,
         no a ARL ni parafiscales; el descuento al empleado es el normal (Art.
         3.2.1.10), a diferencia de SLN. Integral: 0 (como H-017a).
-        `codigos` permite acotar; por defecto los 4 de ausencia calendario."""
+        `codigos` permite acotar; por defecto los 4 de ausencia calendario.
+
+        Lee SIN mutar (.275): ``result_rules.get(codigo, {})`` insertaba un ``{}`` en el ``DefaultDictPayroll`` del motor
+        (``hr_payroll/models/hr_payslip.py:23-27``) para cada ausencia no evaluada, y el neto de E-8 fallaba con
+        ``KeyError: 'total'``. El resultado numérico es el mismo que antes (0.0 si no se evaluó)."""
         if contract.l10n_co_ne_integral_salary:
             return 0.0
         if codigos is None:
             codigos = _NOVEDAD_AUSENCIA_CALENDARIO_CODES
-        return sum(
-            result_rules.get(codigo, {}).get('total', 0.0) for codigo in sorted(codigos))
+        return sum(self._ne_total_regla(result_rules, codigo) for codigo in sorted(codigos))
 
     def _ne_ibc_seguridad_social(self, categories, contract, inputs, worked_days, result_rules):
         """Base que guarda CO_SS_BASE_IBC y que _ne_ultimo_ibc_anterior() lee el mes
