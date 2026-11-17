@@ -270,3 +270,36 @@ class TestRetefuenteMes(DocumentoFixture, TransactionCase):
         segunda = self._recibo(contrato, date(2026, 4, 16), date(2026, 4, 30))
         res = segunda._ne_retencion_mes({'DEV_SAL': MEDIO})
         self.assertAlmostEqual(res['retencion'], 321216.0, delta=1.0)
+
+    # ── R-2b (doc 59 §20.9 y §25): reintegro de retención ────────────
+    def test_un_reintegro_anterior_se_resta_de_lo_retenido(self):
+        """Recibo previo con retención 321.216 y un reintegro de 100.000 (línea CO_REINTEGRO_RETE de un cierre anterior del
+        mismo mes): lo retenido neto es 221.216; el cierre retiene 642.432 - 221.216 = 421.216."""
+        contrato = self._contrato()
+        previo = self._previo(contrato, date(2026, 4, 1), date(2026, 4, 15), MEDIO, retenido=321216.0)
+        self._linea(previo, 'CO_REINTEGRO_RETE', 100000.0)
+        segunda = self._recibo(contrato, date(2026, 4, 16), date(2026, 4, 30))
+        res = segunda._ne_retencion_mes({'DEV_SAL': MEDIO})
+        self.assertAlmostEqual(res['retencion'], 421216.0, delta=1.0)
+
+    def test_la_regla_de_reintegro_va_antes_del_total_devengados_y_despues_de_todos_los_devengados(self):
+        reglas = self.struct.with_context(active_test=False).rule_ids
+        reintegro = reglas.filtered(lambda r: r.code == 'CO_REINTEGRO_RETE')
+        self.assertEqual(len(reintegro), 1)
+        self.assertLess(reintegro.sequence, reglas.filtered(lambda r: r.code == 'CO_BRUTO').sequence)
+        devengados = reglas.filtered(lambda r: r.category_id.code in ('DEV_SAL', 'HEX', 'VAC', 'INC', 'DEV_NOSAL', 'PREST'))
+        self.assertGreater(reintegro.sequence, max(devengados.mapped('sequence')))
+
+    def test_el_reintegro_suma_al_neto_pero_no_a_la_base_ni_al_ibc(self):
+        reintegro = self.struct.with_context(active_test=False).rule_ids.filtered(lambda r: r.code == 'CO_REINTEGRO_RETE')
+        self.assertEqual(reintegro.category_id.code, 'REINT')
+        self.assertEqual(reintegro.category_id.parent_id.code, 'DEV')           # cuenta en CO_BRUTO y CO_NETO (categories['DEV'])
+        recibo = self._recibo(self._contrato('monthly'), date(2026, 4, 1), date(2026, 4, 30))
+        codigos = set(recibo._ne_retencion_categorias_base().mapped('code'))
+        self.assertNotIn('REINT', codigos)                                        # no entra a la base de la retención
+        self.assertFalse({'DEV_SAL', 'DEV_NOSAL'} & {reintegro.category_id.code, reintegro.category_id.parent_id.code})
+
+    def test_el_reintegro_se_reporta_a_la_dian_como_devengado_reintegro_y_con_tercero_dian(self):
+        reintegro = self.struct.with_context(active_test=False).rule_ids.filtered(lambda r: r.code == 'CO_REINTEGRO_RETE')
+        self.assertEqual(reintegro.l10n_co_ne_dian_concept, 'Reintegro')
+        self.assertEqual(reintegro.l10n_co_tercero_origen, 'company_dian')
