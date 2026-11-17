@@ -5,11 +5,11 @@ DECISIÓN (TL, 2026-11-16, opción C1): la cuenta del neto va en la regla nativa
 ``CO_NETO``/``CO_LIQ_NETO``/``CO_PRIMA_NETO``/``CO_BON_NETO``; una guarda impide configurar la cuenta en las dos (duplicaría el
 crédito del neto) y ``_ne_fechas_pagos_contables`` solo mira la línea del neto (cuenta de ``NET`` + partner del empleado).
 
-ESTADO: este archivo se escribió ANTES del código de producción (pruebas «rojas por escrito»). No ejecutadas (no hay Odoo local).
-- **ROJAS a propósito hasta que exista E-10 (2):** ``test_la_guarda_...`` y ``test_un_pago_a_un_tercero_...``.
-- **De CARACTERIZACIÓN del comportamiento nativo en que C1 se apoya (se esperan VERDES hoy y después):** si alguna falla por el
-  fixture contable, se ajusta el fixture ANTES de escribir código, porque son el contrato de que «NET con cuenta por pagar» sirve.
-NO regresionar esta rama hasta que E-10 esté implementado.
+ESTADO (E-10 implementado, .273): el archivo se escribió ANTES del código (2 pruebas rojas a propósito: la guarda y el pago a un tercero)
+y ahora cubre también lo implementado. Las pruebas de CARACTERIZACIÓN del nativo (asiento con la cuenta en ``NET``, «Pagar», orden con
+E-5) se apoyan en lo que QA validó de punta a punta en la compañía de prueba 2841 (recibo 63693: cuenta 250500 por pagar y conciliable en
+``NET``, ``CO_NETO`` vacía, una línea del neto con el empleado como tercero, «Pagar» real, recibo «Hecho» → «Pagado»). NO ejecutadas
+en Odoo (no hay Odoo local); si alguna falla por el fixture contable, se ajusta el fixture, no el producto.
 
 Texto nativo (consultor v19, v18 y v19): ``hr_payroll_account/models/hr_payslip.py`` ``action_register_payment`` (chequeo de la regla de
 código ``NET``, cuenta bancaria de confianza, asiento publicado, estado distinto de ``paid``) y ``_prepare_line_values`` (el partner
@@ -271,3 +271,53 @@ class TestPagarNeto(TransactionCase):
         self.recibo.write({'state': 'paid'})
         with self.assertRaisesRegex(UserError, 'unpaid documents'):
             self.recibo.action_register_payment()
+
+    # ── lo implementado en E-10 (.273) ───────────────────────────────
+    def test_la_guarda_tambien_se_dispara_al_confirmar_el_recibo(self):
+        """Desde la confirmación real (``action_payslip_done``), antes de crear el asiento y sin cambiar el estado del recibo."""
+        self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
+        self._cuenta_del_neto(self.regla_co_neto, self.otra_cuenta_neto)
+        self.recibo.write({'state': 'verify'})
+        with self.assertRaises(UserError) as error:
+            self.recibo.action_payslip_done()
+        self.assertIn('CO_NETO', str(error.exception))
+        self.assertEqual(self.recibo.state, 'verify')
+
+    def test_la_guarda_dice_donde_dejar_la_cuenta(self):
+        self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
+        self._cuenta_del_neto(self.regla_co_neto, self.otra_cuenta_neto)
+        with self.assertRaisesRegex(UserError, 'SOLO en la regla NET'):
+            self.recibo._ne_validar_cuenta_neto()
+
+    def test_la_guarda_no_dice_nada_si_ninguna_de_las_dos_tiene_cuenta(self):
+        self._cuenta_del_neto(self.regla_net, False)
+        self._cuenta_del_neto(self.regla_co_neto, False)
+        self.recibo._ne_validar_cuenta_neto()           # no lanza
+
+    def test_las_lineas_del_neto_son_solo_la_del_empleado_en_la_cuenta_de_net(self):
+        self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
+        asiento = self._asiento_publicado()
+        self.assertEqual(self.recibo._ne_lineas_del_neto(), self._linea_de(asiento, self.neto_por_pagar))
+
+    def test_una_linea_en_la_cuenta_del_neto_con_otro_tercero_no_es_la_del_neto(self):
+        self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
+        asiento = self.env['account.move'].create({
+            'move_type': 'entry', 'journal_id': self.diario_nomina.id, 'date': date(2026, 3, 31),
+            'line_ids': [
+                (0, 0, {'account_id': self.gasto.id, 'debit': 1000.0, 'credit': 0.0}),
+                (0, 0, {'account_id': self.neto_por_pagar.id, 'debit': 0.0, 'credit': 1000.0, 'partner_id': self.eps.id})]})
+        asiento.action_post()
+        self.recibo.write({'move_id': asiento.id})
+        self.assertFalse(self.recibo._ne_lineas_del_neto())
+
+    def test_sin_cuenta_en_net_no_hay_linea_del_neto_y_el_error_explica_donde_va_la_cuenta(self):
+        """Configuración anterior (cuenta solo en CO_NETO): no se detecta el pago y el error dice qué hacer."""
+        self._cuenta_del_neto(self.regla_net, False)
+        self._cuenta_del_neto(self.regla_co_neto, self.neto_por_pagar)
+        asiento = self._asiento_publicado()
+        self._pagar(self._linea_de(asiento, self.neto_por_pagar), self.empleado.work_contact_id, 900000.0, date(2026, 4, 5))
+        self.assertFalse(self.recibo._ne_lineas_del_neto())
+        self.assertEqual(self.recibo._ne_fechas_pagos_contables(), [])
+        self.company.l10n_co_ne_fuente_fecha_pago = 'contabilidad'
+        with self.assertRaisesRegex(UserError, 'línea del neto'):
+            self.recibo._ne_fechas_pago()

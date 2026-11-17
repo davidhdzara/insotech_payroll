@@ -706,7 +706,29 @@ class HrPayslip(models.Model):
                 donde=self[modelo]._description, nombre=self[modelo].display_name))
         return [(partner, 1.0)]
 
+    def _ne_validar_cuenta_neto(self):
+        """E-10 (doc 64, H-QA-030): la cuenta del neto va SOLO en la regla nativa ``NET`` de la estructura (el nativo identifica el neto
+        por ese codigo: partner del empleado en la linea del asiento y boton «Pagar»); la regla del modulo (``CO_NETO``,
+        ``CO_LIQ_NETO``, ``CO_PRIMA_NETO`` o ``CO_BON_NETO``) queda SIN cuenta. Con cuenta en las dos el asiento llevaria el neto dos
+        veces (descuadre real): error claro que dice cual vaciar. Con cuenta solo en la regla del modulo (configuracion anterior) no se
+        bloquea: el asiento sale como siempre y «Pagar» sigue sin habilitarse."""
+        for recibo in self._ne_solo_colombia():
+            reglas = recibo.struct_id.rule_ids.with_company(recibo.company_id)
+            con_cuenta = reglas.filtered(lambda r: r.account_debit or r.account_credit)
+            nativa = con_cuenta.filtered(lambda r: r.code == 'NET')
+            del_modulo = con_cuenta.filtered(lambda r: r.code in recibo._NE_NETO_CODES)
+            if nativa and del_modulo:
+                raise UserError(_(
+                    'La cuenta del neto está configurada en DOS reglas de la estructura "%(estructura)s" de la compañía '
+                    '"%(compania)s": la regla nativa %(nativa)s («%(nombre_nativa)s») y la del módulo %(modulo)s («%(nombre_modulo)s»). '
+                    'El asiento llevaría el neto dos veces. Deje la cuenta SOLO en la regla NET y vacíe la de %(modulo)s '
+                    '(Nómina > Configuración > Nómina Colombia > Cuentas Contables).',
+                    estructura=recibo.struct_id.name, compania=recibo.company_id.name,
+                    nativa=nativa[0].code, nombre_nativa=nativa[0].name,
+                    modulo=del_modulo[0].code, nombre_modulo=del_modulo[0].name))
+
     def _prepare_slip_lines(self, date, line_ids):
+        self._ne_validar_cuenta_neto()
         new_lines = super()._prepare_slip_lines(date, line_ids)
         precision = self.company_id.currency_id.decimal_places
         procesadas = []
@@ -763,6 +785,7 @@ class HrPayslip(models.Model):
         colombia = self._ne_solo_colombia()
         colombia._ne_validar_duracion_periodo()
         colombia._ne_validar_sin_solape()
+        colombia._ne_validar_cuenta_neto()
         res = super(HrPayslip, self).action_payslip_done()
         colombia._ne_aplicar_libranzas()
         colombia._ne_refrescar_ibc_mensual()
@@ -1627,18 +1650,32 @@ class HrPayslip(models.Model):
         if not fechas:
             raise UserError(_(
                 'El recibo "%(recibo)s" (%(empleado)s) no tiene pagos conciliados en Contabilidad: no se puede '
-                'saber su fecha de pago.', recibo=self.display_name, empleado=self.employee_id.display_name))
+                'saber su fecha de pago. El pago debe conciliar la línea del neto del asiento (la cuenta del neto va en la regla '
+                'NET, con el empleado como tercero).', recibo=self.display_name, empleado=self.employee_id.display_name))
         return fechas
 
     def _ne_fecha_pago(self):
         """Primera fecha de pago: define el mes del documento (Oficio DIAN 901476: pago o abono, lo primero)."""
         return self._ne_fechas_pago()[0]
 
-    def _ne_fechas_pagos_contables(self):
-        """Fechas de los pagos contables (account.payment) conciliados con las líneas del asiento del recibo.
-        NO VERIFICADO en Odoo cargado: el camino es el nativo por conciliaciones parciales (matched_*)."""
+    def _ne_lineas_del_neto(self):
+        """Línea(s) del asiento del recibo que son el neto del empleado (E-10, doc 64): las de la cuenta de la regla nativa ``NET`` de
+        la estructura con el empleado como tercero (``work_contact_id``; el nativo solo lo pone a la línea de la regla ``NET``). Sin
+        cuenta en ``NET`` (configuración anterior, cuenta en ``CO_NETO``) no hay línea del neto identificable: vacío."""
         self.ensure_one()
-        lineas = self.move_id.line_ids
+        nativas = self.struct_id.rule_ids.with_company(self.company_id).filtered(lambda r: r.code == 'NET')
+        cuentas = nativas.account_credit | nativas.account_debit
+        if not cuentas:
+            return self.move_id.line_ids.browse()
+        contacto = self.employee_id.work_contact_id
+        return self.move_id.line_ids.filtered(lambda l: l.account_id in cuentas and l.partner_id == contacto)
+
+    def _ne_fechas_pagos_contables(self):
+        """Fechas de los pagos contables (account.payment) conciliados con la LÍNEA DEL NETO del asiento del recibo (E-10, doc 64): un
+        pago a un tercero del mismo asiento (EPS, AFP, DIAN) nunca fija la fecha de pago del recibo. Camino nativo por
+        conciliaciones parciales (``matched_*``). Se verificó con un pago real en la compañía de prueba 2841 (QA, recibo 63693)."""
+        self.ensure_one()
+        lineas = self._ne_lineas_del_neto()
         contrapartes = lineas.matched_debit_ids.debit_move_id | lineas.matched_credit_ids.credit_move_id
         pagos = contrapartes.payment_id.filtered(lambda p: p.move_id.state == 'posted')
         return sorted({p.date for p in pagos})
