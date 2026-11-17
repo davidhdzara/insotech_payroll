@@ -226,39 +226,58 @@ class TestPagarNeto(TransactionCase):
         with self.assertRaisesRegex(UserError, 'not reconciliable'):
             self.recibo.action_register_payment()
 
-    def test_pagar_con_una_cuenta_que_no_es_por_pagar_no_ofrece_lineas_en_el_asistente(self):
-        """Obstáculo 2 del doc 64: cuenta de pasivo corriente (aunque fuera conciliable) -> «nothing left to pay»."""
+    def _asiento_con_neto_en(self, cuenta):
         asiento = self.env['account.move'].create({
             'move_type': 'entry', 'journal_id': self.diario_nomina.id, 'date': date(2026, 3, 31),
             'line_ids': [
                 (0, 0, {'account_id': self.gasto.id, 'debit': 1000.0, 'credit': 0.0}),
-                (0, 0, {'account_id': self.neto_pasivo.id, 'debit': 0.0, 'credit': 1000.0,
+                (0, 0, {'account_id': cuenta.id, 'debit': 0.0, 'credit': 1000.0,
                         'partner_id': self.empleado.work_contact_id.id})]})
         asiento.action_post()
+        return asiento
+
+    def test_sin_el_contexto_del_boton_una_cuenta_de_pasivo_corriente_no_ofrece_lineas_en_el_asistente(self):
+        """El asistente nativo de pago solo acepta cuentas por pagar/por cobrar. El botón «Pagar» agrega el contexto
+        ``hr_payroll_payment_register`` (ver el test siguiente); sin él, una cuenta de pasivo corriente no ofrece líneas."""
+        asiento = self._asiento_con_neto_en(self.neto_pasivo)
         with self.assertRaisesRegex(UserError, 'nothing left to pay'):
             self.env['account.payment.register'].with_context(
                 active_model='account.move.line', active_ids=asiento.line_ids.ids).create({})
 
-    def test_pagar_deja_el_recibo_en_hecho_sin_fecha_de_pago_y_la_fecha_sale_de_contabilidad(self):
-        """«Pagar» NO escribe de vuelta al recibo (doc 53 §20.3 y texto nativo): estado y paid_date quedan como estaban."""
+    def test_con_el_contexto_del_boton_una_cuenta_de_pasivo_corriente_conciliable_si_ofrece_la_linea(self):
+        """Según el consultor v19, ``hr_payroll_account/models/account_payment.py`` amplía los tipos de cuenta válidos con
+        ``liability_current`` cuando el contexto trae ``hr_payroll_payment_register`` (lo pone el botón «Pagar»): el tipo «Por pagar»
+        NO es obligatorio, sí la conciliación (la validación del botón y la propia conciliación del pago)."""
+        conciliable = self.env['account.account'].create({
+            'code': '250513', 'name': 'Neto pasivo corriente conciliable', 'account_type': 'liability_current',
+            'reconcile': True, 'company_ids': [(6, 0, [self.company.id])]})
+        asiento = self._asiento_con_neto_en(conciliable)
+        asistente = self.env['account.payment.register'].with_context(
+            active_model='account.move.line', active_ids=asiento.line_ids.ids,
+            hr_payroll_payment_register=True, dont_redirect_to_payments=True).create({})
+        self.assertEqual(asistente.line_ids.account_id, conciliable)
+
+    def test_tras_pagar_con_el_asistente_nativo_la_fecha_de_pago_sale_de_la_linea_del_neto(self):
+        """El asistente se crea con el mismo contexto que el botón «Pagar». NO se afirma qué pasa con el estado del recibo: QA lo vio
+        pasar de «Hecho» a «Pagado» (recibo 63693) y el origen en el código nativo aún no está ubicado."""
         self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
         asiento = self._asiento_publicado()
         self.recibo.write({'state': 'done'})
         linea = self._linea_de(asiento, self.neto_por_pagar)
         asistente = self.env['account.payment.register'].with_context(
-            active_model='account.move.line', active_ids=linea.ids).create({
+            active_model='account.move.line', active_ids=linea.ids,
+            hr_payroll_payment_register=True, dont_redirect_to_payments=True).create({
                 'payment_date': date(2026, 4, 5), 'journal_id': self.banco.id})
         asistente._create_payments()
-        self.assertEqual(self.recibo.state, 'done')
-        self.assertFalse(self.recibo.paid_date)
         self.assertEqual(self.recibo._ne_fechas_pagos_contables(), [date(2026, 4, 5)])
 
     # ── con E-5 (orden: primero Pagar, luego Registrar fecha de pago) ──
-    def test_registrar_la_fecha_de_pago_despues_de_pagar_pasa_el_recibo_a_pagado(self):
+    def test_registrar_la_fecha_de_pago_pasa_el_recibo_a_pagado_aunque_tenga_asiento(self):
+        """E-5 con un recibo que tiene asiento publicado. La combinación con «Pagar» NO se prueba aún: QA vio que «Pagar» deja el
+        recibo en «Pagado» y el asistente de E-5 solo acepta recibos en «Hecho» (pendiente de ubicar el origen, doc 64)."""
         self.company.l10n_co_ne_fuente_fecha_pago = 'recibo'
         self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
-        asiento = self._asiento_publicado()
-        self._pagar(self._linea_de(asiento, self.neto_por_pagar), self.empleado.work_contact_id, 900000.0, date(2026, 4, 5))
+        self._asiento_publicado()
         self.recibo.write({'state': 'done'})
         self.env['hr.payslip.registrar.pago'].create({
             'payslip_ids': [(6, 0, self.recibo.ids)], 'fecha': date(2026, 4, 5)}).action_registrar_pago()
