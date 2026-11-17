@@ -85,12 +85,31 @@ class TestSalarioMes(TransactionCase):
 
     def test_no_se_toca_programar_pago(self):
         """``schedule_pay`` (aviso de duración, factor de costos y la periodicidad de la retención lo leen) no se oculta ni se
-        vuelve de solo lectura por país: la vista solo cambia el rótulo del salario."""
+        vuelve de solo lectura por país POR ESTE MÓDULO: ni nuestras vistas lo mencionan como destino de un xpath o de un campo, ni
+        la vista efectiva lo condiciona a Colombia. Se verifica lo NUESTRO y no el atributo completo: la vista nativa ya trae su
+        propia condición (``country_code == 'MX'`` en ``invisible``, regresión bu del 16-nov-2026), que no es de este módulo."""
+        for xmlid in ('view_contract_form_ne', 'view_contract_form_ne_salario_mes'):
+            with self.subTest(vista=xmlid):
+                propia = etree.fromstring(self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).arch_db.encode())
+                self.assertFalse(propia.xpath("//field[@name='schedule_pay']"), 'La vista propia declara schedule_pay.')
+                for xpath in propia.xpath('//xpath'):
+                    self.assertNotRegex(
+                        xpath.get('expr'), r"""field\[@name\s*=\s*['"]schedule_pay['"]\]""",
+                        'Un xpath propio apunta al campo schedule_pay.')
         campos = self.arch.xpath("//field[@name='schedule_pay']")
         self.assertTrue(campos, 'Programar pago ya no está en la vista del contrato.')
+        # Con la localización de México instalada su vista (l10n_mx_hr_payroll_localisation/views/hr_contract_views.xml, herencia de
+        # hr_payroll.hr_contract_form_inherit) pone EXACTAMENTE ``invisible="country_code == 'MX'"`` al campo: es el único
+        # atributo que debe traer. Sin ella no trae ninguno. Readonly y required nunca los toca nadie.
+        mexico = self.env['ir.module.module'].search_count([
+            ('name', '=', 'l10n_mx_hr_payroll_localisation'), ('state', '=', 'installed')])
         for campo in campos:
-            for atributo in ('invisible', 'readonly', 'required'):
-                self.assertNotIn('country_code', campo.get(atributo) or '', atributo)
+            if mexico:
+                self.assertEqual(campo.get('invisible'), "country_code == 'MX'")
+            else:
+                self.assertFalse(campo.get('invisible'))
+            for atributo in ('readonly', 'required'):
+                self.assertFalse(campo.get(atributo), 'schedule_pay trae %s: %s.' % (atributo, campo.get(atributo)))
 
     def test_el_salario_conserva_su_campo_y_su_contenedor(self):
         """El campo ``wage`` sigue donde estaba, dentro del contenedor del rótulo (solo cambian los rótulos de al lado)."""

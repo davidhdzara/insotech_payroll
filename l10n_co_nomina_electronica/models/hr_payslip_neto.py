@@ -28,21 +28,13 @@ class HrPayslipNeto(models.Model):
         self.ensure_one()
         return self.company_id.currency_id.round(valor)
 
-    def _ne_estructuras_con_padres(self):
-        """La estructura del recibo y sus estructuras padre (``parent_id``, recursivo). Las 4 estructuras propias no tienen
-        padre (se fija en ``test_neto_redondeo``); se recorre igual para que una estructura hija que alguien configure NO deje
-        fuera del neto las reglas heredadas, a diferencia de ``categories``, que sí las suma. Una regla heredada que no se evaluó
-        no está en ``result_rules`` y no suma: incluirla de más es inofensivo."""
-        self.ensure_one()
-        estructuras = actual = self.struct_id
-        while actual.parent_id and actual.parent_id not in estructuras:
-            actual = actual.parent_id
-            estructuras |= actual
-        return estructuras
-
     def _ne_suma_lineas_redondeadas(self, result_rules, codigo_categoria):
         """Suma de las líneas de la categoría ``codigo_categoria`` y de sus descendientes (la misma agrupación de
         ``categories[codigo]``: Odoo suma cada regla a su categoría y a todos sus ancestros), con cada línea redondeada.
+
+        El motor evalúa SOLO las reglas de la estructura del recibo (``sorted(payslip.struct_id.rule_ids, ...)``,
+        ``hr_payroll/models/hr_payslip.py:944``): en este Odoo 18 ``hr.payroll.structure`` no tiene estructura padre ni herencia de
+        reglas, así que ``struct_id.rule_ids`` es exactamente el conjunto que suma ``categories``.
 
         :param result_rules: ``result_rules`` del cálculo del recibo: totales SIN redondear de las reglas ya evaluadas (las que
             no cumplieron su condición no están y no suman, igual que en ``categories``).
@@ -53,7 +45,7 @@ class HrPayslipNeto(models.Model):
         categorias = Categoria.search([
             ('id', 'child_of', Categoria.search([('code', '=', codigo_categoria)]).ids)])
         total, vistos = 0.0, set()
-        for regla in self._ne_estructuras_con_padres().rule_ids:
+        for regla in self.struct_id.rule_ids:
             if regla.code in vistos or regla.category_id not in categorias or regla.code not in result_rules:
                 continue
             vistos.add(regla.code)          # un código evaluado dos veces deja un solo total (el último)

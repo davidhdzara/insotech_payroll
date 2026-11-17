@@ -225,28 +225,6 @@ class TestNetoRedondeo(TransactionCase):
         # 100.00 + 50.00 + 10.00 - 4.00 - 4.00
         self.assertAlmostEqual(recibo._ne_neto_redondeado(reglas, 'DEV'), 152.0, places=2)
 
-    # ── estructuras con padre (verificación pedida por TL, 2026-11-16) ──
-    def test_las_4_estructuras_propias_no_tienen_estructura_padre(self):
-        """Hecho de los datos: ninguna de las 4 estructuras propias hereda reglas de un padre (por eso ``categories`` y la suma
-        de ``struct_id.rule_ids`` coinciden)."""
-        for estructura in (self.est_general, self.est_liquidacion, self.est_prima, self.est_bonificacion):
-            with self.subTest(estructura=estructura.name):
-                self.assertFalse(estructura.parent_id)
-
-    def test_una_estructura_hija_suma_tambien_las_reglas_heredadas_del_padre(self):
-        """Si alguien configura una estructura hija de la liquidación, las reglas del padre (que el motor sí evalúa y suma a
-        ``categories``) también entran en el neto: la suma recorre estructura y padres."""
-        hija = self.env['hr.payroll.structure'].create({
-            'name': 'Hija de Liquidación (prueba E-8)', 'type_id': self.structure_type.id,
-            'parent_id': self.est_liquidacion.id})
-        recibo = self._recibo(hija, 'Hija', SMMLV_2026, date(2025, 6, 1), date(2026, 1, 30))
-        self.assertEqual(recibo._ne_estructuras_con_padres(), hija | self.est_liquidacion)
-        reglas = _totales(CO_LIQ_SALARIOS=100.004, CO_LIQ_PRIMA=50.004, CO_LIQ_SALUD=-4.004)
-        self.assertAlmostEqual(recibo._ne_neto_redondeado(reglas, 'DEV'), 146.0, places=2)
-        # Sin padre devuelve solo la propia estructura.
-        propio = self._recibo(self.est_liquidacion, 'SinPadre', SMMLV_2026, date(2025, 6, 1), date(2026, 1, 30))
-        self.assertEqual(propio._ne_estructuras_con_padres(), self.est_liquidacion)
-
     # ── las 4 reglas de neto usan el ayudante ────────────────────────
     def test_las_reglas_de_neto_de_las_4_estructuras_usan_el_ayudante(self):
         for estructura, codigo, categoria in (
