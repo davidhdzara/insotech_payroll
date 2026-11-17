@@ -189,15 +189,35 @@ class TestNetoRedondeo(TransactionCase):
                 self.assertNotAlmostEqual(exacto, esperado, places=2)                  # lo que daba antes
                 self.assertAlmostEqual(recibo._ne_neto_redondeado(reglas, 'DEV'), esperado, places=2)
 
-    def test_prima_neto_usa_prestaciones_mas_deducciones(self):
-        """Prima de 11 días sobre 2.000.000: 61.111,111 (.11) y salud/pensión 2.444,444 (.44): el neto exacto .22 y la suma
-        de las líneas .23."""
-        recibo = self._recibo(self.est_prima, 'Prima', 1750905.0, date(2026, 7, 1), date(2026, 12, 31))
+    def test_prima_las_reglas_de_salud_y_pension_estan_inactivas_y_la_retencion_activa(self):
+        """Desde .164 la prima no lleva salud ni pensión del empleado (CST art. 307): CO_PRIMA_SALUD y CO_PRIMA_PENSION están
+        inactivas (hr_payroll_structure_special_data.xml) y ``struct_id.rule_ids`` -el recorrido del motor
+        (hr_payroll/models/hr_payslip.py:944)- no las trae. CO_PRIMA_RETE (categoría DEDU) sí está activa."""
+        codigos = set(self.est_prima.rule_ids.mapped('code'))
+        self.assertNotIn('CO_PRIMA_SALUD', codigos)
+        self.assertNotIn('CO_PRIMA_PENSION', codigos)
+        self.assertIn('CO_PRIMA_RETE', codigos)
+        self.assertEqual(self.est_prima.rule_ids.filtered(lambda r: r.code == 'CO_PRIMA_RETE').category_id.code, 'DEDU')
+
+    def test_prima_sin_deducciones_neto_es_el_valor_de_la_prima(self):
+        """Prima de 11 días sobre 2.000.000: 2.000.000 / 360 x 11 = 61.111,111...: la línea guarda 61.111,11 y, sin salud ni
+        pensión, ese es el neto. Las reglas inactivas que alguien meta en ``result_rules`` no suman: el motor no las evalúa."""
+        recibo = self._recibo(self.est_prima, 'PrimaSinDed', 1750905.0, date(2026, 7, 1), date(2026, 12, 31))
         valor = 2000000.0 / 360 * 11
-        reglas = _totales(
+        self.assertAlmostEqual(recibo._ne_neto_redondeado(_totales(CO_PRIMA_VALOR=valor), 'PREST'), 61111.11, places=2)
+        con_inactivas = _totales(
             CO_PRIMA_VALOR=valor, CO_PRIMA_SALUD=-(valor * 4 / 100), CO_PRIMA_PENSION=-(valor * 4 / 100))
-        self.assertAlmostEqual(float_round(sum(r['total'] for r in reglas.values()), precision_digits=2), 56222.22, places=2)
-        self.assertAlmostEqual(recibo._ne_neto_redondeado(reglas, 'PREST'), 56222.23, places=2)
+        self.assertAlmostEqual(recibo._ne_neto_redondeado(con_inactivas, 'PREST'), 61111.11, places=2)
+
+    def test_prima_neto_usa_prestaciones_mas_deducciones(self):
+        """Prima 10,006 (línea 10,01) y retención -5,004 (línea -5,00): el neto exacto redondeado daría 5,00 y la suma de las
+        líneas guardadas da 5,01. Con CO_PRIMA_RETE (activa en la estructura) en lugar de salud/pensión (inactivas)."""
+        recibo = self._recibo(self.est_prima, 'PrimaRete', 1750905.0, date(2026, 7, 1), date(2026, 12, 31))
+        reglas = _totales(CO_PRIMA_VALOR=10.006, CO_PRIMA_RETE=-5.004)
+        self.assertEqual(recibo._ne_redondear_moneda(10.006), 10.01)
+        self.assertEqual(recibo._ne_redondear_moneda(-5.004), -5.0)
+        self.assertAlmostEqual(float_round(sum(r['total'] for r in reglas.values()), precision_digits=2), 5.00, places=2)
+        self.assertAlmostEqual(recibo._ne_neto_redondeado(reglas, 'PREST'), 5.01, places=2)
 
     def test_bonificacion_neto_de_las_lineas_redondeadas(self):
         recibo = self._recibo(self.est_bonificacion, 'Bonificacion', 1750905.0, date(2026, 9, 1), date(2026, 9, 30))
