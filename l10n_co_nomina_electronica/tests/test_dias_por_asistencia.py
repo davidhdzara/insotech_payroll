@@ -23,6 +23,8 @@ import logging
 from datetime import date
 from unittest.mock import patch
 
+from lxml import etree
+
 from odoo.tests.common import TransactionCase, tagged
 
 _logger = logging.getLogger(__name__)
@@ -51,6 +53,10 @@ class TestDiasPorAsistencia(TransactionCase):
         cls.leave_lic_nr = ref('l10n_co_nomina_electronica.hr_leave_type_co_lic_nr')
         cls.tipo_vac = ref('l10n_co_nomina_electronica.hr_work_entry_type_co_vac')
         cls.tipo_lic_nr = ref('l10n_co_nomina_electronica.hr_work_entry_type_co_lic_nr')
+        cls.leave_inc_comun = ref('l10n_co_nomina_electronica.hr_leave_type_co_inc_comun')
+        cls.leave_inc_laboral = ref('l10n_co_nomina_electronica.hr_leave_type_co_inc_laboral')
+        cls.leave_lic_mat = ref('l10n_co_nomina_electronica.hr_leave_type_co_lic_mat')
+        cls.tipo_inc_comun = ref('l10n_co_nomina_electronica.hr_work_entry_type_co_inc_comun')
         cls.n = 0
 
     # ── fixtures ─────────────────────────────────────────────────────
@@ -120,6 +126,24 @@ class TestDiasPorAsistencia(TransactionCase):
             'co_basico': self._linea(recibo, 'CO_BASICO').total, 'cantidad': self._linea(recibo, 'CO_BASICO').quantity,
             'pagables': recibo._ne_dias_pagables(), 'suma': sum(recibo.worked_days_line_ids.mapped('amount')),
             'basic': self._linea(recibo, 'BASIC').total, 'gross': self._linea(recibo, 'GROSS').total}
+
+    def _pago(self, recibo, codigos):
+        """Total y cantidad de las líneas de pago ``codigos`` más el neto: lo que NO debe cambiar al mostrar otros días en la pestaña."""
+        cifras = {'neto': self._linea(recibo, 'CO_NETO').total}
+        for codigo in codigos:
+            cifras['%s_total' % codigo] = self._linea(recibo, codigo).total
+            cifras['%s_cantidad' % codigo] = self._linea(recibo, codigo).quantity
+        return cifras
+
+    def _assert_pago_igual_antes_y_despues(self, recibo, codigos):
+        """Regenera el recibo como lo calculaba el nativo y compara pago, días pagables, suma de importes, BASIC y GROSS con los de ahora."""
+        despues = dict(self._cifras(recibo), **self._pago(recibo, codigos))
+        self._como_antes(recibo)
+        antes = dict(self._cifras(recibo), **self._pago(recibo, codigos))
+        self.assertEqual(sorted(antes), sorted(despues))
+        for clave in despues:
+            self.assertAlmostEqual(despues[clave], antes[clave], delta=0.05, msg=clave)
+        return antes, despues
 
     def _valores(self, recibo, *lineas):
         """Lista de valores de líneas de días como la entrega el nativo: (tipo, días, horas) -> diccionario."""
@@ -336,3 +360,102 @@ class TestDiasPorAsistencia(TransactionCase):
         self.assertTrue(general._ne_aplica_dias_por_asistencia())
         self.assertFalse(liquidacion._ne_aplica_dias_por_asistencia())
         self.assertFalse(prima._ne_aplica_dias_por_asistencia())
+
+    # ── .281: días calendario en las 4 líneas de ausencia ─────────────
+    def test_incapacidad_muestra_los_dias_calendario_que_se_pagan(self):
+        """Incapacidad común del viernes 11 al lunes 14 de septiembre: 4 días calendario (viernes, sábado, domingo y lunes), pero el calendario
+        de la compañía (lun-vie, 8 h) solo tiene entradas el viernes y el lunes: el nativo mostraba 2 días (16 h / 8). Ahora la línea muestra
+        4, Asistencia = 30 - 4 = 26 y la pestaña suma los 30 días del mes. Nombre sin « (Half-Day)» (16 h / 4 días < 8 h)."""
+        recibo = self._recibo_con_ausencia(self.leave_inc_comun, date(2026, 9, 11), date(2026, 9, 14))
+        linea = recibo.worked_days_line_ids.filtered(lambda w: w.work_entry_type_id.code == 'CO_INC_COMUN')
+        self.assertEqual(len(linea), 1)
+        self.assertEqual(linea.number_of_days, 4.0)
+        self.assertEqual(linea.number_of_days, recibo._ne_ausencia_calendario('CO_INC_COMUN')[0])
+        self.assertEqual(linea.name, self.tipo_inc_comun.name, 'Nombre explícito, sin « (Half-Day)»')
+        self.assertEqual(self._dias(recibo, 'WORK100'), 26.0)
+        self.assertEqual(sum(recibo.worked_days_line_ids.mapped('number_of_days')), 30.0)
+        horas_ahora = linea.number_of_hours
+        self._como_antes(recibo)
+        dias_nativos = self._dias(recibo, 'CO_INC_COMUN')
+        self.assertLess(dias_nativos, 4.0, 'Premisa: el nativo mostraba horas / horas por día, no los días calendario')
+        self.assertAlmostEqual(self._horas(recibo, 'CO_INC_COMUN'), horas_ahora, places=4, msg='Las horas de la línea no se tocan')
+
+    def test_el_pago_de_la_incapacidad_no_cambia_antes_y_despues(self):
+        """Solo presentación: CO_BASICO, CO_AUX_TRANS, CO_INC_COMUN, el neto, los días pagables y la suma de importes (BASIC, GROSS) iguales."""
+        recibo = self._recibo_con_ausencia(self.leave_inc_comun, date(2026, 9, 11), date(2026, 9, 14))
+        recibo.compute_sheet()
+        antes, despues = self._assert_pago_igual_antes_y_despues(recibo, ('CO_BASICO', 'CO_AUX_TRANS', 'CO_INC_COMUN'))
+        _logger.info('[.281] incapacidad 11-14 sep: antes=%s despues=%s', antes, despues)
+        self.assertGreater(despues['CO_INC_COMUN_total'], 0, 'Premisa: la incapacidad se pagó')
+
+    def test_accidente_de_trabajo_muestra_los_dias_calendario(self):
+        recibo = self._recibo_con_ausencia(self.leave_inc_laboral, date(2026, 9, 11), date(2026, 9, 14))
+        self.assertEqual(self._dias(recibo, 'CO_INC_LABORAL'), 4.0)
+        self.assertEqual(self._dias(recibo, 'WORK100'), 26.0)
+        self.assertEqual(self._linea(recibo, 'CO_BASICO').quantity, 26.0)
+
+    def test_maternidad_que_cruza_el_periodo_muestra_solo_los_dias_del_periodo_y_el_pago_no_cambia(self):
+        """Licencia de maternidad del 25-ago al 9-sep: en el recibo de septiembre cuenta el tramo 1 al 9 = 9 días calendario (el nativo mostraba
+        los 7 días hábiles con entrada: 1, 2, 3, 4, 7, 8 y 9). Asistencia = 30 - 9 = 21; el pago, igual."""
+        recibo = self._recibo_con_ausencia(self.leave_lic_mat, date(2026, 8, 25), date(2026, 9, 9))
+        recibo.compute_sheet()
+        self.assertEqual(self._dias(recibo, 'CO_LIC_MAT'), 9.0)
+        self.assertEqual(self._dias(recibo, 'WORK100'), 21.0)
+        self._assert_pago_igual_antes_y_despues(recibo, ('CO_BASICO', 'CO_LIC_MAT'))
+
+    def test_sin_ausencia_validada_la_linea_nativa_queda_igual(self):
+        """Entradas de trabajo de incapacidad sin hr.leave validada (no hay fechas que contar): la línea no se reemplaza."""
+        asistencia = self._recibo(calcular=False)._ne_tipo_asistencia()
+        recibo = self._recibo(calcular=False)
+        valores = self._valores(recibo, (asistencia, 22.0, 176.0), (self.tipo_inc_comun, 2.0, 16.0))
+        resultado = recibo._ne_ajustar_dias_por_asistencia(valores)
+        self.assertEqual(resultado[1], valores[1])
+
+    def test_un_tipo_marcado_sin_sueldo_no_se_reemplaza(self):
+        """Guarda: el código de un tipo ``unpaid`` SÍ lo lee ``_ne_dias_habiles_excluidos`` de la línea; reemplazar sus días movería el pago.
+        Sin la marca, la línea muestra los 4 días calendario; con la marca queda igual que la entrega el nativo."""
+        recibo = self._recibo_con_ausencia(self.leave_inc_comun, date(2026, 9, 11), date(2026, 9, 14))
+        asistencia = recibo._ne_tipo_asistencia()
+        valores = self._valores(recibo, (asistencia, 22.0, 176.0), (self.tipo_inc_comun, 2.0, 16.0))
+        self.assertEqual(recibo._ne_ajustar_dias_por_asistencia(valores)[1]['number_of_days'], 4.0)
+        self.leave_inc_comun.unpaid = True
+        self.assertIn('CO_INC_COMUN', recibo._ne_codigos_tipos_no_remunerados())
+        self.assertEqual(recibo._ne_ajustar_dias_por_asistencia(valores)[1], valores[1])
+
+    def test_los_tipos_de_ausencia_de_dias_calendario_no_son_sin_sueldo_de_fabrica(self):
+        """Premisa de la guarda: solo la licencia no remunerada trae ``unpaid`` (data/l10n_co_ausencias_data.xml)."""
+        recibo = self._recibo(calcular=False)
+        no_remunerados = recibo._ne_codigos_tipos_no_remunerados()
+        self.assertIn('CO_LIC_NR', no_remunerados)
+        for codigo in ('CO_INC_COMUN', 'CO_INC_LABORAL', 'CO_LIC_MAT', 'CO_LIC_PAT'):
+            self.assertNotIn(codigo, no_remunerados, codigo)
+
+    # ── .281: vista de la pestaña ─────────────────────────────────────
+    def _pagina_de_dias(self):
+        arch = self.env['hr.payslip'].get_view(view_type='form')['arch']
+        paginas = etree.fromstring(arch).xpath("//page[@name='worked_days_input']")
+        self.assertEqual(len(paginas), 1, 'Falta la página «Días trabajados y entradas» del formulario del recibo')
+        return paginas[0]
+
+    def test_la_vista_cambia_la_etiqueta_de_las_entradas_por_novedades_de_nomina(self):
+        pagina = self._pagina_de_dias()
+        # Se verifica el RESULTADO (no el selector de la herencia): los separadores directos de la página, en orden.
+        separadores = pagina.xpath('./separator')
+        etiquetas = [separador.get('string') for separador in separadores]
+        self.assertEqual(etiquetas.count('Novedades de nómina'), 1, etiquetas)
+        nuevo = separadores[etiquetas.index('Novedades de nómina')]
+        self.assertTrue(nuevo.xpath("following-sibling::field[@name='input_line_ids']"), 'Va antes de la lista de entradas')
+        self.assertTrue(nuevo.xpath("preceding-sibling::field[@name='worked_days_line_ids']"), 'Va después de la lista de días')
+        self.assertEqual(len(nuevo.xpath('preceding-sibling::separator')), len(separadores) - 1 - len(nuevo.xpath('following-sibling::separator')))
+        # El separador original (el que queda justo antes del nuevo) está oculto: el usuario ve una sola etiqueta para las entradas.
+        original = nuevo.xpath('preceding-sibling::separator[1]')[0]
+        self.assertIn(original.get('invisible'), ('1', 'True', 'true'), 'El separador original queda oculto')
+        self.assertNotEqual(original.get('string'), 'Novedades de nómina')
+
+    def test_la_vista_oculta_por_defecto_importe_y_horas_de_la_lista_de_dias(self):
+        pagina = self._pagina_de_dias()
+        for campo in ('amount', 'number_of_hours'):
+            columnas = pagina.xpath(".//field[@name='worked_days_line_ids']//field[@name='%s']" % campo)
+            self.assertTrue(columnas, campo)
+            self.assertEqual(columnas[0].get('optional'), 'hide', campo)
+        self.assertTrue(pagina.xpath(".//field[@name='worked_days_line_ids']//field[@name='number_of_days']"), 'Los días siguen a la vista')

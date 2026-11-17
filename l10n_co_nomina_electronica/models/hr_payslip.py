@@ -1816,6 +1816,12 @@ class HrPayslip(models.Model):
             return 0
         return self._ne_contar_dias(activo_ini, activo_fin)
 
+    def _ne_codigos_tipos_no_remunerados(self):
+        """Códigos de tipo de entrada de trabajo de los tipos de ausencia marcados ``unpaid`` (sin continuidad de pago del empleador):
+        ``_ne_dias_pagables`` los excluye siempre del básico, leyendo sus líneas de días. Fuente única de ese conjunto (.281)."""
+        unpaid_types = self.env['hr.leave.type'].search([('unpaid', '=', True)])
+        return set(unpaid_types.mapped('work_entry_type_id.code')) - {False}
+
     def _ne_dias_pagables(self, valores=None):
         """Días pagables del período -- misma convención de "mes comercial" colombiano que ya
         usa la regla salarial CO_BASICO (hr_salary_rule_co_basico, data/hr_payroll_structure_
@@ -1838,8 +1844,7 @@ class HrPayslip(models.Model):
         self.ensure_one()
         dias_bajo_contrato = self._ne_dias_bajo_contrato()
 
-        unpaid_types = self.env['hr.leave.type'].search([('unpaid', '=', True)])
-        unpaid_codes = set(unpaid_types.mapped('work_entry_type_id.code')) - {False}
+        unpaid_codes = self._ne_codigos_tipos_no_remunerados()
         # H-013 (2026-10-08, QA Bloque 4): vacaciones/licencias/incapacidades entraban como
         # novedades manuales (inputs CO_VAC/CO_LIC_REM/CO_LIC_NR/CO_INC_COMUN/CO_INC_LABORAL)
         # y el básico no descontaba esos días -- doble pago real (vacaciones 15 días: básico
@@ -1910,19 +1915,37 @@ class HrPayslip(models.Model):
            casi siempre. Sin días pagados pero con horas (festivo o descanso en un periodo de ausencias) la línea se conserva con 0 días
            para no cambiar el total de horas; sin ninguno de los dos no hay línea.
         2. Los tipos del parámetro ``l10n_co_dias_trabajados_ocultar`` (festivo, descanso) se quitan.
-        3. Todo lo demás (vacaciones, licencias, incapacidades, tipos sin sueldo) se conserva igual y en su orden.
+        3. Las líneas de las 4 ausencias de días CALENDARIO (incapacidad común y laboral, maternidad, paternidad: ``_NOVEDAD_AUSENCIA_
+           CALENDARIO_CODES``) muestran los días que realmente se pagan (``_ne_ausencia_calendario``, recortados al periodo), no horas ÷
+           horas por día del nativo (3,07 en vez de 3; 1,98 si la ausencia cruza el día de descanso); solo se muestra: el pago sale de las
+           fechas de la ausencia y estas líneas no se leen (.281). Las horas no se tocan, así que ``amount`` y ``BASIC`` no cambian. No se
+           reemplaza la línea si no hay ausencia validada (entradas de trabajo sueltas) ni si el tipo es ``unpaid`` (su código SÍ entra a
+           ``_ne_dias_habiles_excluidos`` y el cambio movería el pago).
+        4. Todo lo demás (vacaciones, licencias remuneradas y sin sueldo) se conserva igual y en su orden (días = horas ÷ horas por día del
+           nativo; contarlos por fecha cambia plata y es otra pieza).
 
         La línea «OUT» (ingreso o retiro a mitad del periodo) la agrega el nativo DESPUÉS de este método y no se toca."""
         self.ensure_one()
         tipos = self.env['hr.work.entry.type'].browse([valor['work_entry_type_id'] for valor in valores])
         codigo_por_tipo = {tipo.id: tipo.code for tipo in tipos}
+        nombre_por_tipo = {tipo.id: tipo.name for tipo in tipos}
         asistencia = self._ne_tipo_asistencia()
         ocultos = self._ne_codigos_dias_ocultos()
+        no_remunerados = self._ne_codigos_tipos_no_remunerados()
         pagables = max(self._ne_dias_pagables(valores=valores), 0)
         horas = sum(valor['number_of_hours'] for valor in valores
                     if valor['work_entry_type_id'] == asistencia.id or codigo_por_tipo[valor['work_entry_type_id']] in ocultos)
-        resto = [valor for valor in valores
-                 if valor['work_entry_type_id'] != asistencia.id and codigo_por_tipo[valor['work_entry_type_id']] not in ocultos]
+        resto = []
+        for valor in valores:
+            tipo_id = valor['work_entry_type_id']
+            codigo = codigo_por_tipo[tipo_id]
+            if tipo_id == asistencia.id or codigo in ocultos:
+                continue
+            if codigo in _NOVEDAD_AUSENCIA_CALENDARIO_CODES and codigo not in no_remunerados:
+                dias_calendario = self._ne_ausencia_calendario(codigo)[0]
+                if dias_calendario > 0:
+                    valor = dict(valor, number_of_days=dias_calendario, name=nombre_por_tipo[tipo_id])
+            resto.append(valor)
         if not pagables and not horas:
             return resto
         linea = {
