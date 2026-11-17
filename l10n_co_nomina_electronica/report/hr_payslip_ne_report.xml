@@ -68,13 +68,12 @@
                     <span t-field="o.contract_id.wage"
                           t-options='{"widget": "monetary", "display_currency": o.company_id.currency_id}'/>
                 </p>
-                <p class="mb-1">
+                <!-- H-QA-034: los días con que se PAGÓ el recibo (cantidad guardada de su línea de sueldo; los entrega
+                     report.l10n_co_nomina_electronica.report_payslip_ne). Sin esa línea (prima, bonificación) el campo no sale. -->
+                <t t-set="linea_dias" t-value="dias_pagados and dias_pagados.get(o.id)"/>
+                <p class="mb-1" t-if="linea_dias">
                     <strong>Días trabajados:</strong>
-                    <t t-foreach="o.worked_days_line_ids" t-as="wd">
-                        <t t-if="wd.code == 'WORK100'">
-                            <span t-field="wd.number_of_days"/>
-                        </t>
-                    </t>
+                    <span t-field="linea_dias.quantity"/>
                 </p>
                 <p class="mb-1">
                     <strong>Tipo de contrato:</strong>
