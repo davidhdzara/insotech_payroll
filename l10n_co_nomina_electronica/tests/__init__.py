@@ -143,3 +143,4 @@ from . import test_exchange_nombre_descarga
 from . import test_salario_mes
 from . import test_pagar_neto
 from . import test_result_rules_lectura
+from . import test_neto_entradas_multiples

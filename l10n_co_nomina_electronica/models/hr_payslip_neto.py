@@ -29,6 +29,41 @@ class HrPayslipNeto(models.Model):
         self.ensure_one()
         return self.company_id.currency_id.round(valor)
 
+    def _ne_tiene_entradas_multiples(self, codigo):
+        """True si el recibo tiene 2 o más entradas (``hr.payslip.input``) con el código ``codigo``.
+
+        Es IDÉNTICA a la condición por la que el motor toma la rama de entradas múltiples: ``_get_localdict`` arma
+        ``same_type_input_lines`` con ``self.input_line_ids.grouped('code')`` y guarda el código solo si ``len(input_lines) > 1``
+        (``hr_payroll/models/hr_payslip.py:817-821``), y el bucle de reglas entra a esa rama con
+        ``rule.code in localdict['same_type_input_lines']`` (``:957``)."""
+        self.ensure_one()
+        return len(self.input_line_ids.filtered(lambda entrada: entrada.code == codigo)) > 1
+
+    def _get_payslip_line_total(self, amount, quantity, rate, rule):
+        """H-TL-009 (.277): con 2+ entradas del mismo código, el total de CADA entrada se redondea a los decimales de la moneda.
+
+        Gancho nativo del motor (``hr_payroll/models/hr_payslip.py:872-874``: ``amount * quantity * rate / 100.0``). El motor lo
+        llama una vez por entrada en la rama de entradas múltiples (``:961``) y una vez por regla simple (``:996``). En la rama
+        múltiple acumula ese total SIN redondear (``result_rules_dict[code]['total'] += tot_rule``, ``:963``) y guarda UNA línea
+        por entrada con su propio ``total`` (``:972-986``), que Odoo redondea al guardar. Con dos entradas de 3 h de hora extra
+        el acumulado exacto (53.571,428…) se redondeaba a 53.571,43, pero las líneas guardadas suman 26.785,71 + 26.785,71 =
+        53.571,42: el neto de E-8 quedaba un centavo por encima de las líneas y el asiento no cuadraba. Con este gancho el
+        acumulado es Σ round(entrada), igual a la suma de las líneas que se guardan.
+
+        Alcance mínimo: solo recibos de compañía colombiana (``res.company._ne_es_colombia``) y solo códigos con 2+ entradas
+        (``_ne_tiene_entradas_multiples``); en cualquier otro caso devuelve el valor nativo sin tocarlo. SIEMPRE llama a
+        ``super()``: ``l10n_ch_hr_payroll/models/hr_payslip.py:159-160`` también lo sobrescribe y llama a ``super()``; con la
+        guardia de compañía colombiana no interfiere.
+
+        EFECTO CONOCIDO: en esos códigos ``categories`` y ``result_rules`` acumulan valores redondeados (no exactos), así que una
+        regla posterior que los lea (IBC, retención) puede ver una base distinta en menos de 0,005 por entrada. También cambia el
+        ``ytd`` de esas líneas (``:984-985``): usa el valor guardado. El resto de los recibos y de las líneas queda idéntico
+        (``tests/test_neto_entradas_multiples.py``)."""
+        total = super()._get_payslip_line_total(amount, quantity, rate, rule)
+        if self.company_id._ne_es_colombia() and self._ne_tiene_entradas_multiples(rule.code):
+            return self._ne_redondear_moneda(total)
+        return total
+
     def _ne_total_regla(self, result_rules, codigo):
         """Total SIN redondear que el motor ya calculó para la regla ``codigo``, o 0.0 si no se evaluó. LECTURA SIN MUTAR.
 
