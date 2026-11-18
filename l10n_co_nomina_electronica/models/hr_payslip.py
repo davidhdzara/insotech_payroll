@@ -652,6 +652,39 @@ class HrPayslip(models.Model):
         colombia._ne_validar_terceros_deducciones()
         return res
 
+    def _ne_recalcular_hoja_por_novedad(self):
+        """Recalcula la hoja de los recibos cuya novedad (``hr.payslip.input``) se creó, cambió o borró (.283, doc 68 §14; orden de David).
+
+        Solo los recibos de compañía colombiana, en borrador o en espera (``compute_sheet`` ya exige eso, ``nat:597-614``), no editados a mano
+        (``edited``: las copias de reembolso traen las líneas negadas y recalcularlas las borraría) y con la hoja YA calculada (``line_ids``):
+        un borrador sin calcular no tiene nada viejo, y calcularlo lo pasaría a «en espera», gastaría un número de la secuencia y correría
+        dentro de la creación del propio recibo (las novedades nacen en el ``create`` del recibo, en el asistente de liquidación y en
+        ``_compute_input_line_ids``). Los días NO se tocan (``action_refresh_from_work_entries`` no se usa: no dependen de las novedades).
+
+        No se recalcula con el contexto ``ne_sin_recalculo_hoja`` (cargas masivas; se enciende solo mientras se calcula aquí, contra la
+        re-entrada), con ``import_file`` (importación: el lote queda sin recalcular, se calcula al final con «Calcular hoja») ni mientras Odoo
+        calcula ``input_line_ids`` del recibo (embargos de ``hr.salary.attachment``).
+
+        Un error de ``compute_sheet`` (periodo inválido, terceros de embargos, reparto que no cuadra...) NO impide guardar la novedad: el
+        recálculo corre en un savepoint, se revierte, la novedad se conserva y el recibo recibe una nota con el error y la instrucción de pulsar
+        «Calcular hoja» (decisión de TL: así se puede corregir el monto que arreglaría el reparto)."""
+        contexto = self.env.context
+        if contexto.get('ne_sin_recalculo_hoja') or contexto.get('import_file'):
+            return
+        recibos = self.exists()._ne_solo_colombia().filtered(
+            lambda r: r.state in ('draft', 'verify') and not r.edited and r.line_ids
+            and not self.env.is_protected(r._fields['input_line_ids'], r))
+        for recibo in recibos:
+            try:
+                with self.env.cr.savepoint():
+                    recibo.with_context(ne_sin_recalculo_hoja=True).compute_sheet()
+            except UserError as error:
+                self.env.invalidate_all()
+                recibo.message_post(
+                    body=_('La hoja de cálculo no se pudo recalcular al cambiar una novedad: %(error)s. Hoja sin recalcular: corrija lo indicado '
+                           'y pulse «Calcular hoja».', error=error.args[0] if error.args else error),
+                    message_type='notification', subtype_xmlid='mail.mt_note')
+
     # ──────────────────────────────────────────────────────────────────
     # Asiento contable por tercero
     # ──────────────────────────────────────────────────────────────────
