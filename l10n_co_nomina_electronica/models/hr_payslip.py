@@ -1948,9 +1948,13 @@ class HrPayslip(models.Model):
             resto.append(valor)
         if not pagables and not horas:
             return resto
+        # .282: la línea «Asistencia» va PRIMERA en la pestaña. El orden en pantalla es ``_order = 'payslip_id, sequence'`` del nativo
+        # (``hr_payslip_worked_days.py:11``) y todos los tipos traen la misma ``sequence`` (25): con empate el orden depende del desempate. Una
+        # ``sequence`` menor que la de todas las demás líneas lo fija; solo se usa para ordenar (``sequence`` es de la línea, no del tipo).
+        secuencia = min([valor.get('sequence', asistencia.sequence) for valor in resto] + [asistencia.sequence]) - 1
         linea = {
             'name': asistencia.name,
-            'sequence': asistencia.sequence,
+            'sequence': secuencia,
             'work_entry_type_id': asistencia.id,
             'number_of_days': pagables,
             'number_of_hours': horas,
