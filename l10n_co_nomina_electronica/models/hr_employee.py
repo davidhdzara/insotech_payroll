@@ -463,21 +463,12 @@ class HrEmployee(models.Model):
     # res_config_settings.py usa en todo el módulo: no son un dato nuevo,
     # solo un acceso de lectura conveniente).
     # ──────────────────────────────────────────────────────────────────
-    l10n_co_ne_contract_type_display = fields.Selection(
-        related='contract_id.l10n_co_ne_contract_type',
-        string='Tipo de Contrato',
-        readonly=True,
-    )
-    l10n_co_ne_analytic_account_id = fields.Many2one(
-        related='contract_id.analytic_account_id',
-        string='Centro de Costo',
-        readonly=True,
-    )
-    l10n_co_pila_clase_riesgo_display = fields.Selection(
-        related='contract_id.l10n_co_pila_clase_riesgo',
-        string='Clase de Riesgo ARL',
-        readonly=True,
-    )
+    # v19 (doc 02 M-6/M-8): se retiraron los 3 ``related='contract_id.*'`` que estaban aquí
+    # (``l10n_co_ne_contract_type_display``, ``l10n_co_ne_analytic_account_id`` y
+    # ``l10n_co_pila_clase_riesgo_display``): ``hr.employee`` ya expone los campos de la versión
+    # por ``_inherits`` (``employee.l10n_co_ne_contract_type`` y ``employee.l10n_co_pila_clase_riesgo``,
+    # ``hr/models/hr_employee.py:45``) y ``analytic_account_id`` no existe en v19 (lo reemplaza
+    # ``analytic_distribution``, R4: decisión pendiente de TL/David). Ninguno tenía consumidores.
     l10n_co_pila_arl_name_display = fields.Char(
         related='company_id.l10n_co_pila_arl_name',
         string='ARL',

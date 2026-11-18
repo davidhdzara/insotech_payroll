@@ -36,16 +36,16 @@
 # Base prima = salario mensual + auxilio de transporte (si aplica)
 # El auxilio de transporte se incluye en la base de prima siempre que
 # el salario no supere 2 SMMLV (Art. 7, Ley 1 de 1963)
-_salario = contract.wage
+_salario = payslip._ne_salario()
 
 # Determinar si incluye auxilio de transporte
 _aux_transporte = 0
-if _salario &lt;= payslip._rule_parameter('l10n_co_smmlv', payslip.date_from) * 2 and not contract.l10n_co_ne_integral_salary:
+if _salario &lt;= payslip._rule_parameter('l10n_co_smmlv', payslip.date_from) * 2 and not version.l10n_co_ne_integral_salary:
     _aux_transporte = payslip._rule_parameter('l10n_co_aux_transporte', payslip.date_from)
 
 # Si es salario integral, la base es el 100% del salario
 # (el factor prestacional ya esta incluido, Art. 132 CST)
-if contract.l10n_co_ne_integral_salary:
+if version.l10n_co_ne_integral_salary:
     result = 0  # Salario integral no genera prima
 else:
     result = _salario + _aux_transporte
@@ -93,7 +93,7 @@ else:
     _fin_sem = date(_year, 12, 31)
 
 # Fecha de inicio efectiva: la mayor entre inicio de contrato e inicio de semestre
-_inicio_contrato = contract.date_start
+_inicio_contrato = version.contract_date_start
 _inicio_efectivo = max(_inicio_contrato, _inicio_sem)
 
 # Fecha fin efectiva: la menor entre fin del periodo y fin del semestre
@@ -280,7 +280,7 @@ result = payslip._ne_neto_redondeado(result_rules, 'PREST')
 # abarcan varios meses/anos (contrato desde hace tiempo, retiro reciente).
 _dias = payslip._ne_dias_pagables()
 
-result = contract.wage / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_to)
+result = payslip._ne_salario() / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_to)
 result_qty = _dias
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -298,7 +298,7 @@ result_qty = _dias
             <field name="condition_select">python</field>
             <field name="condition_python">
 # No aplica para salario integral
-result = not contract.l10n_co_ne_integral_salary
+result = not version.l10n_co_ne_integral_salary
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
@@ -309,7 +309,7 @@ result = not contract.l10n_co_ne_integral_salary
 # sandbox de safe_eval (opcode IMPORT_NAME/IMPORT_FROM), no hace falta.
 # Hallazgo de Tech Lead corriendo test_estructuras_especiales.sh contra
 # staging_produccion (T3): "forbidden opcode(s)... IMPORT_NAME, IMPORT_FROM".
-_salario = contract.wage
+_salario = payslip._ne_salario()
 
 # Auxilio de transporte en la base si aplica
 _aux = 0
@@ -327,7 +327,7 @@ else:
     _inicio_sem = date(_year, 7, 1)
 
 # Fecha efectiva de inicio: la mayor entre inicio contrato e inicio semestre
-_inicio_efectivo = max(contract.date_start, _inicio_sem)
+_inicio_efectivo = max(version.contract_date_start, _inicio_sem)
 _dias = payslip._ne_dias_prestacion(_inicio_efectivo, _fecha_fin)
 # Tope maximo: un semestre completo = mitad del anio comercial (AUD-DIAN-34,
 # 2026-10-05: misma derivacion que CO_PRIMA, ver su comentario -- 180 no es
@@ -354,7 +354,7 @@ result_qty = _dias
             <field name="condition_select">python</field>
             <field name="condition_python">
 # No aplica para salario integral
-result = not contract.l10n_co_ne_integral_salary
+result = not version.l10n_co_ne_integral_salary
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
@@ -362,7 +362,7 @@ result = not contract.l10n_co_ne_integral_salary
 # Se calculan las cesantias no consignadas del periodo actual (1 Ene - fecha fin)
 # date ya esta disponible en el contexto de la regla, un "import" esta
 # prohibido por el sandbox de safe_eval -- ver CO_LIQ_PRIMA mas arriba.
-_salario = contract.wage
+_salario = payslip._ne_salario()
 
 # Auxilio de transporte en la base si aplica
 _aux = 0
@@ -375,7 +375,7 @@ _year = _fecha_fin.year
 
 # Inicio del periodo de cesantias: 1 de enero o fecha de ingreso
 _inicio_periodo = date(_year, 1, 1)
-_inicio_efectivo = max(contract.date_start, _inicio_periodo)
+_inicio_efectivo = max(version.contract_date_start, _inicio_periodo)
 
 _dias = payslip._ne_dias_prestacion(_inicio_efectivo, _fecha_fin)
 _dias = min(_dias, payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_to))
@@ -399,7 +399,7 @@ result_qty = _dias
             <field name="condition_select">python</field>
             <field name="condition_python">
 # Aplica solo si hay cesantias calculadas
-result = (not contract.l10n_co_ne_integral_salary
+result = (not version.l10n_co_ne_integral_salary
           and result_rules.get('CO_LIQ_CESANTIAS') and result_rules['CO_LIQ_CESANTIAS']['total'] &gt; 0)
             </field>
             <field name="amount_select">code</field>
@@ -413,7 +413,7 @@ _year = _fecha_fin.year
 
 # Periodo de intereses: desde 1 enero o fecha de ingreso
 _inicio_periodo = date(_year, 1, 1)
-_inicio_efectivo = max(contract.date_start, _inicio_periodo)
+_inicio_efectivo = max(version.contract_date_start, _inicio_periodo)
 
 _dias = payslip._ne_dias_prestacion(_inicio_efectivo, _fecha_fin)
 _dias = min(_dias, payslip._rule_parameter('l10n_co_dias_anio_comercial', payslip.date_to))
@@ -444,7 +444,7 @@ result = payslip._ne_ausencia_habil_tramo('CO_VAC')[0] &gt; 0
             <field name="amount_python_compute">
 # Valor dia x dias habiles de la ausencia en el tramo (como CO_VAC de la nomina general).
 _dias = payslip._ne_ausencia_habil_tramo('CO_VAC')[0]
-result = contract.wage / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_to)
+result = payslip._ne_salario() / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_to)
 result_qty = _dias
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -470,7 +470,7 @@ result = payslip._ne_ausencia_habil_tramo('CO_LIC_REM')[0] &gt; 0
             <field name="amount_python_compute">
 # Valor dia x dias habiles de la ausencia en el tramo (como CO_LIC_REM de la nomina general).
 _dias = payslip._ne_ausencia_habil_tramo('CO_LIC_REM')[0]
-result = contract.wage / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_to)
+result = payslip._ne_salario() / payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip.date_to)
 result_qty = _dias
             </field>
             <field name="appears_on_payslip" eval="True"/>
@@ -658,9 +658,9 @@ result = payslip.l10n_co_ne_liquidacion_cause == 'sin_justa_causa'
 # implementado -- Guapante no tiene empleados en ese supuesto. Si algun
 # dia aplica, esta formula daria un valor distinto al legal para ese
 # caso puntual.
-_salario = contract.wage
-_tipo_contrato = contract.l10n_co_ne_contract_type
-_fecha_inicio = contract.date_start
+_salario = payslip._ne_salario()
+_tipo_contrato = version.l10n_co_ne_contract_type
+_fecha_inicio = version.contract_date_start
 _fecha_fin = payslip.date_to
 
 # Dias trabajados totales
@@ -757,7 +757,7 @@ Para contrato indefinido: no requiere ningun input, el calculo diferencia entre 
             <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = payslip._ne_ibc_salarial_liquidacion(categories, contract)</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_salarial_liquidacion(categories, version)</field>
             <field name="appears_on_payslip" eval="False"/>
             <field name="note">Salario pendiente del tramo del ultimo mes.</field>
         </record>
@@ -770,7 +770,7 @@ Para contrato indefinido: no requiere ningun input, el calculo diferencia entre 
             <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = payslip._ne_ibc_remuneracion(contract, result_rules['CO_IBC_SALARIAL']['total'])</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_remuneracion(version, result_rules['CO_IBC_SALARIAL']['total'])</field>
             <field name="appears_on_payslip" eval="False"/>
             <field name="note">Remuneracion base de la regla del 40%.</field>
         </record>
@@ -796,7 +796,7 @@ Para contrato indefinido: no requiere ningun input, el calculo diferencia entre 
             <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = payslip._ne_ibc_sln(contract)</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_sln(version)</field>
             <field name="appears_on_payslip" eval="False"/>
             <field name="note">Base de los dias SLN del tramo del ultimo mes (ultimo IBC de la nomina general antes del tramo, prorrateado por dias). Solo salud y pension; el empleador asume el 100% (igual que la nomina general, H-168).</field>
         </record>
@@ -809,7 +809,7 @@ Para contrato indefinido: no requiere ningun input, el calculo diferencia entre 
             <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
             <field name="condition_select">none</field>
             <field name="amount_select">code</field>
-            <field name="amount_python_compute">result = payslip._ne_ibc_incap(contract, result_rules)</field>
+            <field name="amount_python_compute">result = payslip._ne_ibc_incap(version, result_rules)</field>
             <field name="appears_on_payslip" eval="False"/>
             <field name="note">Base de incapacidades y licencias de maternidad/paternidad del tramo: solo salud y pension (igual que la nomina general).</field>
         </record>
@@ -896,9 +896,9 @@ _rete_cfg = payslip._ne_retefuente_config()  # UserError si falta la del año (.
 
 # Bruto total de la liquidacion
 _gross = categories['DEV'] if categories.get('DEV') else 0
-_ibc = categories.get('DEV_SAL', contract.wage)
-if contract.l10n_co_ne_integral_salary:
-    _ibc = contract.wage * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_to)
+_ibc = categories.get('DEV_SAL', payslip._ne_salario())
+if version.l10n_co_ne_integral_salary:
+    _ibc = payslip._ne_salario() * payslip._rule_parameter('l10n_co_factor_integral_salary', payslip.date_to)
 
 _rete_result = _rete_cfg.compute_retefuente(
     employee, _gross, _ibc, _ibc, employee.company_id

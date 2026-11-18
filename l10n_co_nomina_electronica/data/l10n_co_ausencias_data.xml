@@ -31,7 +31,7 @@
         <record id="hr_leave_type_co_vac" model="hr.leave.type">
             <field name="name">Vacaciones Disfrutadas</field>
             <field name="work_entry_type_id" ref="hr_work_entry_type_co_vac"/>
-            <field name="requires_allocation">no</field>
+            <field name="requires_allocation" eval="False"/>
             <field name="company_id" eval="False"/>
         </record>
 
@@ -44,7 +44,7 @@
         <record id="hr_leave_type_co_lic_rem" model="hr.leave.type">
             <field name="name">Licencia Remunerada</field>
             <field name="work_entry_type_id" ref="hr_work_entry_type_co_lic_rem"/>
-            <field name="requires_allocation">no</field>
+            <field name="requires_allocation" eval="False"/>
             <field name="company_id" eval="False"/>
         </record>
 
@@ -61,7 +61,7 @@
         <record id="hr_leave_type_co_lic_nr" model="hr.leave.type">
             <field name="name">Licencia No Remunerada</field>
             <field name="work_entry_type_id" ref="hr_work_entry_type_co_lic_nr"/>
-            <field name="requires_allocation">no</field>
+            <field name="requires_allocation" eval="False"/>
             <field name="unpaid" eval="True"/>
             <field name="company_id" eval="False"/>
         </record>
@@ -75,7 +75,7 @@
         <record id="hr_leave_type_co_inc_comun" model="hr.leave.type">
             <field name="name">Incapacidad Enfermedad General</field>
             <field name="work_entry_type_id" ref="hr_work_entry_type_co_inc_comun"/>
-            <field name="requires_allocation">no</field>
+            <field name="requires_allocation" eval="False"/>
             <field name="company_id" eval="False"/>
             <!-- H-014 (2026-10-08): el conteo de días pagables lo hace _ne_ausencia_calendario()
                  directamente sobre las fechas de la hr.leave (días calendario corridos, CST
@@ -94,7 +94,7 @@
         <record id="hr_leave_type_co_inc_laboral" model="hr.leave.type">
             <field name="name">Incapacidad Accidente de Trabajo</field>
             <field name="work_entry_type_id" ref="hr_work_entry_type_co_inc_laboral"/>
-            <field name="requires_allocation">no</field>
+            <field name="requires_allocation" eval="False"/>
             <field name="company_id" eval="False"/>
             <!-- H-014: ver comentario en hr_leave_type_co_inc_comun, misma razón. -->
             <field name="include_public_holidays_in_duration" eval="True"/>
@@ -109,7 +109,7 @@
         <record id="hr_leave_type_co_lic_mat" model="hr.leave.type">
             <field name="name">Licencia de Maternidad</field>
             <field name="work_entry_type_id" ref="hr_work_entry_type_co_lic_mat"/>
-            <field name="requires_allocation">no</field>
+            <field name="requires_allocation" eval="False"/>
             <field name="company_id" eval="False"/>
             <!-- H-014: ver comentario en hr_leave_type_co_inc_comun, misma razón. -->
             <field name="include_public_holidays_in_duration" eval="True"/>
@@ -124,7 +124,7 @@
         <record id="hr_leave_type_co_lic_pat" model="hr.leave.type">
             <field name="name">Licencia de Paternidad</field>
             <field name="work_entry_type_id" ref="hr_work_entry_type_co_lic_pat"/>
-            <field name="requires_allocation">no</field>
+            <field name="requires_allocation" eval="False"/>
             <field name="company_id" eval="False"/>
             <!-- H-014: ver comentario en hr_leave_type_co_inc_comun, misma razón. -->
             <field name="include_public_holidays_in_duration" eval="True"/>

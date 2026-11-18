@@ -564,8 +564,8 @@ class L10nCoNominaUgpp(models.Model):
         Adjunto = self.env['ir.attachment']
         resultado = []
         for empleado in payslips.employee_id.sorted('name'):
-            contratos = payslips.filtered(lambda s: s.employee_id == empleado).contract_id | empleado.contract_ids
-            fuentes = (('contrato', 'hr.contract', contratos.ids), ('empleado', 'hr.employee', empleado.ids),
+            contratos = payslips.filtered(lambda s: s.employee_id == empleado).version_id | empleado.version_ids
+            fuentes = (('contrato', 'hr.version', contratos.ids), ('empleado', 'hr.employee', empleado.ids),
                        ('contacto', 'res.partner', empleado.work_contact_id.ids))
             adjuntos = []
             for tipo, modelo, ids in fuentes:
@@ -746,9 +746,9 @@ class L10nCoNominaUgpp(models.Model):
             raise UserError(_(
                 'Para el oficio de respuesta a la UGPP de la compañía "%(compania)s" falta: %(faltan)s.',
                 compania=company.display_name, faltan='; '.join(faltan)))
-        periodicidad = dict(self.env['hr.contract']._fields['schedule_pay'].selection)
+        periodicidad = dict(self.env['hr.version']._fields['schedule_pay']._description_selection(self.env))
         calendarios = sorted({periodicidad.get(c.schedule_pay or c.structure_type_id.default_schedule_pay, '')
-                              for c in recibos.contract_id} - {''})
+                              for c in recibos.version_id} - {''})
         meses = dict(self._fields['month'].selection)
         # Fechas de pago REALES de los recibos del reporte: la periodicidad nativa (``schedule_pay``) no puede expresar
         # "los días 5 y 20" ni "todos los viernes". Misma fuente de la fecha de pago del documento DIAN; un recibo sin
@@ -1077,7 +1077,7 @@ class L10nCoNominaUgpp(models.Model):
         row_num = fila_datos
         valores = self._ugpp_valores(payslips)
         for employee, payslip in self._ugpp_empleados(payslips):
-            contract = payslip.contract_id
+            contract = payslip.version_id
             # Valor de cada concepto del mes para el empleado (una fila por empleado y mes; vacaciones por fecha de pago).
             rule_totals = valores.get(employee.id, {})
 
@@ -1133,17 +1133,17 @@ class L10nCoNominaUgpp(models.Model):
             # -- Ingreso / Retiro en el período ------------------------
             es_ingreso = False
             fecha_ingreso = ''
-            if contract and contract.date_start:
-                if period_start <= contract.date_start <= period_end:
+            if contract and contract.contract_date_start:
+                if period_start <= contract.contract_date_start <= period_end:
                     es_ingreso = True
-                    fecha_ingreso = contract.date_start.strftime('%d/%m/%Y')
+                    fecha_ingreso = contract.contract_date_start.strftime('%d/%m/%Y')
 
             es_retiro = False
             fecha_retiro = ''
-            if contract and contract.date_end:
-                if period_start <= contract.date_end <= period_end:
+            if contract and contract.contract_date_end:
+                if period_start <= contract.contract_date_end <= period_end:
                     es_retiro = True
-                    fecha_retiro = contract.date_end.strftime('%d/%m/%Y')
+                    fecha_retiro = contract.contract_date_end.strftime('%d/%m/%Y')
 
             # -- Fechas de las novedades (desde Ausencias validadas) ---------
             fecha_ini_vac, fecha_fin_vac = (

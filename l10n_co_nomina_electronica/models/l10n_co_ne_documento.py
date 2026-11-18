@@ -63,7 +63,7 @@ class L10nCoNeDocumento(models.Model):
     currency_id = fields.Many2one(related='company_id.currency_id')
     employee_id = fields.Many2one('hr.employee', string='Empleado', required=True, index=True,
                                   check_company=True, ondelete='restrict')
-    contract_id = fields.Many2one('hr.contract', string='Contrato', check_company=True, ondelete='restrict',
+    version_id = fields.Many2one('hr.version', string='Contrato', check_company=True, ondelete='restrict',
                                   help='Contrato vigente en el mes (ingreso/retiro, tipo de contrato).')
     period = fields.Date(string='Mes', required=True, index=True,
                          help='Primer día del mes del documento (mes de la primera fecha de pago de sus recibos).')
@@ -212,7 +212,7 @@ class L10nCoNeDocumento(models.Model):
     def _ne_calendario(self):
         """Calendario laboral del documento: el del contrato; si no, el de la compañía."""
         self.ensure_one()
-        return self.contract_id.resource_calendar_id or self.company_id.resource_calendar_id
+        return self.version_id.resource_calendar_id or self.company_id.resource_calendar_id
 
     def _ne_dias_habiles(self, desde, hasta):
         """Fechas hábiles de [desde, hasta]: con jornada en el calendario y sin festivo (festivos globales de la
@@ -249,7 +249,7 @@ class L10nCoNeDocumento(models.Model):
         habiles = sorted(self._ne_dias_habiles(primero, primero + timedelta(days=44)))
         return habiles[dias - 1] if len(habiles) >= dias else False
 
-    @api.depends('period', 'contract_id.resource_calendar_id', 'company_id.resource_calendar_id',
+    @api.depends('period', 'version_id.resource_calendar_id', 'company_id.resource_calendar_id',
                  'legacy', 'is_adjustment', 'error_conocido_el')
     def _compute_fecha_limite(self):
         for doc in self:
@@ -400,8 +400,8 @@ class L10nCoNeDocumento(models.Model):
         nuevos = recibos - self.payslip_ids
         if nuevos:
             nuevos.write({'l10n_co_ne_documento_id': self.id})
-        contratos = recibos.sorted('date_to').contract_id
-        self.contract_id = contratos[-1:] or False
+        contratos = recibos.sorted('date_to').version_id
+        self.version_id = contratos[-1:] or False
         if self.etapa == 'ready':
             self.etapa = 'draft'   # cambió la composición: se revalida
         if (sueltos or nuevos) and not self.state and self.xml_attachment_id:
@@ -501,7 +501,7 @@ class L10nCoNeDocumento(models.Model):
         padre = self._ne_ultimo_aceptado()
         nota = self.create({
             'company_id': self.company_id.id, 'employee_id': self.employee_id.id, 'period': self.period,
-            'contract_id': self.contract_id.id, 'is_adjustment': True, 'adjustment_type': tipo,
+            'version_id': self.version_id.id, 'is_adjustment': True, 'adjustment_type': tipo,
             'parent_id': padre.id, 'adjustment_ref_cune': padre.cune, 'error_conocido_el': fecha, 'etapa': 'draft'})
         if tipo == '1':
             nota._ne_componer_adoptados(self._ne_adoptables(
@@ -629,7 +629,7 @@ class L10nCoNeDocumento(models.Model):
         if not slip.employee_id.identification_id:
             raise UserError(_('El empleado %s no tiene número de identificación configurado.',
                               slip.employee_id.name))
-        if not slip.contract_id:
+        if not slip.version_id:
             raise UserError(_('El recibo %s no tiene contrato asociado.', slip.number or slip.name))
         slip._ne_validar_cuenta_transferencia()
         slip.employee_id._l10n_co_nombre_dian()
@@ -692,15 +692,15 @@ class L10nCoNeDocumento(models.Model):
         self.ensure_one()
         primero = self.period
         ultimo = (primero.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-        inicio = max(primero, contrato.date_start) if contrato.date_start else primero
-        fin = min(ultimo, contrato.date_end) if contrato.date_end else ultimo
+        inicio = max(primero, contrato.contract_date_start) if contrato.contract_date_start else primero
+        fin = min(ultimo, contrato.contract_date_end) if contrato.contract_date_end else ultimo
         ahora = _dt.now(pytz.timezone('America/Bogota'))
         return {
-            'FechaIngreso': str(contrato.date_start) if contrato.date_start else '',
-            'FechaRetiro': str(contrato.date_end) if contrato.date_end else '',
+            'FechaIngreso': str(contrato.contract_date_start) if contrato.contract_date_start else '',
+            'FechaRetiro': str(contrato.contract_date_end) if contrato.contract_date_end else '',
             'FechaLiquidacionInicio': str(inicio),
             'FechaLiquidacionFin': str(fin),
-            'TiempoLaborado': str(dian_utils.compute_worked_time_360(contrato.date_start, fin, inclusive=True)),
+            'TiempoLaborado': str(dian_utils.compute_worked_time_360(contrato.contract_date_start, fin, inclusive=True)),
             'FechaGen': ahora.strftime('%Y-%m-%d'),
         }
 
@@ -713,7 +713,7 @@ class L10nCoNeDocumento(models.Model):
         recibos = self._ne_recibos_para_xml().sorted('date_to')
         if not recibos:
             raise UserError(_('El documento "%s" no tiene recibos.', self.display_name))
-        contrato = self.contract_id or recibos[-1].contract_id
+        contrato = self.version_id or recibos[-1].version_id
         fechas = sorted({str(f) for slip in recibos for f in slip._ne_fechas_pago()})
         datos_recibos = [slip._collect_payslip_data() for slip in recibos]
         try:
@@ -1802,7 +1802,7 @@ class L10nCoNeDocumento(models.Model):
         return {
             'company_id': slip.company_id.id,
             'employee_id': slip.employee_id.id,
-            'contract_id': slip.contract_id.id or False,
+            'version_id': slip.version_id.id or False,
             'period': slip.date_to.replace(day=1),
             'legacy': True,
             'etapa': etapa,

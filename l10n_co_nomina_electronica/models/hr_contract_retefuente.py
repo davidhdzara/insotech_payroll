@@ -11,7 +11,7 @@ de AÑO+COMPAÑÍA (1 solo valor compartido por todos los empleados) -- forma
 equivocada para lo que exige el Art. 384 ET, que es un porcentaje fijo
 POR EMPLEADO, calculado sobre el promedio de SUS propios ingresos de los
 últimos 12 meses. Este módulo mueve la selección del procedimiento a
-``hr.contract`` (mismo lugar que las demás deducciones/retención propias
+``hr.version`` (v19; en v18 ``hr.contract``; mismo lugar que las demás deducciones/retención propias
 del contrato, ver ``hr_contract_deductions.py``) y agrega
 ``l10n.co.retefuente.procedure2`` como histórico real por contrato+semestre
 -- a diferencia del bug de UVT corregido en doc 06 (que NO debía cachear),
@@ -42,10 +42,23 @@ def _semester_start_for_date(d):
     return d.replace(month=1, day=1) if d.month <= 6 else d.replace(month=7, day=1)
 
 
-class HrContractRetefuenteProcedure(models.Model):
-    """Selección del procedimiento de retención en la fuente por contrato."""
+class HrEmployeeRetefuenteProcedure(models.Model):
+    """Histórico del Procedimiento 2 en el empleado (v19, R3: la llave del histórico es ``employee_id``;
+    el One2many no puede colgar de ``hr.version`` porque su inverso ya no es el contrato)."""
 
-    _inherit = 'hr.contract'
+    _inherit = 'hr.employee'
+
+    l10n_co_ne_retention_procedure2_ids = fields.One2many(
+        comodel_name='l10n.co.retefuente.procedure2',
+        inverse_name='employee_id',
+        string='Histórico Procedimiento 2',
+    )
+
+
+class HrVersionRetefuenteProcedure(models.Model):
+    """Selección del procedimiento de retención en la fuente por contrato (versión del empleado)."""
+
+    _inherit = 'hr.version'
 
     l10n_co_ne_retention_procedure = fields.Selection(
         selection=[
@@ -60,12 +73,6 @@ class HrContractRetefuenteProcedure(models.Model):
              'dentro de esa ventana, vigente para las nóminas que se '
              'calculen desde ese momento.',
     )
-    l10n_co_ne_retention_procedure2_ids = fields.One2many(
-        comodel_name='l10n.co.retefuente.procedure2',
-        inverse_name='contract_id',
-        string='Histórico Procedimiento 2',
-    )
-
     def write(self, vals):
         if 'l10n_co_ne_retention_procedure' in vals:
             today = fields.Date.context_today(self)
@@ -77,8 +84,8 @@ class HrContractRetefuenteProcedure(models.Model):
                             'puede cambiarse en junio o diciembre (Art. 384 '
                             'ET), para que el nuevo procedimiento quede '
                             'vigente desde el semestre correspondiente. '
-                            'Contrato: %(name)s',
-                            name=contract.name,
+                            'Contrato de: %(name)s',
+                            name=contract.employee_id.name or contract.display_name,
                         ))
         return super().write(vals)
 
@@ -113,10 +120,11 @@ class HrContractRetefuenteProcedure(models.Model):
         )
 
         struct = self.env.ref(_STRUCT_XMLID)
+        # v19: el histórico es POR EMPLEADO (R3) y el estado confirmado es 'validated' (R2: ``done`` no existe).
         payslips = self.env['hr.payslip'].search([
-            ('contract_id', '=', self.id),
+            ('employee_id', '=', self.employee_id.id),
             ('struct_id', '=', struct.id),
-            ('state', '=', 'done'),
+            ('state', '=', 'validated'),
         ], order='date_from desc', limit=_MAX_MONTHS_AVERAGE)
         if not payslips:
             raise UserError(_(
@@ -151,11 +159,11 @@ class HrContractRetefuenteProcedure(models.Model):
 
         Procedure2 = self.env['l10n.co.retefuente.procedure2']
         existing = Procedure2.search([
-            ('contract_id', '=', self.id),
+            ('employee_id', '=', self.employee_id.id),
             ('semester_start', '=', next_semester_start),
         ], limit=1)
         vals = {
-            'contract_id': self.id,
+            'employee_id': self.employee_id.id,
             'semester_start': next_semester_start,
             'months_considered': months_considered,
             'average_gross': avg_gross,
@@ -201,19 +209,17 @@ class L10nCoRetefuenteProcedure2(models.Model):
     _description = 'Retención en la Fuente - Procedimiento 2 - Histórico Semestral'
     _order = 'semester_start desc'
 
-    contract_id = fields.Many2one(
-        comodel_name='hr.contract',
-        string='Contrato',
+    # v19 (R3): la llave es el EMPLEADO, no el contrato: ``hr.contract`` no existe y una versión del
+    # empleado cambia con cada aumento, mientras el porcentaje fijo vale todo el semestre (Art. 384 ET).
+    employee_id = fields.Many2one(
+        comodel_name='hr.employee',
+        string='Empleado',
         required=True,
+        index=True,
         ondelete='cascade',
     )
-    employee_id = fields.Many2one(
-        related='contract_id.employee_id',
-        string='Empleado',
-        store=True,
-    )
     company_id = fields.Many2one(
-        related='contract_id.company_id',
+        related='employee_id.company_id',
         string='Compañía',
         store=True,
     )
@@ -256,11 +262,10 @@ class L10nCoRetefuenteProcedure2(models.Model):
         readonly=True,
     )
 
-    _sql_constraints = [
-        (
-            'contract_semester_uniq',
-            'UNIQUE(contract_id, semester_start)',
-            'Ya existe un cálculo de Procedimiento 2 para este contrato '
-            'en este semestre.',
-        ),
-    ]
+    # v19: ``_sql_constraints`` ya no crea nada (aviso en el log); se usa ``models.Constraint``
+    # (misma sintaxis que ``hr/models/hr_version.py:197``).
+    _employee_semester_uniq = models.Constraint(
+        'UNIQUE(employee_id, semester_start)',
+        'Ya existe un cálculo de Procedimiento 2 para este empleado '
+        'en este semestre.',
+    )

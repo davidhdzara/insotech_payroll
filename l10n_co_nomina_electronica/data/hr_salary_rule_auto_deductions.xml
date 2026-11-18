@@ -44,14 +44,14 @@ result = -payslip._ne_libranzas_calcular(_neto_ley, _embargo)
             <field name="condition_select">python</field>
             <field name="condition_python">
 # Automatico desde contrato, o manual desde input
-_from_contract = contract.l10n_co_ne_sindicato or 0
+_from_contract = version.l10n_co_ne_sindicato or 0
 _from_input = inputs.get('CO_SINDICATO') and inputs['CO_SINDICATO'].amount or 0
 result = _from_contract > 0 or _from_input > 0
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Input manual tiene prioridad sobre contrato (permite ajuste puntual)
-_from_contract = contract.l10n_co_ne_sindicato or 0
+_from_contract = version.l10n_co_ne_sindicato or 0
 _from_input = inputs.get('CO_SINDICATO') and inputs['CO_SINDICATO'].amount or 0
 result = -abs(_from_input if _from_input > 0 else _from_contract)
             </field>
@@ -70,14 +70,14 @@ result = -abs(_from_input if _from_input > 0 else _from_contract)
             <field name="condition_select">python</field>
             <field name="condition_python">
 # Automatico desde contrato, o manual desde input
-_from_contract = contract.l10n_co_ne_afc or 0
+_from_contract = version.l10n_co_ne_afc or 0
 _from_input = inputs.get('CO_AFC') and inputs['CO_AFC'].amount or 0
 result = _from_contract > 0 or _from_input > 0
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Input manual tiene prioridad sobre contrato (permite ajuste puntual)
-_from_contract = contract.l10n_co_ne_afc or 0
+_from_contract = version.l10n_co_ne_afc or 0
 _from_input = inputs.get('CO_AFC') and inputs['CO_AFC'].amount or 0
 result = -abs(_from_input if _from_input > 0 else _from_contract)
             </field>
@@ -96,14 +96,14 @@ result = -abs(_from_input if _from_input > 0 else _from_contract)
             <field name="condition_select">python</field>
             <field name="condition_python">
 # Automatico desde contrato, o manual desde input
-_from_contract = contract.l10n_co_ne_pension_voluntaria or 0
+_from_contract = version.l10n_co_ne_pension_voluntaria or 0
 _from_input = inputs.get('CO_PENSION_VOL') and inputs['CO_PENSION_VOL'].amount or 0
 result = _from_contract > 0 or _from_input > 0
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Input manual tiene prioridad sobre contrato (permite ajuste puntual)
-_from_contract = contract.l10n_co_ne_pension_voluntaria or 0
+_from_contract = version.l10n_co_ne_pension_voluntaria or 0
 _from_input = inputs.get('CO_PENSION_VOL') and inputs['CO_PENSION_VOL'].amount or 0
 result = -abs(_from_input if _from_input > 0 else _from_contract)
             </field>
@@ -122,14 +122,14 @@ result = -abs(_from_input if _from_input > 0 else _from_contract)
             <field name="condition_select">python</field>
             <field name="condition_python">
 # Automatico desde contrato, o manual desde input
-_from_contract = contract.l10n_co_ne_cooperativa or 0
+_from_contract = version.l10n_co_ne_cooperativa or 0
 _from_input = inputs.get('CO_COOPERATIVA') and inputs['CO_COOPERATIVA'].amount or 0
 result = _from_contract > 0 or _from_input > 0
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Input manual tiene prioridad sobre contrato (permite ajuste puntual)
-_from_contract = contract.l10n_co_ne_cooperativa or 0
+_from_contract = version.l10n_co_ne_cooperativa or 0
 _from_input = inputs.get('CO_COOPERATIVA') and inputs['CO_COOPERATIVA'].amount or 0
 result = -abs(_from_input if _from_input > 0 else _from_contract)
             </field>
@@ -148,14 +148,14 @@ result = -abs(_from_input if _from_input > 0 else _from_contract)
             <field name="condition_select">python</field>
             <field name="condition_python">
 # Automatico desde contrato, o manual desde input
-_from_contract = contract.l10n_co_ne_plan_complementario or 0
+_from_contract = version.l10n_co_ne_plan_complementario or 0
 _from_input = inputs.get('CO_PLAN_COMP') and inputs['CO_PLAN_COMP'].amount or 0
 result = _from_contract > 0 or _from_input > 0
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Input manual tiene prioridad sobre contrato (permite ajuste puntual)
-_from_contract = contract.l10n_co_ne_plan_complementario or 0
+_from_contract = version.l10n_co_ne_plan_complementario or 0
 _from_input = inputs.get('CO_PLAN_COMP') and inputs['CO_PLAN_COMP'].amount or 0
 result = -abs(_from_input if _from_input > 0 else _from_contract)
             </field>
@@ -174,14 +174,14 @@ result = -abs(_from_input if _from_input > 0 else _from_contract)
             <field name="condition_select">python</field>
             <field name="condition_python">
 # Automatico desde contrato, o manual desde input
-_from_contract = contract.l10n_co_ne_educacion or 0
+_from_contract = version.l10n_co_ne_educacion or 0
 _from_input = inputs.get('CO_EDUCACION') and inputs['CO_EDUCACION'].amount or 0
 result = _from_contract > 0 or _from_input > 0
             </field>
             <field name="amount_select">code</field>
             <field name="amount_python_compute">
 # Input manual tiene prioridad sobre contrato (permite ajuste puntual)
-_from_contract = contract.l10n_co_ne_educacion or 0
+_from_contract = version.l10n_co_ne_educacion or 0
 _from_input = inputs.get('CO_EDUCACION') and inputs['CO_EDUCACION'].amount or 0
 result = -abs(_from_input if _from_input > 0 else _from_contract)
             </field>

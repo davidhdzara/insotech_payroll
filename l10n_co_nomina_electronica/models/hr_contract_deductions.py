@@ -2,7 +2,7 @@
 # Part of InSoTech. See LICENSE file for full copyright and licensing details.
 
 """
-Extensión de hr.contract con campos de deducciones fijas mensuales.
+Extensión de hr.version (v19; en v18 hr.contract) con campos de deducciones fijas mensuales.
 
 Permite configurar en el contrato las deducciones recurrentes que antes
 requerían ingreso manual en cada nómina: libranzas, cuota sindical, AFC,
@@ -15,10 +15,10 @@ y permiten sobreescritura puntual mediante inputs manuales en la nómina.
 from odoo import fields, models
 
 
-class HrContractDeductions(models.Model):
-    """Deducciones fijas mensuales configuradas en el contrato."""
+class HrVersionDeductions(models.Model):
+    """Deducciones fijas mensuales configuradas en el contrato (versión del empleado)."""
 
-    _inherit = 'hr.contract'
+    _inherit = 'hr.version'
 
     # ──────────────────────────────────────────────────────────────────
     # Deducciones Legales

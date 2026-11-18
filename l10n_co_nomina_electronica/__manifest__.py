@@ -1,6 +1,6 @@
 {
     'name': 'Colombia - Nómina',
-    'version': '18.0.3.0.281',
+    'version': '19.0.1.0.0',
     'category': 'Human Resources/Payroll',
     'countries': ['co'],
     'summary': 'Generación y envío de Nómina Electrónica a la DIAN (Resolución 000013 de 2021)',
@@ -94,7 +94,11 @@ Funcionalidades principales:
         'views/res_partner_views.xml',
         'views/res_config_settings_views.xml',
         'views/hr_employee_views.xml',
-        'views/hr_contract_views.xml',
+        # v19 (bloque 0): las 3 vistas de contrato (hr_contract_views, hr_contract_deductions_views y
+        # hr_contract_retefuente_views) heredan hr_payroll.hr_contract_form_inherit, que NO existe en v19
+        # (no hay formulario de hr.contract: los campos viven en hr.version y se editan en la ficha del
+        # empleado); sin sacarlas el modulo no carga. Los campos existen en hr.version pero sin pantalla
+        # hasta que David decida donde van (grupos en payroll_information). TL 2026-11-18.
         'views/hr_leave_prorroga_views.xml',
         'views/hr_payslip_views.xml',
         'views/l10n_co_ne_exchange_views.xml',
@@ -102,8 +106,6 @@ Funcionalidades principales:
         # Despues de ugpp_views: usa su menu menu_l10n_co_nomina_reportes.
         'views/l10n_co_ne_documento_views.xml',
         'views/hr_salary_attachment_views.xml',
-        'views/hr_contract_deductions_views.xml',
-        'views/hr_contract_retefuente_views.xml',
         # Reports
         'report/hr_payslip_ne_report.xml',
         'report/comprobante_pago_report.xml',

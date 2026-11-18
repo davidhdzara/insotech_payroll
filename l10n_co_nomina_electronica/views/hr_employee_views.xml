@@ -6,7 +6,7 @@
          entre ellas (banco, EPS/AFP/CCF) y una ficha ("Nómina Colombia") que solo
          reempaquetaba visualmente datos que ya viven en el contrato, la compañía o el
          button box nativo. Ahora se complementa la pestaña nativa de Nómina (hr_payroll,
-         page[@name='hr_payroll']) en vez de duplicarla: cada campo aparece UNA sola vez
+         page[@name='payroll_information'] en v19; hr_payroll en v18) en vez de duplicarla: cada campo aparece UNA sola vez
          en todo el formulario. Sin campos nuevos, sin cambios de modelo ni de cálculo/XML. -->
     <record id="view_employee_form_ne" model="ir.ui.view">
         <field name="name">hr.employee.form.ne</field>
@@ -14,7 +14,7 @@
         <field name="inherit_id" ref="hr.view_employee_form"/>
         <field name="priority">99</field>
         <field name="arch" type="xml">
-            <xpath expr="//page[@name='hr_payroll']" position="inside">
+            <xpath expr="//page[@name='payroll_information']" position="inside">
                 <field name="company_country_code" invisible="1"/>
 
                 <!-- UX-02 (2026-10-11): el tipo de documento ya no vive aquí, sale del

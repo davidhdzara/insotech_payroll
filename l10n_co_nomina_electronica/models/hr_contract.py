@@ -2,11 +2,13 @@
 # Part of InSoTech. See LICENSE file for full copyright and licensing details.
 
 """
-Extensión de hr.contract para Nómina Electrónica DIAN.
+Extensión de hr.version para Nómina Electrónica DIAN (Odoo 19; en Odoo 18 era hr.contract).
 
 Agrega los campos requeridos por el nodo ``<Trabajador>`` del XML de nómina
 electrónica que dependen del contrato laboral: tipo de contrato y si el
-salario es integral.
+salario es integral. En v19 no existe ``hr.contract``: el contrato es un rango de
+fechas (``contract_date_start/_end``) sobre ``hr.version``, que además es versionado
+por fecha (``date_version``); los campos propios quedan versionados con él.
 
 Referencia: Anexo Técnico – Documento Soporte de Pago de Nómina Electrónica
 V1.0, sección 6.2.8, atributos TipoContrato y SalarioIntegral.
@@ -19,10 +21,10 @@ from odoo.tools.misc import format_amount
 from .res_company import NE_CLASES_RIESGO
 
 
-class HrContract(models.Model):
-    """Campos del contrato laboral para Nómina Electrónica DIAN."""
+class HrVersion(models.Model):
+    """Campos del contrato laboral (versión del empleado) para Nómina Electrónica DIAN."""
 
-    _inherit = 'hr.contract'
+    _inherit = 'hr.version'
 
     # ──────────────────────────────────────────────────────────────────
     # Tipo de Contrato (codificación DIAN)
@@ -127,11 +129,13 @@ class HrContract(models.Model):
     def _ne_validar_piso_integral(self, fecha=None):
         """Un contrato de salario integral no puede pagar menos del piso: l10n_co_piso_salario_
         integral_smmlv (13 SMMLV, 10 de salario + 30 % de factor prestacional) x SMMLV de la
-        fecha. fecha: la del SMMLV; sin ella, la de inicio del contrato."""
+        fecha. fecha: la del SMMLV; sin ella, la de inicio del contrato (``contract_date_start``: en
+        v19 ``date_start`` es la vigencia de la VERSIÓN, no el ingreso; T2, doc 02,
+        ``hr/models/hr_version.py:561-580``)."""
         Parametro = self.env['hr.rule.parameter']
         for contrato in self.filtered(
                 lambda c: c.l10n_co_ne_integral_salary and c.company_id._ne_es_colombia()):
-            fecha_smmlv = fecha or contrato.date_start
+            fecha_smmlv = fecha or contrato.contract_date_start
             if not fecha_smmlv:
                 continue
             veces = Parametro._get_parameter_from_code(
@@ -139,14 +143,20 @@ class HrContract(models.Model):
             smmlv = Parametro._get_parameter_from_code('l10n_co_smmlv', fecha_smmlv)
             piso = veces * smmlv
             moneda = contrato.company_id.currency_id
-            if contrato.wage < piso:
+            # ``wage`` tiene grupos (``hr``: hr.group_hr_manager, ``hr/models/hr_version.py:178-180``;
+            # ``hr_payroll`` lo redefine con group_hr_payroll_user, ``hr_payroll/models/hr_version.py:28``)
+            # y quien edita la marca de integral puede no tenerlos: el salario se lee con sudo SOLO para
+            # validar el piso (no se muestra ni se devuelve).
+            salario = contrato.sudo().wage
+            if salario < piso:
                 raise ValidationError(_(
-                    "El contrato '%(contrato)s' de %(empleado)s es de salario integral con un "
-                    "salario de %(salario)s, por debajo del piso de %(piso)s (%(veces)s SMMLV de "
-                    "%(smmlv)s, vigente el %(fecha)s; CST art. 132). Corrija el Salario del "
-                    "contrato o quite la marca \"Salario Integral\".",
-                    contrato=contrato.name, empleado=contrato.employee_id.name,
-                    salario=format_amount(self.env, contrato.wage, moneda),
+                    "El contrato de %(empleado)s (versión vigente desde el %(version)s) es de salario "
+                    "integral con un salario de %(salario)s, por debajo del piso de %(piso)s "
+                    "(%(veces)s SMMLV de %(smmlv)s, vigente el %(fecha)s; CST art. 132). Corrija el "
+                    "Salario del contrato o quite la marca \"Salario Integral\".",
+                    empleado=contrato.employee_id.name or contrato.display_name,
+                    version=contrato.date_version,
+                    salario=format_amount(self.env, salario, moneda),
                     piso=format_amount(self.env, piso, moneda), veces=veces,
                     smmlv=format_amount(self.env, smmlv, moneda), fecha=fecha_smmlv))
 
@@ -158,10 +168,10 @@ class HrContract(models.Model):
 
     def write(self, vals):
         resultado = super().write(vals)
-        if {'wage', 'l10n_co_ne_integral_salary', 'date_start'} & set(vals):
+        if {'wage', 'l10n_co_ne_integral_salary', 'contract_date_start'} & set(vals):
             # Un cambio solo de salario se valida con el SMMLV de hoy; si se toca el ingreso o
             # la marca de integral, con el SMMLV de la fecha de inicio del contrato.
-            solo_salario = 'wage' in vals and not {'l10n_co_ne_integral_salary', 'date_start'} & set(vals)
+            solo_salario = 'wage' in vals and not {'l10n_co_ne_integral_salary', 'contract_date_start'} & set(vals)
             self._ne_validar_piso_integral(fields.Date.context_today(self) if solo_salario else None)
         return resultado
 
@@ -172,30 +182,36 @@ class HrContract(models.Model):
         valor = self[campo]
         if not valor:
             raise UserError(_(
-                'El contrato "%(contrato)s" de %(empleado)s no tiene "%(campo)s". Elíjalo en el '
-                'contrato (nunca se asume un valor por defecto).',
-                contrato=self.name, empleado=self.employee_id.name,
+                'El contrato de %(empleado)s (versión vigente desde el %(version)s) no tiene "%(campo)s". '
+                'Elíjalo en el contrato (nunca se asume un valor por defecto).',
+                empleado=self.employee_id.name or self.display_name, version=self.date_version,
                 campo=self._fields[campo].string))
         return valor
 
     _NE_CAMPOS_OBLIGATORIOS_EN_PROCESO = (
         'l10n_co_ne_contract_type', 'l10n_co_pila_tipo_cotizante', 'l10n_co_pila_subtipo_cotizante')
 
-    @api.constrains('state', *_NE_CAMPOS_OBLIGATORIOS_EN_PROCESO)
+    @api.constrains('contract_date_start', *_NE_CAMPOS_OBLIGATORIOS_EN_PROCESO)
     def _check_tipos_obligatorios_en_proceso(self):
-        """Un contrato colombiano 'En proceso' exige tipo de contrato DIAN, tipo y subtipo de
-        cotizante: no tienen valor por defecto (antes salian 'indefinido', 'dependiente')."""
+        """Una versión colombiana CON contrato (``contract_date_start`` definida) exige tipo de
+        contrato DIAN, tipo y subtipo de cotizante: no tienen valor por defecto (antes salian
+        'indefinido', 'dependiente').
+
+        Sustituto v19 de «En proceso»: en v18 la restricción valía para ``state == 'open'``, pero
+        ``hr.version`` no tiene ``state`` (doc 02, T4); el contrato se deriva de las fechas.
+        Decisión D-A, Tech Lead 2026-11-18."""
         for contrato in self:
-            if contrato.state != 'open' or not contrato.company_id._ne_es_colombia():
+            if not contrato.contract_date_start or not contrato.company_id._ne_es_colombia():
                 continue
             faltan = [contrato._fields[c].string for c in self._NE_CAMPOS_OBLIGATORIOS_EN_PROCESO
                       if not contrato[c]]
             if faltan:
                 raise ValidationError(_(
-                    'El contrato "%(contrato)s" de %(empleado)s no puede pasar a "En proceso" sin: '
-                    '%(faltan)s. Complételos en el contrato (Detalles del contrato y pestaña PILA).',
-                    contrato=contrato.name, empleado=contrato.employee_id.name,
-                    faltan=', '.join(faltan)))
+                    'El contrato de %(empleado)s (versión vigente desde el %(version)s) no puede tener '
+                    'fecha de inicio del contrato sin: %(faltan)s. Complételos en el contrato '
+                    '(Detalles del contrato y pestaña PILA).',
+                    empleado=contrato.employee_id.name or contrato.display_name,
+                    version=contrato.date_version, faltan=', '.join(faltan)))
 
     def _ne_clase_riesgo(self):
         """Clase de riesgo ARL efectiva: la del contrato y, si no tiene, la general de la

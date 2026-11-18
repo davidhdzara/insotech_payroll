@@ -86,7 +86,7 @@
         <field name="target">new</field>
         <field name="binding_model_id" ref="l10n_co_nomina_electronica.model_l10n_co_ne_documento"/>
         <field name="binding_view_types">form,list</field>
-        <field name="groups_id" eval="[(4, ref('hr_payroll.group_hr_payroll_manager'))]"/>
+        <field name="group_ids" eval="[(4, ref('hr_payroll.group_hr_payroll_manager'))]"/>
     </record>
 
 </odoo>

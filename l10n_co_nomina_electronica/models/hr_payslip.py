@@ -142,8 +142,8 @@ class HrPayslip(models.Model):
         string='Aviso de periodicidad', compute='_compute_ne_aviso_periodicidad',
         help='Solo para las vistas: aviso (no bloquea) cuando el recibo cubre 7 días y el contrato no es semanal.')
 
-    @api.depends('date_from', 'date_to', 'struct_id', 'employee_id', 'contract_id.schedule_pay',
-                 'contract_id.structure_type_id.default_schedule_pay', 'company_id')
+    @api.depends('date_from', 'date_to', 'struct_id', 'employee_id', 'version_id.schedule_pay',
+                 'version_id.structure_type_id.default_schedule_pay', 'company_id')
     def _compute_ne_aviso_periodicidad(self):
         """E-2 (doc 59 §19.1): un recibo de la estructura general de exactamente 7 días con un contrato que no es `weekly` se
         calcularia con dias comerciales (un semanal mal configurado daria 6 dias al cruzar un mes de 31 dias). Aviso sin bloquear,
@@ -153,13 +153,13 @@ class HrPayslip(models.Model):
         for recibo in self:
             recibo.l10n_co_ne_aviso_periodicidad = False
             if not (recibo.date_from and recibo.date_to and recibo.struct_id == general and recibo.company_id
-                    and recibo.company_id._ne_es_colombia() and recibo.contract_id):
+                    and recibo.company_id._ne_es_colombia() and recibo.version_id):
                 continue
             if (recibo.date_to - recibo.date_from).days + 1 != 7 or recibo._ne_es_semanal():
                 continue
-            contrato = recibo.contract_id
+            contrato = recibo.version_id
             periodicidad = contrato.schedule_pay or contrato.structure_type_id.default_schedule_pay
-            etiqueta = dict(contrato._fields['schedule_pay'].selection).get(periodicidad) or _('(sin periodicidad)')
+            etiqueta = dict(contrato._fields['schedule_pay']._description_selection(self.env)).get(periodicidad) or _('(sin periodicidad)')
             recibo.l10n_co_ne_aviso_periodicidad = _(
                 'El recibo de %(empleado)s cubre exactamente 7 días pero la periodicidad de su contrato es "%(periodicidad)s", no '
                 '"Semanal". Si se le paga por semana, cambie la periodicidad a Semanal en el contrato o en el tipo de estructura '
@@ -275,7 +275,7 @@ class HrPayslip(models.Model):
                 campo = self._NE_TERCERO_DEDUCCION_CONTRATO.get(line.code)
                 if not campo or not line.total:
                     continue
-                contract = slip.contract_id
+                contract = slip.version_id
                 if not contract[campo]:
                     raise UserError(_(
                         'La nomina "%(nomina)s" calcula la deduccion '
@@ -625,12 +625,12 @@ class HrPayslip(models.Model):
         periodicidad de su contrato. La liquidacion, la prima y la bonificacion quedan fuera (su periodo es otro)."""
         general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina', raise_if_not_found=False)
         for recibo in self._ne_solo_colombia().filtered(lambda s: s.struct_id == general and s.date_from and s.date_to):
-            contrato = recibo.contract_id
+            contrato = recibo.version_id
             periodicidad = contrato.schedule_pay or contrato.structure_type_id.default_schedule_pay or 'monthly'
             maximo = self._NE_MAX_DIAS_PERIODO.get(periodicidad)
             dias = (recibo.date_to - recibo.date_from).days + 1
             if maximo and dias > maximo:
-                etiqueta = dict(contrato._fields['schedule_pay'].selection).get(periodicidad, periodicidad)
+                etiqueta = dict(contrato._fields['schedule_pay']._description_selection(self.env)).get(periodicidad, periodicidad)
                 raise UserError(_(
                     'El recibo "%(recibo)s" de %(empleado)s va del %(desde)s al %(hasta)s (%(dias)s días) y la periodicidad de su '
                     'contrato es "%(periodicidad)s" (máximo %(maximo)s días por recibo). Revise las fechas "Desde" y "Hasta" del '
@@ -663,12 +663,12 @@ class HrPayslip(models.Model):
         'company_sena': ('company_id', 'l10n_co_sena_partner_id'),
         'company_icbf': ('company_id', 'l10n_co_icbf_partner_id'),
         'company_dian': ('company_id', 'l10n_co_dian_partner_id'),
-        'contract_sindicato': ('contract_id', 'l10n_co_ne_sindicato_partner_id'),
-        'contract_afc': ('contract_id', 'l10n_co_ne_afc_partner_id'),
-        'contract_pension_voluntaria': ('contract_id', 'l10n_co_ne_pension_voluntaria_partner_id'),
-        'contract_plan_complementario': ('contract_id', 'l10n_co_ne_plan_complementario_partner_id'),
-        'contract_cooperativa': ('contract_id', 'l10n_co_ne_cooperativa_partner_id'),
-        'contract_educacion': ('contract_id', 'l10n_co_ne_educacion_partner_id'),
+        'contract_sindicato': ('version_id', 'l10n_co_ne_sindicato_partner_id'),
+        'contract_afc': ('version_id', 'l10n_co_ne_afc_partner_id'),
+        'contract_pension_voluntaria': ('version_id', 'l10n_co_ne_pension_voluntaria_partner_id'),
+        'contract_plan_complementario': ('version_id', 'l10n_co_ne_plan_complementario_partner_id'),
+        'contract_cooperativa': ('version_id', 'l10n_co_ne_cooperativa_partner_id'),
+        'contract_educacion': ('version_id', 'l10n_co_ne_educacion_partner_id'),
     }
 
     def _ne_repartos_tercero(self, line):
@@ -948,7 +948,7 @@ class HrPayslip(models.Model):
         self.ensure_one()
         company = self.company_id
         employee = self.employee_id
-        contract = self.contract_id
+        contract = self.version_id
 
         # Construir estructura de Devengados y Deducciones
         devengados, deducciones = self._map_salary_rules_to_xml()
@@ -1058,13 +1058,13 @@ class HrPayslip(models.Model):
         data['trabajador'] = self._ne_trabajador()
         data['pago'] = self._ne_pago()
         data['periodo'] = {
-                'FechaIngreso': str(contract.date_start) if contract.date_start else '',
-                'FechaRetiro': str(contract.date_end) if contract.date_end else '',
+                'FechaIngreso': str(contract.contract_date_start) if contract.contract_date_start else '',
+                'FechaRetiro': str(contract.contract_date_end) if contract.contract_date_end else '',
                 'FechaLiquidacionInicio': str(self.date_from),
                 'FechaLiquidacionFin': str(self.date_to),
                 # Anexo §8.3.1: 360/30; el día de ingreso cuenta (D19, David 2026-11-11).
                 'TiempoLaborado': str(
-                    dian_utils.compute_worked_time_360(contract.date_start, self.date_to, inclusive=True)
+                    dian_utils.compute_worked_time_360(contract.contract_date_start, self.date_to, inclusive=True)
                 ),
                 'FechaGen': now.strftime('%Y-%m-%d'),
         }
@@ -1353,7 +1353,7 @@ class HrPayslip(models.Model):
         puedan divergir. Sin clase en el contrato: UserError que nombra al empleado (nunca se
         asume la Clase I en silencio)."""
         self.ensure_one()
-        contract = self.contract_id
+        contract = self.version_id
         clase = contract._ne_clase_riesgo()
         codigo = self._NE_ARL_PARAMETRO_POR_CLASE.get(clase)
         if not codigo:
@@ -1431,7 +1431,7 @@ class HrPayslip(models.Model):
     def _ne_trabajador(self):
         """Sección <Trabajador> del XML de nómina electrónica."""
         employee = self.employee_id
-        contract = self.contract_id
+        contract = self.version_id
         _name_parts = employee._l10n_co_nombre_dian()
         lugar_trabajo = self._ne_lugar_trabajo_partner()
         return {
@@ -1461,7 +1461,7 @@ class HrPayslip(models.Model):
                 'true' if contract.l10n_co_ne_integral_salary else 'false'
             ),
             'TipoContrato': contract._ne_valor_obligatorio('l10n_co_ne_contract_type'),
-            'Sueldo': '%.2f' % contract.wage,
+            'Sueldo': '%.2f' % self._ne_salario(contract),
             'CodigoTrabajador': str(employee.id),
         }
 
@@ -1555,7 +1555,7 @@ class HrPayslip(models.Model):
     def _ne_es_semanal(self):
         """El empleado se paga por semana (periodicidad nativa del contrato o, sin ella, la de su tipo de estructura)."""
         self.ensure_one()
-        contrato = self.contract_id
+        contrato = self.version_id
         return (contrato.schedule_pay or contrato.structure_type_id.default_schedule_pay) == 'weekly'
 
     def _ne_contar_dias(self, ini, fin):
@@ -1683,7 +1683,7 @@ class HrPayslip(models.Model):
     def _ne_fecha_parametros(self):
         """Fecha con la que se resuelven los hr.rule.parameter (SMMLV, auxilio, topes, divisores).
 
-        Liquidacion: la fecha de retiro (date_to). En ella date_from es contract.date_start, que
+        Liquidacion: la fecha de retiro (date_to). En ella date_from es contract.contract_date_start, que
         puede ser de anos atras y traeria el SMMLV/auxilio del ingreso (o ningun valor, si es
         anterior al primer parametro cargado). Es tambien el criterio del nativo
         (hr.payslip._rule_parameter sin fecha usa date_to). Demas estructuras: date_from, igual
@@ -1700,7 +1700,7 @@ class HrPayslip(models.Model):
         """En la estructura de liquidacion el recibo va de inicio de contrato a retiro.
 
         Las reglas que dependen del tramo contractual (vacaciones causadas y tomadas, tramo
-        pagable) asumen date_from = contract.date_start. Con otra fecha las vacaciones de meses
+        pagable) asumen date_from = contract.contract_date_start. Con otra fecha las vacaciones de meses
         anteriores no se descuentan y el valor sale inflado SIN aviso (QA, recibo 12954).
         No se corrige en silencio: se detiene con un error que dice que corregir."""
         self.ensure_one()
@@ -1708,7 +1708,7 @@ class HrPayslip(models.Model):
                 'l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion',
                 raise_if_not_found=False):
             return
-        inicio = self.contract_id.date_start
+        inicio = self.version_id.contract_date_start
         desde = self.date_from
         if hasattr(desde, 'date'):
             desde = desde.date()
@@ -1739,19 +1739,18 @@ class HrPayslip(models.Model):
         no genera valor negativo. Solo ve lo registrado en el sistema."""
         self.ensure_one()
         self._ne_validar_inicio_liquidacion()
-        contract = self.contract_id
+        contract = self.version_id
         fecha = self._ne_fecha_parametros()
         dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', fecha)
         divisor = self._rule_parameter('l10n_co_divisor_vacaciones', fecha)
-        dias_servicio = self._ne_dias_prestacion(contract.date_start, self.date_to)
+        dias_servicio = self._ne_dias_prestacion(contract.contract_date_start, self.date_to)
         causados = dias_servicio * dias_mes / divisor
 
         disfrutados, _detalle = self._ne_ausencia_habil('CO_VAC')
         compensado_dinero = 0.0
-        previos = self.env['hr.payslip'].search([
-            ('contract_id', '=', contract.id),
+        previos = self.env['hr.payslip'].search(self._ne_dominio_mismo_contrato(contract) + [
             ('id', '!=', self.id),
-            ('state', 'in', ('done', 'paid')),
+            ('state', 'in', ('validated', 'paid')),   # v19 (R2): ``done`` no existe
             ('struct_id', '!=', self.struct_id.id),
             ('credit_note', '=', False),
             ('l10n_co_ne_is_adjustment', '=', False),
@@ -1761,7 +1760,7 @@ class HrPayslip(models.Model):
                 previo.input_line_ids.filtered(lambda i: i.code == 'CO_VAC').mapped('amount'))
             compensado_dinero += sum(
                 previo.line_ids.filtered(lambda l: l.code == 'CO_VAC_COMP').mapped('total'))
-        valor_dia = contract.wage / dias_mes
+        valor_dia = self._ne_salario(contract) / dias_mes
         compensados = compensado_dinero / valor_dia if valor_dia else 0.0
         pendientes = max(0.0, causados - disfrutados - compensados)
         return {
@@ -1774,7 +1773,7 @@ class HrPayslip(models.Model):
         """(periodo_ini, periodo_fin) -- el tramo del período de la nómina que realmente es
         pagable bajo la convención de mes comercial de 30 días.
 
-        H-009 (2026-10-06, QA Bloque 2): en Liquidación, date_from es contract.date_start y
+        H-009 (2026-10-06, QA Bloque 2): en Liquidación, date_from es contract.contract_date_start y
         date_to la fecha de retiro -- un período que puede abarcar meses o años. Cuando el
         período cruza más de un mes calendario, el tramo pagable se restringe al mes
         calendario de date_to (los meses anteriores ya se pagaron en nóminas regulares);
@@ -1802,14 +1801,33 @@ class HrPayslip(models.Model):
             return 0
         return self._ne_contar_dias(ini, fin)
 
+    def _ne_salario(self, version=None):
+        """ÚNICO punto de lectura del sueldo contractual para las reglas y los ayudantes del módulo (v19: ``hr.version.wage``).
+
+        Antes cada regla leía ``contract.wage``; en v19 el campo tiene grupos (``hr``: hr.group_hr_manager, ``hr/models/hr_version.py:178-180``;
+        ``hr_payroll`` lo redefine con group_hr_payroll_user, ``hr_payroll/models/hr_version.py:28``) y el motor no usa ``sudo``.
+        Centralizar la lectura deja UN lugar donde agregar ``sudo()`` si la prueba con un usuario oficial de nómina (``with_user``)
+        da AccessError: NO VERIFICADO si la redefinición reemplaza o suma grupos (D-B, Tech Lead 2026-11-18, corregida)."""
+        self.ensure_one()
+        return (version or self.version_id).wage
+
+    def _ne_dominio_mismo_contrato(self, version):
+        """Dominio de los recibos del MISMO contrato que ``version``. v19: no hay ``contract_id`` en el recibo; el contrato es el
+        rango ``contract_date_start/_end`` del empleado (R1/T2), así que son los recibos del empleado desde el inicio de ese
+        contrato (un reingreso no hereda recibos del contrato anterior). R3: la llave es el empleado."""
+        dominio = [('employee_id', '=', version.employee_id.id)]
+        if version.contract_date_start:
+            dominio.append(('date_from', '>=', version.contract_date_start))
+        return dominio
+
     def _ne_dias_bajo_contrato(self):
         """Dias (mes comercial) del tramo pagable en que el contrato estuvo vigente.
         Delimita ING/RET: la fecha de ingreso y de retiro recortan el rango."""
         self.ensure_one()
-        contract = self.contract_id
+        contract = self.version_id
         periodo_ini, periodo_fin = self._ne_tramo_pagable_periodo()
-        contrato_ini = contract.date_start
-        contrato_fin = contract.date_end or periodo_fin
+        contrato_ini = contract.contract_date_start
+        contrato_fin = contract.contract_date_end or periodo_fin
         activo_ini = max(periodo_ini, contrato_ini)
         activo_fin = min(periodo_fin, contrato_fin)
         if activo_ini > activo_fin:
@@ -1873,13 +1891,15 @@ class HrPayslip(models.Model):
     # el descanso NO trabajados no aparezcan. Las demás líneas (vacaciones, licencias, incapacidades, OUT) quedan como las calcula el
     # nativo: ``_ne_dias_habiles_excluidos`` y la UGPP las leen por código.
     def _ne_aplica_dias_por_asistencia(self):
-        """True si las líneas de días de este recibo se rearman desde los días pagados: compañía colombiana, estructura general y sin
-        crédito de tiempo (el crédito de tiempo del nativo mezcla dos calendarios y no aplica a Colombia). Las demás estructuras
-        (liquidación, prima, bonificación) no usan líneas de días o no se tocan."""
+        """True si las líneas de días de este recibo se rearman desde los días pagados: compañía colombiana y estructura general. Las
+        demás estructuras (liquidación, prima, bonificación) no usan líneas de días o no se tocan.
+
+        v19: ya no se pregunta por ``time_credit`` (crédito de tiempo): ese concepto genérico no existe en ``hr_payroll`` v19 (cero
+        coincidencias en ``hr_version.py``, ``hr_payslip.py`` y ``hr_payslip_worked_days.py``; solo ``l10n_be_time_credit``) y no
+        aplica a Colombia. D-G, Tech Lead 2026-11-18."""
         self.ensure_one()
         general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina', raise_if_not_found=False)
-        return bool(general and self.struct_id == general and self.company_id and self.company_id._ne_es_colombia()
-                    and not self.contract_id.time_credit)
+        return bool(general and self.struct_id == general and self.company_id and self.company_id._ne_es_colombia())
 
     def _ne_codigos_dias_ocultos(self):
         """Códigos de tipo de entrada de trabajo cuyas líneas NO se muestran en «Días trabajados» (parámetro
@@ -2007,7 +2027,7 @@ class HrPayslip(models.Model):
             return 0.0
         fecha = self._ne_fecha_parametros()
         dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', fecha)
-        valor_dia = self.contract_id.wage / dias_mes
+        valor_dia = self._ne_salario() / dias_mes
         if codigo != 'CO_INC_COMUN':
             return valor_dia * dias
         dias_emp = self._rule_parameter('l10n_co_dias_incapacidad_empleador', fecha)
@@ -2058,7 +2078,7 @@ class HrPayslip(models.Model):
         interrupcion = int(self._rule_parameter(
             'l10n_co_dias_interrupcion_prorroga', self._ne_fecha_parametros()))
         periodo_ini = self._ne_tramo_pagable_periodo()[0]
-        tramo_ini = max(periodo_ini, self.contract_id.date_start)
+        tramo_ini = max(periodo_ini, self.version_id.contract_date_start)
         todas = self.env['hr.leave'].search([
             ('employee_id', '=', self.employee_id.id),
             ('state', '=', 'validate'),
@@ -2113,11 +2133,11 @@ class HrPayslip(models.Model):
         H-013, que puede reusar esto mismo con las fechas ya recortadas).
         """
         self.ensure_one()
-        contract = self.contract_id
+        contract = self.version_id
         dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
         periodo_ini, periodo_fin = self._ne_tramo_pagable_periodo()
-        contrato_ini = contract.date_start
-        contrato_fin = contract.date_end or periodo_fin
+        contrato_ini = contract.contract_date_start
+        contrato_fin = contract.contract_date_end or periodo_fin
         tramo_ini = max(periodo_ini, contrato_ini)
         tramo_fin = min(periodo_fin, contrato_fin)
 
@@ -2332,7 +2352,7 @@ class HrPayslip(models.Model):
         (hr_contract_retefuente.py): última nómina 'done' del mismo contrato y
         estructura, antes del date_from de esta nómina, leyendo su línea
         invisible CO_SS_BASE_IBC. Sin historial (primera nómina del contrato):
-        fallback a contract.wage -- confirmado el caso real de los 18 empleados
+        fallback a self._ne_salario(contract) -- confirmado el caso real de los 18 empleados
         de Guapante hoy (ninguno tiene nómina previa).
 
         Lectura literal (Tech Lead, 2026-10-11): si hubo un cambio de salario
@@ -2342,16 +2362,15 @@ class HrPayslip(models.Model):
         self.ensure_one()
         # estructura / antes_de (opcionales): la liquidacion no tiene historial propio; su "ultimo
         # IBC anterior" es el de la nomina general del contrato antes del tramo.
-        payslip_anterior = self.env['hr.payslip'].search([
-            ('contract_id', '=', contract.id),
+        payslip_anterior = self.env['hr.payslip'].search(self._ne_dominio_mismo_contrato(contract) + [
             ('struct_id', '=', (estructura or self.struct_id).id),
-            ('state', '=', 'done'),
+            ('state', '=', 'validated'),   # v19 (R2): ``done`` no existe
             ('date_from', '<', antes_de or self.date_from),
         ], order='date_from desc', limit=1)
         if not payslip_anterior:
-            return contract.wage
+            return self._ne_salario(contract)
         linea_ibc = payslip_anterior.line_ids.filtered(lambda l: l.code == 'CO_SS_BASE_IBC')
-        return linea_ibc.total if linea_ibc else contract.wage
+        return linea_ibc.total if linea_ibc else self._ne_salario(contract)
 
     def _ne_factor_dias_integral(self):
         """Fraccion del mes comercial que cubre este recibo, para prorratear el salario
@@ -2367,7 +2386,7 @@ class HrPayslip(models.Model):
         factor (70%) x salario. Ver _ne_ibc_seguridad_social para el alcance H-017a."""
         self.ensure_one()
         if contract.l10n_co_ne_integral_salary:
-            return contract.wage * self._rule_parameter(
+            return self._ne_salario(contract) * self._rule_parameter(
                 'l10n_co_factor_integral_salary', self._ne_fecha_parametros()) * self._ne_factor_dias_integral()
         ibc = categories['DEV_SAL']
         dias_mes_comercial = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
@@ -2416,7 +2435,7 @@ class HrPayslip(models.Model):
         e indemnizacion."""
         self.ensure_one()
         if contract.l10n_co_ne_integral_salary:
-            return contract.wage * self._rule_parameter(
+            return self._ne_salario(contract) * self._rule_parameter(
                 'l10n_co_factor_integral_salary', self._ne_fecha_parametros()) * self._ne_factor_dias_integral()
         # Vacaciones disfrutadas y licencia remunerada del tramo (se pagan en CO_LIQ_VAC_DISFRUTADAS
         # y CO_LIQ_LIC_REM): cotizan con el mismo criterio de _ne_ibc_salarial -- ultimo IBC
@@ -2440,7 +2459,7 @@ class HrPayslip(models.Model):
     def _ne_ibc_remuneracion(self, contract, salarial):
         """Base del 40%: remuneracion total. Integral: 100% del salario pactado."""
         if contract.l10n_co_ne_integral_salary:
-            return contract.wage * self._ne_factor_dias_integral()
+            return self._ne_salario(contract) * self._ne_factor_dias_integral()
         return salarial
 
     def _ne_ibc_pactados(self, result_rules):

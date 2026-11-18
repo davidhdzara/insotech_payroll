@@ -65,7 +65,7 @@
                 </p>
                 <p class="mb-1">
                     <strong>Salario:</strong>
-                    <span t-field="o.contract_id.wage"
+                    <span t-field="o.version_id.wage"
                           t-options='{"widget": "monetary", "display_currency": o.company_id.currency_id}'/>
                 </p>
                 <!-- H-QA-034: los días con que se PAGÓ el recibo (cantidad guardada de su línea de sueldo; los entrega
@@ -77,7 +77,7 @@
                 </p>
                 <p class="mb-1">
                     <strong>Tipo de contrato:</strong>
-                    <span t-field="o.contract_id.l10n_co_ne_contract_type"/>
+                    <span t-field="o.version_id.l10n_co_ne_contract_type"/>
                 </p>
             </div>
         </div>

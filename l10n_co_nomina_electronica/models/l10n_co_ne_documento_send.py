@@ -128,10 +128,10 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
         doc = grupo['documento']
         if doc:
             return doc.fecha_limite
-        contrato = grupo['recibos'].sorted('date_to').contract_id[-1:]
+        contrato = grupo['recibos'].sorted('date_to').version_id[-1:]
         virtual = self.env['l10n.co.ne.documento'].new({
             'company_id': grupo['company'].id, 'employee_id': grupo['employee'].id,
-            'contract_id': contrato.id, 'period': grupo['period']})
+            'version_id': contrato.id, 'period': grupo['period']})
         return virtual.fecha_limite
 
     @api.model

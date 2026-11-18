@@ -323,7 +323,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 continue
             employees_checked.add(emp.id)
 
-            contract = payslip.contract_id
+            contract = payslip.version_id
             emp_name = emp.name or 'Sin nombre'
 
             # Validar código EPS
@@ -705,7 +705,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             dict con todos los campos del registro Tipo 02.
         """
         employee = payslip.employee_id
-        contract = payslip.contract_id
+        contract = payslip.version_id
         payslips = payslips or payslip
 
         # IBC y dias consolidados del empleado en el mes (H-017b): unica fuente.
@@ -756,7 +756,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 code, payslip.date_from)
 
         # Datos del contrato
-        salario = contract.wage or 0
+        salario = payslip._ne_salario(contract) or 0
         integral = bool(
             getattr(contract, 'l10n_co_ne_integral_salary', False))
 
@@ -984,7 +984,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         Returns:
             dict con las claves de novedades para el registro Tipo 02.
         """
-        contract = payslip.contract_id
+        contract = payslip.version_id
         nov = {
             'ing': '', 'fecha_ing': '',
             'ret': '', 'fecha_ret': '',
@@ -1002,16 +1002,16 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         }
 
         # Ingreso: si fecha inicio del contrato está en el período
-        if contract.date_start:
-            cs = contract.date_start
+        if contract.contract_date_start:
+            cs = contract.contract_date_start
             if (cs.year == payslip.date_from.year
                     and cs.month == payslip.date_from.month):
                 nov['ing'] = 'X'
                 nov['fecha_ing'] = str(cs)
 
         # Retiro: si contrato tiene fecha fin en el período
-        if contract.date_end:
-            ce = contract.date_end
+        if contract.contract_date_end:
+            ce = contract.contract_date_end
             if (ce.year == payslip.date_from.year
                     and ce.month == payslip.date_from.month):
                 nov['ret'] = 'X'

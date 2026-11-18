@@ -51,8 +51,8 @@ class L10nCoHrLiquidacionWizard(models.TransientModel):
         help='Seleccione el empleado cuyo contrato se va a liquidar. Incluye empleados archivados: el retiro se registra '
              'primero (RRHH archiva al empleado) y despues se liquida.',
     )
-    contract_id = fields.Many2one(
-        comodel_name='hr.contract',
+    version_id = fields.Many2one(
+        comodel_name='hr.version',
         string='Contrato',
         help='Contrato a liquidar. Si no se selecciona, se usará el '
              'contrato vigente del empleado.',
@@ -102,16 +102,18 @@ class L10nCoHrLiquidacionWizard(models.TransientModel):
         registra el retiro, después se liquida), prellena fecha y causal -- H-011
         (2026-10-06). Si no hay retiro registrado para el empleado, ambos campos quedan
         igual que antes de esta corrección (fecha de hoy, causal vacía)."""
-        self.contract_id = False
+        self.version_id = False
         if not self.employee_id:
             return
 
-        contract = self.env['hr.contract'].search([
+        # v19: no hay ``hr.contract`` ni ``state``; el contrato es el rango contract_date_start/_end de la versión, y la
+        # «vigente» es la versión más reciente que lo tiene definido (``hr.version`` con ``contract_date_start``).
+        contract = self.env['hr.version'].search([
             ('employee_id', '=', self.employee_id.id),
-            ('state', 'in', ['open', 'close']),
-        ], limit=1, order='date_start desc')
+            ('contract_date_start', '!=', False),
+        ], limit=1, order='date_version desc')
         if contract:
-            self.contract_id = contract
+            self.version_id = contract
 
         # hr_contract.HrDepartureWizard.action_register_departure() ya deja el retiro en
         # contract.date_end (cuando "Set Contract End Date" quedó marcado, el default para
@@ -119,7 +121,7 @@ class L10nCoHrLiquidacionWizard(models.TransientModel):
         # core de Odoo) -- esa es la fuente más específica al contrato ya elegido arriba.
         # employee.departure_date (addons/hr/wizard/hr_departure_wizard.py) es el respaldo
         # si ese checkbox se desmarcó. El usuario sigue pudiendo cambiar la fecha a mano.
-        departure_date = (contract.date_end if contract else False) or self.employee_id.departure_date
+        departure_date = (contract.contract_date_end if contract else False) or self.employee_id.departure_date
         self.date_end = departure_date or fields.Date.context_today(self)
 
         self.cause = False
@@ -132,17 +134,17 @@ class L10nCoHrLiquidacionWizard(models.TransientModel):
 
         return {
             'domain': {
-                'contract_id': [
+                'version_id': [
                     ('employee_id', '=', self.employee_id.id),
                 ],
             },
         }
 
-    @api.depends('contract_id', 'contract_id.l10n_co_ne_contract_type')
+    @api.depends('version_id', 'version_id.l10n_co_ne_contract_type')
     def _compute_requires_dias_restantes(self):
         for wizard in self:
             wizard.requires_dias_restantes = (
-                wizard.contract_id.l10n_co_ne_contract_type
+                wizard.version_id.l10n_co_ne_contract_type
                 in _CONTRACT_TYPES_REQUIRE_DIAS_RESTANTES
             )
 
@@ -179,7 +181,7 @@ class L10nCoHrLiquidacionWizard(models.TransientModel):
         """
         self.ensure_one()
 
-        if not self.contract_id:
+        if not self.version_id:
             raise UserError(_(
                 'No se encontró un contrato para el empleado %s. '
                 'Por favor seleccione o cree un contrato antes de '
@@ -187,16 +189,16 @@ class L10nCoHrLiquidacionWizard(models.TransientModel):
                 self.employee_id.name,
             ))
 
-        contract = self.contract_id
+        contract = self.version_id
         struct = self.env.ref(
             'l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion')
 
         payslip = self.env['hr.payslip'].create({
             'name': _('Liquidación - %s', self.employee_id.name),
             'employee_id': self.employee_id.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'struct_id': struct.id,
-            'date_from': contract.date_start,
+            'date_from': contract.contract_date_start,
             'date_to': self.date_end,
             'l10n_co_ne_liquidacion_cause': self.cause,
             'input_line_ids': self._prepare_input_line_ids(),

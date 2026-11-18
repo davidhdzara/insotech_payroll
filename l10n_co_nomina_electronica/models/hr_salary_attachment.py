@@ -108,7 +108,7 @@ class HrSalaryAttachment(models.Model):
         período.
         """
         if self.l10n_co_embargo_porcentaje and len(self.employee_ids) == 1:
-            wage = self.employee_ids.contract_id.wage
+            wage = self.employee_ids.version_id.wage
             if wage:
                 self.monthly_amount = wage * self.l10n_co_embargo_porcentaje / 100
 

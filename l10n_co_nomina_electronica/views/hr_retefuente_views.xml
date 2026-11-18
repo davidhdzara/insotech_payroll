@@ -202,7 +202,7 @@
          ═══════════════════════════════════════════════════════════════ -->
     <menuitem id="menu_l10n_co_nomina_colombia_config"
               name="Nómina Colombia"
-              parent="hr_work_entry_contract_enterprise.menu_hr_payroll_configuration"
+              parent="hr_work_entry_enterprise.menu_hr_payroll_configuration"
               sequence="60"/>
 
     <menuitem id="l10n_co_retefuente_menu"

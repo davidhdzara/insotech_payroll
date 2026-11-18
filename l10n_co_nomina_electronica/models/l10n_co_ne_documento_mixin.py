@@ -585,10 +585,10 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
                 links = f'<br/>🔗 <a href="/odoo/hr.employee/{self.employee_id.id}">Corregir correo en ficha de empleado</a>'
             elif 'cuenta' in detail_lower or 'banco' in detail_lower or 'metodo' in detail_lower:
                 diagnosis = "La información bancaria o método de pago del trabajador contiene datos erróneos o incompletos."
-                links = f'<br/>🔗 <a href="/odoo/hr.contract/{self.contract_id.id}">Revisar contrato para corregir información bancaria</a>'
+                links = f'<br/>🔗 <a href="/odoo/hr.employee/{self.employee_id.id}">Revisar contrato para corregir información bancaria</a>'
             elif 'salario' in detail_lower or 'ibc' in detail_lower or 'minimo' in detail_lower:
                 diagnosis = "El salario base o el ingreso base de cotización (IBC) reportado presenta discrepancias matemáticas o de ley."
-                links = f'<br/>🔗 <a href="/odoo/hr.contract/{self.contract_id.id}">Revisar salario en el contrato</a>'
+                links = f'<br/>🔗 <a href="/odoo/hr.employee/{self.employee_id.id}">Revisar salario en el contrato</a>'
 
             body = (
                 f'❌ <b>Nómina rechazada por la DIAN</b><br/>'
@@ -648,7 +648,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
                 'default_l10n_co_ne_adjustment_type': tipo,
                 'default_l10n_co_ne_adjustment_ref_cune': self.l10n_co_ne_cune,
                 'default_employee_id': self.employee_id.id,
-                'default_contract_id': self.contract_id.id,
+                'default_version_id': self.version_id.id,
                 'default_struct_id': self.struct_id.id,
                 'default_date_from': str(self.date_from),
                 'default_date_to': str(self.date_to),
@@ -1240,7 +1240,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
                 employee.name,
             ))
 
-        contract = self.contract_id
+        contract = self.version_id
         if not contract:
             raise UserError(_(
                 'La nómina %s no tiene contrato asociado.',

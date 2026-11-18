@@ -214,7 +214,7 @@ class L10nCoRetefuenteUvt(models.Model):
         :param ibc_salud: float — IBC para aportes a salud ($)
         :param company: recordset ``res.company`` (opcional; si no se
             pasa se usa ``self.env.company``)
-        :param contract: recordset ``hr.contract`` (opcional -- fuente de
+        :param contract: recordset ``hr.version`` (v19; en v18 ``hr.contract``) (opcional -- fuente de
             ``l10n_co_ne_pension_voluntaria``/``l10n_co_ne_afc`` para el
             tope combinado del 30%%, AUD-05/doc 32. Sin contrato, esos
             aportes se tratan como 0 -- mismo comportamiento que antes de
@@ -228,7 +228,7 @@ class L10nCoRetefuenteUvt(models.Model):
         :param force_procedure: str '1'/'2' (opcional -- doc 08). Si se
             pasa, ignora ``self.procedure`` (el de la config anual,
             compartido) y fuerza esa rama. Lo usa
-            ``hr.contract.action_calculate_retention_procedure2()`` para
+            ``hr.version.action_calculate_retention_procedure2()`` para
             aplicar SIEMPRE la tabla marginal Art. 383 (fuerza '1') sobre
             el ingreso PROMEDIO al derivar el % fijo semestral, sin
             importar qué procedimiento tenga configurado el año en curso.
@@ -399,7 +399,7 @@ class L10nCoRetefuenteUvt(models.Model):
                 _ref = payslip.date_from if payslip else fields.Date.context_today(self)
                 semester_start = _ref.replace(month=1, day=1) if _ref.month <= 6 else _ref.replace(month=7, day=1)
                 proc2 = self.env['l10n.co.retefuente.procedure2'].search([
-                    ('contract_id', '=', contract.id),
+                    ('employee_id', '=', employee.id),   # v19 (R3): el histórico es por empleado
                     ('semester_start', '=', semester_start),
                 ], limit=1)
                 if proc2:
