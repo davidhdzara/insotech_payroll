@@ -17,6 +17,8 @@ from unittest.mock import patch
 
 from odoo.tests.common import TransactionCase, tagged
 
+from .common_version import crear_empleado_con_contrato, crear_usuario_nomina
+
 _REGLAS = (
     ('CO_PROV_PRIMA', 'hr_salary_rule_co_prov_prima'),
     ('CO_PROV_CESANTIAS', 'hr_salary_rule_co_prov_cesantias'),
@@ -46,17 +48,12 @@ class TestProvisionesPeriodo(TransactionCase):
 
     # ── ayudas ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     def _recibo(self, date_from, date_to, wage=_SUELDO, inicio=date(2024, 1, 1), semanal=False, integral=False, name='Recibo'):
-        employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00',
-            'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        valores = {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
-            'name': 'Contrato %s' % name, 'employee_id': employee.id, 'company_id': self.company.id,
-            'structure_type_id': (self.tipo_semanal if semanal else self.structure_type).id, 'wage': wage,
-            'date_start': inicio, 'state': 'open'}
-        contract = self.env['hr.contract'].create(valores)
-        if integral:
-            contract.write({'l10n_co_ne_integral_salary': True})
+        """Empleado con contrato (versión de Odoo 19, ``common_version``) y su recibo de la estructura general. ``version_id`` se pasa explícito:
+        el cálculo nativo toma la versión al INICIO del periodo (``hr_payslip.py:1270-1272``) y aquí hay una sola."""
+        empleado, version = crear_empleado_con_contrato(
+            self.env, self.company, wage, inicio, self.tipo_semanal if semanal else self.structure_type, nombre=name, integral=integral)
         return self.env['hr.payslip'].create({
-            'name': name, 'employee_id': employee.id, 'contract_id': contract.id,
+            'name': name, 'employee_id': empleado.id, 'version_id': version.id,
             'company_id': self.company.id, 'struct_id': self.est_general.id,
             'date_from': date_from, 'date_to': date_to})
 
@@ -66,7 +63,7 @@ class TestProvisionesPeriodo(TransactionCase):
         valores, resultados = {}, {}
         for codigo, xmlid in _REGLAS:
             regla = self.env.ref('l10n_co_nomina_electronica.%s' % xmlid)
-            monto = regla._compute_rule({'payslip': recibo, 'contract': recibo.contract_id, 'result_rules': resultados})[0]
+            monto = regla._compute_rule({'payslip': recibo, 'version': recibo.version_id, 'result_rules': resultados})[0]
             valores[codigo] = monto
             resultados[codigo] = {'total': monto}
         return valores
@@ -87,7 +84,7 @@ class TestProvisionesPeriodo(TransactionCase):
 
     def _premisa_sin_auxilio(self, recibo):
         smmlv = recibo._rule_parameter('l10n_co_smmlv', recibo.date_from)
-        self.assertGreater(recibo.contract_id.wage, 2 * smmlv, 'Premisa: con este sueldo no hay auxilio de transporte')
+        self.assertGreater(recibo._ne_salario(), 2 * smmlv, 'Premisa: con este sueldo no hay auxilio de transporte')
 
     # ── pruebas ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     def test_mes_completo_da_el_mismo_valor_mensual_de_antes(self):
@@ -209,6 +206,30 @@ class TestProvisionesPeriodo(TransactionCase):
         self.assertTrue(recibo._ne_es_semanal(), 'Premisa: el contrato es semanal')
         self.assertAlmostEqual(recibo._ne_factor_provision_periodo(), 7 / 30.0)
         self._assert_provisiones(recibo, self._esperado_6m(recibo, 7 / 30.0))
+
+    def test_humo_el_motor_real_calcula_las_cuatro_provisiones_del_mes(self):
+        """Humo del bloque 0 (v19): ``compute_sheet()`` REAL, no el ``localdict`` armado a mano de ``_provisiones`` (simulador, lección de la
+        regresión ``bv``). Un recibo mensual de abril con 6.000.000 guarda las 4 líneas: prima 500.000, cesantías 500.000, vacaciones 250.000
+        e intereses = cesantías x porcentaje vigente / 100. Si queda una sola referencia a ``contract`` en las reglas, v19 da ``NameError``."""
+        recibo = self._recibo(date(2026, 4, 1), date(2026, 4, 30), name='Humo mes')
+        recibo.compute_sheet()
+        for codigo, valor in self._esperado_6m(recibo, 1.0).items():
+            linea = recibo.line_ids.filtered(lambda l, c=codigo: l.code == c)
+            self.assertEqual(len(linea), 1, 'Falta la línea %s del recibo' % codigo)
+            self.assertAlmostEqual(linea.total, valor, delta=0.01, msg=codigo)
+        self.assertTrue(recibo.line_ids.filtered(lambda l: l.code == 'CO_NETO'), 'El motor debe llegar hasta el neto')
+
+    def test_humo_el_usuario_oficial_de_nomina_calcula_sin_acceso_denegado(self):
+        """D-B (Tech Lead, 18-nov): ``_ne_salario()`` lee ``wage`` SIN ``sudo``. ``wage`` tiene grupos (``hr``: hr.group_hr_manager;
+        ``hr_payroll`` lo redefine con group_hr_payroll_user): NO VERIFICADO si la redefinición reemplaza o suma. Como superusuario esto no se ve:
+        se calcula el mismo recibo con un usuario SOLO de nómina. Si da AccessError, la corrección es ``sudo()`` dentro de ``_ne_salario`` (único
+        punto de lectura) y esta prueba pasa a ser su guarda."""
+        usuario = crear_usuario_nomina(self.env, self.company, 'oficial_nomina_provisiones')
+        recibo = self._recibo(date(2026, 4, 1), date(2026, 4, 30), name='Humo oficial')
+        recibo.with_user(usuario).compute_sheet()
+        for codigo, valor in self._esperado_6m(recibo, 1.0).items():
+            linea = recibo.line_ids.filtered(lambda l, c=codigo: l.code == c)
+            self.assertAlmostEqual(linea.total, valor, delta=0.01, msg='%s con usuario oficial' % codigo)
 
     def test_las_provisiones_viven_solo_en_la_estructura_general_y_usan_el_factor(self):
         """Guarda estructural: 4 reglas ``CO_PROV_*``, todas de la estructura general; prima, cesantias y vacaciones llaman al factor y los
