@@ -226,6 +226,20 @@ class HrSalaryRule(models.Model):
              'reincorporado al IBC aunque esté marcado como no salarial.',
     )
 
+    # ──────────────────────────────────────────────────────────────────────
+    # E11 pieza 2a (.287, doc 71c §2 y §7): configuración de «Conceptos de pago». Sembrada en el XML de cada regla; nada en el código.
+    # ──────────────────────────────────────────────────────────────────────
+    l10n_co_ne_ajustable = fields.Boolean(
+        string='Permite ajuste de la empresa',
+        help='Si está marcada, quien administra la nómina puede cambiar la cantidad, el porcentaje o el importe de esta regla en un recibo '
+             'en borrador o en espera. El sistema conserva el valor sugerido y quién lo cambió; el ajuste es responsabilidad de la empresa. '
+             'Solo tiene efecto desde la vista «Conceptos de pago».')
+    l10n_co_ne_unidad = fields.Selection(
+        selection=[('dias', 'Días'), ('horas', 'Horas')],
+        string='Unidad de la cantidad',
+        help='Unidad con la que se muestra la cantidad de esta regla en «Conceptos de pago». Vacío: la regla es un valor y no tiene unidad '
+             '(«valor» no es una unidad).')
+
     _L10N_CO_ORIGEN_NO_SALARIAL_POR_CODIGO = {
         'CO_AUX_TRANS': 'naturaleza', 'CO_VIATICOS_NOSAL': 'naturaleza',
         'CO_DOTACION': 'naturaleza', 'CO_TELETRABAJO': 'naturaleza',
