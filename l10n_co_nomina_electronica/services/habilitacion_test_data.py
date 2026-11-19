@@ -127,5 +127,5 @@ TEST_CONTRACT_COMMON_VALUES = {
     'l10n_co_pila_subtipo_cotizante': '00',  # No aplica
     'l10n_co_ne_integral_salary': False,
     'wage': TEST_CONTRACT_WAGE,
-    'state': 'open',
+    # v19: ``hr.version`` no tiene ``state`` (T4): el contrato queda vigente por ``contract_date_start``.
 }

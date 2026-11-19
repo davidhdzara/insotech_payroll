@@ -46,7 +46,6 @@ from odoo.exceptions import UserError
 
 from ..services import habilitacion_test_data
 
-_CONTRACT_OPEN_STATES = ('open', 'close')
 _POLL_ATTEMPTS = 3
 _POLL_DELAY_SECONDS = 5
 
@@ -259,7 +258,7 @@ class L10nCoNeCertificationWizard(models.TransientModel):
         Ahora usa empleados/contratos sintéticos dedicados
         (``services/habilitacion_test_data.py``), creados una sola vez
         por compañía y reutilizados en cada ejecución -- ningún dato
-        depende de un ``hr.employee``/``hr.contract`` real. La DIAN solo
+        depende de un ``hr.employee``/contrato (``hr.version``) real. La DIAN solo
         exige 4 Nómina Individual + 4 Nota de Ajuste ACEPTADAS, sin
         diversidad de empleados ni periodos (Guía oficial "Registro y
         Selección del Modo de Operación", confirmado 2026-10-04).
@@ -300,6 +299,16 @@ class L10nCoNeCertificationWizard(models.TransientModel):
         if employee:
             return employee
 
+        structure_type = self.env.ref(
+            'l10n_co_nomina_electronica.hr_payroll_structure_type_co')
+        start_date = fields.Date.context_today(self) - relativedelta(
+            years=habilitacion_test_data.TEST_CONTRACT_START_YEARS_AGO,
+        )
+        # v19 (W-3): no existe ``hr.contract``. El contrato es la versión del empleado (``hr.version``; ``contract_date_start``) y
+        # ``hr.employee`` delega en ella con ``_inherits`` (``hr_employee.py:45``): los campos del contrato van en ESTE ``create`` y el
+        # marco crea la versión (``hr_employee.py:1409-1410``). ``date_version`` = inicio, o ``_get_version(date_from)`` de un recibo
+        # pasado no la encuentra (``hr_employee.py:566-576``); los tipos obligatorios (D-A) deben venir en el mismo ``create``.
+        # NO EJECUTADO EN ODOO.
         employee = Employee.create({
             'company_id': self.company_id.id,
             'name': employee_def['name'],
@@ -308,6 +317,10 @@ class L10nCoNeCertificationWizard(models.TransientModel):
             'l10n_co_primer_nombre': employee_def['primer_nombre'],
             'l10n_co_primer_apellido': employee_def['primer_apellido'],
             'l10n_co_segundo_apellido': employee_def['segundo_apellido'],
+            'structure_type_id': structure_type.id,
+            'date_version': start_date,
+            'contract_date_start': start_date,
+            **habilitacion_test_data.TEST_CONTRACT_COMMON_VALUES,
             **habilitacion_test_data.TEST_EMPLOYEE_COMMON_VALUES,
         })
         # UX-02 (2026-10-11): el tipo de documento ya no se fija al crear el
@@ -315,19 +328,6 @@ class L10nCoNeCertificationWizard(models.TransientModel):
         # DESPUÉS de este create() (hr nativo lo crea en _create_work_contacts()).
         employee.l10n_co_ne_identification_type_id = self.env.ref(
             habilitacion_test_data.TEST_EMPLOYEE_IDENTIFICATION_TYPE_XMLID).id
-        structure_type = self.env.ref(
-            'l10n_co_nomina_electronica.hr_payroll_structure_type_co')
-        start_date = fields.Date.context_today(self) - relativedelta(
-            years=habilitacion_test_data.TEST_CONTRACT_START_YEARS_AGO,
-        )
-        self.env['hr.contract'].create({
-            'name': _('Contrato de Prueba - %s', employee_def['name']),
-            'employee_id': employee.id,
-            'company_id': self.company_id.id,
-            'structure_type_id': structure_type.id,
-            'date_start': start_date,
-            **habilitacion_test_data.TEST_CONTRACT_COMMON_VALUES,
-        })
         return employee
 
     # ──────────────────────────────────────────────────────────────────
@@ -358,11 +358,13 @@ class L10nCoNeCertificationWizard(models.TransientModel):
         errors = []
         prepared = self.env['hr.payslip']
         for employee in self.employee_ids:
-            contract = self.env['hr.contract'].search([
-                ('employee_id', '=', employee.id),
-                ('state', 'in', _CONTRACT_OPEN_STATES),
-            ], limit=1, order='date_start desc')
-            if not contract:
+            # v19 (W-3): la versión que el recibo toma por defecto (``_compute_version_id``: la del INICIO del periodo) y que el contrato
+            # esté vigente en el periodo (``contract_date_start/_end``); ``hr.version`` no tiene ``state``. Siempre se pasa la fecha a
+            # ``_get_version`` (su defecto se evalúa al importar, ``hr_employee.py:566``).
+            version = employee._get_version(self.date_from)
+            if (not version or not version.contract_date_start
+                    or version.contract_date_start > self.date_to
+                    or (version.contract_date_end and version.contract_date_end < self.date_from)):
                 errors.append(_(
                     '%s: no tiene contrato vigente.', employee.name
                 ))
@@ -371,7 +373,7 @@ class L10nCoNeCertificationWizard(models.TransientModel):
                 payslip = self.env['hr.payslip'].create({
                     'name': _('Habilitación DIAN - %s', employee.name),
                     'employee_id': employee.id,
-                    'contract_id': contract.id,
+                    'version_id': version.id,
                     'struct_id': struct.id,
                     'date_from': self.date_from,
                     'date_to': self.date_to,
@@ -462,7 +464,7 @@ class L10nCoNeCertificationWizard(models.TransientModel):
                         original.employee_id.name,
                     ),
                     'employee_id': original.employee_id.id,
-                    'contract_id': original.contract_id.id,
+                    'version_id': original.version_id.id,
                     'struct_id': original.struct_id.id,
                     'date_from': original.date_from,
                     'date_to': original.date_to,
