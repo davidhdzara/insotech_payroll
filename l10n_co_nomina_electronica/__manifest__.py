@@ -1,6 +1,6 @@
 {
     'name': 'Colombia - Nómina',
-    'version': '18.0.3.0.288',
+    'version': '18.0.3.0.289',
     'category': 'Human Resources/Payroll',
     'countries': ['co'],
     'summary': 'Generación y envío de Nómina Electrónica a la DIAN (Resolución 000013 de 2021)',
@@ -53,6 +53,7 @@ Funcionalidades principales:
         'security/l10n_co_company_security.xml',
         'security/l10n_co_ne_documento_security.xml',
         'security/l10n_co_payslip_ajuste_security.xml',
+        'security/l10n_co_payslip_concepto_security.xml',
         # Data
         'data/ir_sequence_data.xml',
         'data/l10n_co_rule_parameters_data.xml',
@@ -103,6 +104,7 @@ Funcionalidades principales:
         'views/hr_contract_views.xml',
         'views/hr_leave_prorroga_views.xml',
         'views/hr_payslip_views.xml',
+        'views/hr_payslip_conceptos_views.xml',
         'views/l10n_co_ne_exchange_views.xml',
         'views/l10n_co_nomina_ugpp_views.xml',
         # Despues de ugpp_views: usa su menu menu_l10n_co_nomina_reportes.
