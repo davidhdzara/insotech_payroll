@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Frente 5, C3 (doc 58): informe "Comprobante de pago por fecha de pago": una página por (empleado, fecha de pago),
-una sección por recibo con el nombre de su estructura, neto total pagado, A5 horizontal con formato de papel propio,
-interno (sin DIAN/CUNE/QR), nativo y multicliente."""
+"""Frente 5, C3 (doc 58): informe "Comprobante de pago por fecha de pago" para un (empleado, fecha de pago): neto total pagado, A5 horizontal
+con formato de papel propio, interno (sin DIAN/CUNE/QR), nativo y multicliente.
+
+E11 pieza 5b (.292, decisión de David del 21-nov: la colilla es SIEMPRE de media página, nunca carta completa): UNA MEDIA PÁGINA por recibo del
+grupo (antes, una página por grupo con una sección por recibo), cada una con el encabezado y la tabla compacta de la colilla y el nombre de la
+estructura del recibo; el «Neto total pagado» va en la última media página y solo si el grupo tiene más de un recibo."""
 from datetime import date
+from html import escape
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
@@ -74,15 +78,30 @@ class TestComprobantePago(TransactionCase):
     def _cuerpo(self, html):
         return html.split('class="page"', 1)[-1]
 
-    def test_quincena_y_prima_del_mismo_dia_en_una_sola_pagina_con_neto_total(self):
+    def test_quincena_y_prima_del_mismo_dia_en_dos_medias_paginas_con_neto_total_en_la_ultima(self):
         q, p = self._quincena(), self._prima()
         html = self._html(q, p)
+        self.assertEqual(html.count('class="page"'), 2, 'Un recibo del grupo = una media página')
+        paginas = html.split('class="page"')[1:]
+        self.assertIn(self.nomina.name, paginas[0])
+        self.assertIn(self.prima.name, paginas[1])
+        self.assertNotIn(self.prima.name, paginas[0])
+        self.assertEqual(html.count('Neto total pagado'), 1)
+        self.assertNotIn('Neto total pagado', paginas[0], 'El neto total NO va en la primera media página')
+        self.assertIn('Neto total pagado', paginas[1], 'El neto total va en la ÚLTIMA media página')
+        self.assertIn(4200000.0, valores_monetarios(paginas[1]))      # 2.760.000 + 1.440.000
+        self.assertEqual(html.count('Neto a pagar'), 2, 'Cada media página trae el neto de su recibo')
+        retencion = self.env['hr.salary.rule'].search([('code', '=', 'CO_PRIMA_RETE'), ('struct_id', '=', self.prima.id)], limit=1).name
+        self.assertTrue(retencion in paginas[1] or escape(retencion) in paginas[1], 'La retención sale como fila de Deducciones de la prima')
+        self.assertNotIn('Salud:', html, 'Sin el párrafo de resumen: la retención y los aportes ya son filas de la tabla')
+        self.assertEqual(html.count('Fecha de pago:'), 2, 'Cada media página trae la fecha de pago del grupo')
+        self.assertEqual(html.count('table table-sm table-bordered small'), 3, 'Tabla compacta en cada media página (2) + la del neto total (1)')
+
+    def test_un_grupo_de_un_solo_recibo_no_repite_el_neto_total(self):
+        html = self._html(self._quincena())
         self.assertEqual(html.count('class="page"'), 1)
-        self.assertIn(self.nomina.name, html)
-        self.assertIn(self.prima.name, html)
-        self.assertIn('Neto total pagado', html)
-        self.assertIn(4200000.0, valores_monetarios(html))          # 2.760.000 + 1.440.000
-        self.assertIn('Retención en la fuente', html)
+        self.assertIn('Neto a pagar', html)
+        self.assertNotIn('Neto total pagado', html)
 
     def test_pagos_en_dias_distintos_son_paginas_distintas(self):
         html = self._html(self._quincena(), self._prima(pagado=date(2026, 6, 20)))
@@ -91,7 +110,7 @@ class TestComprobantePago(TransactionCase):
     def test_imprimir_desde_un_solo_recibo_trae_el_pago_completo(self):
         q, p = self._quincena(), self._prima()
         html = self._html(p)
-        self.assertEqual(html.count('class="page"'), 1)
+        self.assertEqual(html.count('class="page"'), 2)       # la quincena y la prima del mismo pago, cada una en su media página
         self.assertIn(self.nomina.name, html)       # la quincena del mismo pago
         self.assertIn(4200000.0, valores_monetarios(html))
 
