@@ -5,6 +5,7 @@ vacaciones derivada de los parametros (salario x 30 / 720 = salario / 24)."""
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -32,13 +33,13 @@ class TestConstantes184(TransactionCase):
         empleado = self.env['hr.employee'].create({
             'name': 'Emp Provision', 'company_id': self.company.id,
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00'})
-        contrato = self.env['hr.contract'].create({
+        contrato = crear_contrato(self.env, {
             'name': 'C', 'employee_id': empleado.id, 'company_id': self.company.id,
             'structure_type_id': tipo.id, 'wage': 3000000.0, 'date_start': date(2026, 1, 1),
             'state': 'open', 'l10n_co_ne_contract_type': '2',
             'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00'})
         recibo = self.env['hr.payslip'].create({
-            'name': 'R', 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'R', 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': self.company.id,
             'struct_id': self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina').id,
             'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})

@@ -24,7 +24,7 @@ class TestConciliacionComprobantes(DocumentoFixture, TransactionCase):
                 [('code', '=', codigo), ('struct_id', '=', recibo.struct_id.id)], limit=1)
             self.env['hr.payslip.line'].create({
                 'slip_id': recibo.id, 'salary_rule_id': regla.id, 'code': codigo, 'name': regla.name,
-                'contract_id': recibo.contract_id.id, 'employee_id': recibo.employee_id.id, 'quantity': 1.0,
+                'version_id': recibo.version_id.id, 'employee_id': recibo.employee_id.id, 'quantity': 1.0,
                 'rate': 100.0, 'amount': total, 'total': total})
 
     def _doc(self, **xml):

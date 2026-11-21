@@ -94,7 +94,7 @@ class TestCicloReciboProduccion(DocumentoFixture, TransactionCase):
     def _condicion(self, arch, texto):
         return arch.xpath("//header/button[@string='%s']" % texto)[0].get('invisible')
 
-    def _oculto(self, condicion, produccion, documento, estado_ne, estado='done'):
+    def _oculto(self, condicion, produccion, documento, estado_ne, estado='validated'):
         return bool(safe_eval(condicion, {
             'country_code': 'CO', 'state': estado, 'l10n_co_ne_is_adjustment': False,
             'l10n_co_ne_documento_id': documento, 'l10n_co_ne_state': estado_ne,

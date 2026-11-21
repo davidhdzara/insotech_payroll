@@ -8,6 +8,7 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.models import l10n_co_nomina_ugpp as ugpp
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -29,17 +30,17 @@ class TestUgppOficio(TransactionCase):
         cls.empleado = cls.env['hr.employee'].create({
             'name': 'Empleado Oficio', 'company_id': cls.company.id, 'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        cls.contrato = cls.env['hr.contract'].create({
+        cls.contrato = crear_contrato(cls.env, {
             'name': 'Contrato Oficio', 'employee_id': cls.empleado.id, 'company_id': cls.company.id,
             'structure_type_id': cls.tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open',
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01',
             'l10n_co_pila_subtipo_cotizante': '00'})
         cls.recibo = cls.env['hr.payslip'].create({
-            'name': 'Recibo Oficio', 'employee_id': cls.empleado.id, 'contract_id': cls.contrato.id,
+            'name': 'Recibo Oficio', 'employee_id': cls.empleado.id, 'version_id': cls.contrato.id,
             'company_id': cls.company.id,
             'struct_id': cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina').id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30)})
-        cls.recibo.write({'state': 'done', 'paid_date': date(2026, 9, 30)})
+        cls.recibo.write({'state': 'validated', 'paid_date': date(2026, 9, 30)})
         cls.reporte = cls.env['l10n_co_nomina.ugpp'].create({
             'year': 2026, 'month': '9', 'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30),
             'company_id': cls.company.id, 'requerimiento_radicado': '2026-RAD-123',
@@ -92,10 +93,10 @@ class TestUgppOficio(TransactionCase):
     def test_el_oficio_lista_las_fechas_de_pago_reales_de_los_recibos(self):
         # Pagos los 5 y 20 (no caben en la periodicidad nativa): se leen de los recibos, sin campo nuevo.
         segundo = self.env['hr.payslip'].create({
-            'name': 'Recibo Oficio 2', 'employee_id': self.empleado.id, 'contract_id': self.contrato.id,
+            'name': 'Recibo Oficio 2', 'employee_id': self.empleado.id, 'version_id': self.contrato.id,
             'company_id': self.company.id, 'struct_id': self.recibo.struct_id.id,
             'date_from': date(2026, 9, 6), 'date_to': date(2026, 9, 20)})
-        segundo.write({'state': 'done', 'paid_date': date(2026, 9, 20)})
+        segundo.write({'state': 'validated', 'paid_date': date(2026, 9, 20)})
         self.recibo.paid_date = date(2026, 9, 5)
         self.assertEqual(self.reporte._ugpp_datos_oficio()['fechas_pago'], ['05/09/2026', '20/09/2026'])
 

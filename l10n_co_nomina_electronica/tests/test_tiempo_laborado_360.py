@@ -9,6 +9,7 @@ from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services.dian_utils import (
     compute_worked_time, compute_worked_time_360 as f)
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -61,7 +62,7 @@ class TestDiasBajoContratoIngreso(TransactionCase):
             'name': 'Empleado Días Contrato', 'company_id': cls.company.id,
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00',
             'l10n_co_ne_payment_method': '10'})
-        cls.contract = cls.env['hr.contract'].create({
+        cls.contract = crear_contrato(cls.env, {
             'name': 'Contrato Días Contrato', 'employee_id': employee.id,
             'company_id': cls.company.id, 'structure_type_id': structure_type.id,
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01',
@@ -69,12 +70,12 @@ class TestDiasBajoContratoIngreso(TransactionCase):
             'wage': 3000000.0, 'date_start': date(2023, 1, 1), 'state': 'open'})
         cls.slip = cls.env['hr.payslip'].create({
             'name': 'Nómina Días Contrato', 'employee_id': employee.id,
-            'contract_id': cls.contract.id, 'company_id': cls.company.id,
+            'version_id': cls.contract.id, 'company_id': cls.company.id,
             'struct_id': cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina').id,
             'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
 
     def _dias(self, ingreso, desde, hasta):
-        self.contract.date_start = ingreso
+        self.contract.contract_date_start = ingreso
         self.slip.write({'date_from': desde, 'date_to': hasta})
         return self.slip._ne_dias_bajo_contrato()
 

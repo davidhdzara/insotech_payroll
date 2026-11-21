@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Liquidacion con date_from distinto de contract.date_start (defecto hallado por QA, recibo 12954).
+"""Liquidacion con date_from distinto de contract.contract_date_start (defecto hallado por QA, recibo 12954).
 
 Las reglas de liquidacion que dependen del tramo contractual (vacaciones causadas/tomadas, tramo
 pagable) asumen que el recibo va de inicio de contrato a retiro. Con otro date_from las
@@ -11,6 +11,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 INGRESO = date(2025, 1, 1)
 RETIRO = date(2026, 1, 2)
@@ -33,7 +34,7 @@ class TestLiquidacionInicioTramo(TransactionCase):
         employee = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Inicio Tramo', 'company_id': cls.company.id,
             'l10n_co_ne_payment_method': '10'})
-        cls.contract = cls.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        cls.contract = crear_contrato(cls.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Inicio Tramo', 'employee_id': employee.id,
             'company_id': cls.company.id, 'structure_type_id': cls.structure_type.id,
             'wage': 3000000.0, 'date_start': INGRESO, 'state': 'open'})
@@ -41,7 +42,7 @@ class TestLiquidacionInicioTramo(TransactionCase):
     def _recibo(self, struct, date_from, date_to=RETIRO):
         return self.env['hr.payslip'].create({
             'name': 'Liquidación Inicio Tramo', 'employee_id': self.contract.employee_id.id,
-            'contract_id': self.contract.id, 'company_id': self.company.id,
+            'version_id': self.contract.id, 'company_id': self.company.id,
             'struct_id': struct.id, 'date_from': date_from, 'date_to': date_to})
 
     def test_vacaciones_con_date_from_distinto_del_ingreso_falla_con_aviso(self):

@@ -18,6 +18,7 @@ from psycopg2 import IntegrityError
 from odoo.exceptions import ValidationError
 from odoo.tests.common import TransactionCase, tagged
 from odoo.tools import mute_logger
+from .common_version import crear_contrato
 
 
 def _cargar_migracion(nombre):
@@ -54,7 +55,7 @@ class TestActividadEconomicaArl(TransactionCase):
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 1800000.0, 'date_start': date(2024, 1, 1), 'state': 'open'}
         vals.update(extra)
-        return self.env['hr.contract'].create(vals)
+        return crear_contrato(self.env, vals)
 
     def test_busqueda_por_codigo_y_por_descripcion(self):
         Ciiu = self.env['l10n.co.pila.ciiu']

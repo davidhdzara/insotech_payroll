@@ -17,6 +17,7 @@ retiro 2026-08-15, licencia no remunerada lun 3 a vie 7 de agosto (5 dias habile
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 RETIRO = date(2026, 8, 15)
 
@@ -40,7 +41,7 @@ class TestLiquidacionSlnIbc(TransactionCase):
     def _contrato(self, name):
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 3000000.0, 'date_start': date(2026, 1, 1), 'state': 'open'})
@@ -57,9 +58,9 @@ class TestLiquidacionSlnIbc(TransactionCase):
     def _liquidacion(self, employee, contract):
         slip = self.env['hr.payslip'].create({
             'name': 'Liquidación %s' % employee.name, 'employee_id': employee.id,
-            'contract_id': contract.id, 'company_id': self.company.id,
+            'version_id': contract.id, 'company_id': self.company.id,
             'struct_id': self.liquidacion.id,
-            'date_from': contract.date_start, 'date_to': RETIRO})
+            'date_from': contract.contract_date_start, 'date_to': RETIRO})
         slip.compute_sheet()
         return slip
 
@@ -81,7 +82,7 @@ class TestLiquidacionSlnIbc(TransactionCase):
     def test_la_base_sln_es_el_ultimo_ibc_de_la_nomina_general_anterior(self):
         employee, contract = self._contrato('SlnHistorial')
         previa = self.env['hr.payslip'].create({
-            'name': 'Nómina julio', 'employee_id': employee.id, 'contract_id': contract.id,
+            'name': 'Nómina julio', 'employee_id': employee.id, 'version_id': contract.id,
             'company_id': self.company.id, 'struct_id': self.nomina.id,
             'date_from': date(2026, 7, 1), 'date_to': date(2026, 7, 31)})
         regla = self.env['hr.salary.rule'].search(
@@ -89,9 +90,9 @@ class TestLiquidacionSlnIbc(TransactionCase):
         self.assertTrue(regla)
         self.env['hr.payslip.line'].create({
             'slip_id': previa.id, 'salary_rule_id': regla.id, 'code': 'CO_SS_BASE_IBC',
-            'name': 'IBC base', 'contract_id': contract.id, 'employee_id': employee.id,
+            'name': 'IBC base', 'version_id': contract.id, 'employee_id': employee.id,
             'quantity': 1.0, 'rate': 100.0, 'amount': 2400000.0, 'total': 2400000.0})
-        previa.state = 'done'
+        previa.state = 'validated'
         self._licencia(employee, date(2026, 8, 3), date(2026, 8, 7))
         slip = self._liquidacion(employee, contract)
         self.assertAlmostEqual(self._total(slip, 'CO_IBC_SLN'), 400000.0, delta=0.01)
@@ -110,7 +111,7 @@ class TestLiquidacionSlnIbc(TransactionCase):
         employee, contract = self._contrato('SlnConsolidado')
         self._licencia(employee, date(2026, 8, 3), date(2026, 8, 7))
         slip = self._liquidacion(employee, contract)
-        slip.state = 'done'
+        slip.state = 'validated'
         consolidado = self.env['l10n.co.ibc.mensual']._refrescar(self.company, employee, RETIRO)
         self.assertAlmostEqual(consolidado.ibc_sln, 500000.0, delta=0.01)
         self.assertAlmostEqual(consolidado.ibc_sp, 1500000.0, delta=0.01)

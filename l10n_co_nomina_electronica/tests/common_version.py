@@ -45,6 +45,50 @@ def crear_empleado_con_contrato(env, compania, wage, inicio, estructura_tipo, no
     return empleado, version
 
 
+# Tipos que la restricción D-A del módulo exige en cuanto una versión tiene ``contract_date_start`` (tipo de contrato y tipo/subtipo de cotizante).
+TIPOS_CONTRATO_DEFECTO = {
+    'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00'}
+
+
+def crear_contrato(env, vals, completar_tipos=True):
+    """Equivalente v19 de ``env['hr.contract'].create(vals)`` de las pruebas de v18: devuelve la ``hr.version`` del contrato. NO ejecutado en Odoo.
+
+    ``vals`` trae las claves de v18 y se traducen así (``hr.contract`` no existe en v19; ver el encabezado de este archivo):
+    * ``employee_id`` (id o registro): el empleado. ``company_id`` se descarta: la compañía de la versión sale del empleado.
+    * ``date_start`` -> ``date_version`` y, si el contrato es vigente o vencido, ``contract_date_start``. ``date_end`` -> ``contract_date_end``.
+    * ``state``: ``hr.version`` no tiene estado (T4 de ``odoo19_migracion/02_inventario_campos_hr_contract.md``). ``'open'`` y ``'close'`` son contrato
+      (llevan ``contract_date_start``); ``'draft'`` y ``'cancel'`` NO: la versión queda sin fechas de contrato, que es lo más cercano a «En proceso».
+    * Si hay ``contract_date_start`` y faltan los tipos de la restricción D-A, se completan con ``TIPOS_CONTRATO_DEFECTO`` (``completar_tipos=True``).
+      Las pruebas que comprueban justamente la AUSENCIA de esos tipos pasan ``completar_tipos=False``.
+    * El resto de las claves (``wage``, ``structure_type_id``, ``name``, ``l10n_co_*``...) son campos de ``hr.version`` y pasan tal cual.
+
+    El empleado ya trae una versión «vacía» (la crea el marco con el empleado, ``date_version`` = hoy). La primera llamada para un empleado la
+    reutiliza (``write``); las siguientes crean otra ``hr.version`` (historial de contratos del mismo empleado). NO VERIFICADO: el ``create`` de
+    ``hr.version`` ni su ``write`` (``hr_version.py``: cuerpo sin leer, ver el encabezado)."""
+    vals = dict(vals)
+    empleado = vals.pop('employee_id')
+    if not hasattr(empleado, 'ids'):
+        empleado = env['hr.employee'].browse(empleado)
+    estado = vals.pop('state', 'open')
+    vals.pop('company_id', None)
+    inicio = vals.pop('date_start', None)
+    fin = vals.pop('date_end', None)
+    if inicio:
+        vals['date_version'] = inicio
+    if estado in ('open', 'close') and inicio:
+        vals['contract_date_start'] = inicio
+        if fin:
+            vals['contract_date_end'] = fin
+        for campo, valor in (TIPOS_CONTRATO_DEFECTO.items() if completar_tipos else ()):
+            vals.setdefault(campo, valor)
+    versiones = empleado.with_context(active_test=False).version_ids
+    if len(versiones) == 1 and not versiones.contract_date_start:
+        versiones.write(vals)
+        return versiones
+    vals['employee_id'] = empleado.id
+    return env['hr.version'].create(vals)
+
+
 def crear_usuario_nomina(env, compania, login):
     """Usuario OFICIAL de nómina (``hr_payroll.group_hr_payroll_user``, sin ``hr.group_hr_manager`` ni ``hr_payroll.group_hr_payroll_manager``)
     de ``compania``. Las pruebas corren como superusuario y esconden los AccessError de campos con grupos (``wage``, ``contract_date_*``:

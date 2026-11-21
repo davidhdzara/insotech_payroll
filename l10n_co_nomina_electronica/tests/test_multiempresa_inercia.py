@@ -11,6 +11,7 @@ from datetime import date
 from unittest import mock
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -37,12 +38,12 @@ class TestMultiempresaInercia(TransactionCase):
 
     def _recibo(self, company, struct=None):
         empleado = self._empleado(company, name='Recibo %s' % company.name)
-        contrato = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contrato = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato', 'employee_id': empleado.id, 'company_id': company.id,
             'structure_type_id': self.tipo.id, 'wage': 1000000.0,
             'date_start': date(2026, 1, 1), 'state': 'open'})
         return self.env['hr.payslip'].create({
-            'name': 'Recibo', 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'Recibo', 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': company.id, 'struct_id': (struct or self.struct_mx).id,
             'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
 
@@ -101,7 +102,7 @@ class TestMultiempresaInercia(TransactionCase):
 
     def test_contrato_integral_mexicano_con_salario_bajo_guarda(self):
         mx = self._empleado(self.mx)
-        contrato = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contrato = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Integral MX', 'employee_id': mx.id, 'company_id': self.mx.id,
             'structure_type_id': self.tipo.id, 'wage': 1000000.0,
             'date_start': date(2026, 1, 1), 'state': 'open',

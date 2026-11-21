@@ -17,6 +17,7 @@ from datetime import date
 from lxml import etree
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -92,7 +93,7 @@ class TestNeConsecutivePrefixGuard(TransactionCase):
         # test_version_de_nota_de_ajuste_usa_el_literal_niae022.
         employee.l10n_co_ne_identification_type_id = self.env.ref(
             'l10n_co.national_citizen_id').id
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name,
             'employee_id': employee.id,
             'company_id': self.company.id,
@@ -104,7 +105,7 @@ class TestNeConsecutivePrefixGuard(TransactionCase):
         vals = {
             'name': 'Nómina %s' % name,
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'company_id': self.company.id,
             'struct_id': self.structure.id,
             'date_from': date(2026, 9, 1),

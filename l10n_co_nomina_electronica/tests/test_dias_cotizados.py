@@ -11,6 +11,7 @@ from datetime import date
 from unittest import mock
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -27,13 +28,13 @@ class TestDiasCotizados(TransactionCase):
     def _payslip(self, name, ini, fin, contrato_ini=date(2024, 1, 1), wage=3000000.0):
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': wage, 'date_start': contrato_ini, 'state': 'open'})
         return self.env['hr.payslip'].create({
             'name': 'Nómina %s' % name, 'employee_id': employee.id,
-            'contract_id': contract.id, 'company_id': self.company.id,
+            'version_id': contract.id, 'company_id': self.company.id,
             'struct_id': self.structure.id, 'date_from': ini, 'date_to': fin})
 
     def test_febrero_completo_cotiza_30_dias(self):
@@ -66,14 +67,14 @@ class TestDiasCotizados(TransactionCase):
         cls = type(slip)
         with mock.patch.object(cls, '_ne_dias_sln', return_value=5), \
                 mock.patch.object(cls, '_ne_ultimo_ibc_anterior', return_value=3000000.0):
-            self.assertAlmostEqual(slip._ne_ibc_sln(slip.contract_id), 500000.0, delta=0.01)
+            self.assertAlmostEqual(slip._ne_ibc_sln(slip.version_id), 500000.0, delta=0.01)
 
     def test_sin_sln_no_consulta_ibc_anterior(self):
         slip = self._payslip('SinSln', date(2026, 9, 1), date(2026, 9, 30))
         cls = type(slip)
         with mock.patch.object(cls, '_ne_dias_sln', return_value=0), \
                 mock.patch.object(cls, '_ne_ultimo_ibc_anterior', side_effect=AssertionError):
-            self.assertEqual(slip._ne_ibc_sln(slip.contract_id), 0.0)
+            self.assertEqual(slip._ne_ibc_sln(slip.version_id), 0.0)
 
     def test_compute_sheet_febrero_completo_reporta_30_dias_y_el_salario_como_ibc(self):
         slip = self._payslip('FebReal', date(2026, 2, 1), date(2026, 2, 28), wage=3000000.0)

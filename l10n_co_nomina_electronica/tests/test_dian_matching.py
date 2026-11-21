@@ -17,6 +17,7 @@ from datetime import date
 from unittest.mock import patch
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 def _application_response_xml(document_id=None, cune=None):
@@ -83,7 +84,7 @@ class TestDianMatchingCommon(TransactionCase):
             # para estas pruebas, 'Efectivo' evita fabricar datos bancarios.
             'l10n_co_ne_payment_method': '10',
         })
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name,
             'employee_id': employee.id,
             'company_id': self.company.id,
@@ -95,7 +96,7 @@ class TestDianMatchingCommon(TransactionCase):
         payslip = self.env['hr.payslip'].create({
             'name': 'Nómina %s' % name,
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'company_id': self.company.id,
             'struct_id': self.structure.id,
             'date_from': date(2026, 9, 1),

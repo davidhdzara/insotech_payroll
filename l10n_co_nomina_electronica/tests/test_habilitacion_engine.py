@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 # Los metodos del ciclo DIAN viven en el mixin (etapa 1a), no en la clase HrPayslip del modulo.
 _PAYSLIP = (
@@ -61,13 +62,13 @@ class TestHabilitacionEngine(TransactionCase):
             'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10',
         })
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 1800000.0, 'date_start': date(2024, 1, 1), 'state': 'open',
         })
         vals = {
-            'name': name, 'employee_id': employee.id, 'contract_id': contract.id,
+            'name': name, 'employee_id': employee.id, 'version_id': contract.id,
             'company_id': self.company.id, 'struct_id': self.structure.id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30),
             'l10n_co_ne_is_adjustment': adjustment, 'l10n_co_ne_hab_set_id': set_id,

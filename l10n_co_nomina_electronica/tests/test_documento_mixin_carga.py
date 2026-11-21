@@ -42,6 +42,11 @@ class TestDocumentoMixinCarga(TransactionCase):
             self.assertTrue(callable(getattr(modelo, metodo, None)), metodo)
 
     def test_las_restricciones_unicas_del_cune_y_el_consecutivo_siguen_en_el_recibo(self):
-        nombres = {c[0] for c in self.env['hr.payslip']._sql_constraints}
-        self.assertIn('l10n_co_ne_cune_unique', nombres)
-        self.assertIn('l10n_co_ne_consecutive_company_unique', nombres)
+        """v19 (X-1): ``_sql_constraints`` ya no crea nada; son ``models.Constraint`` declaradas en ``HrPayslip`` (el mixin es abstracto y no hay
+        lectura de si una ``Constraint`` de un abstracto se aplica al modelo que lo hereda). Nombre en PostgreSQL = ``{tabla}_{nombre}``
+        (``orm/table_objects.py:29,55-58``); ``_table_objects`` las indexa con ese nombre (``orm/model_classes.py:457-462``). Se comprueba en el
+        registro Y en la base de datos."""
+        esperadas = {'hr_payslip_l10n_co_ne_cune_unique', 'hr_payslip_l10n_co_ne_consecutive_company_unique'}
+        self.assertLessEqual(esperadas, set(self.env['hr.payslip']._table_objects))
+        self.env.cr.execute("SELECT conname FROM pg_constraint WHERE conrelid = 'hr_payslip'::regclass")
+        self.assertLessEqual(esperadas, {fila[0] for fila in self.env.cr.fetchall()})

@@ -11,6 +11,7 @@ leen el campo.
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -31,7 +32,7 @@ class TestNetWage(TransactionCase):
             'name': name, 'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10',
         })
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name,
             'employee_id': employee.id,
             'company_id': self.company.id,
@@ -43,7 +44,7 @@ class TestNetWage(TransactionCase):
         return self.env['hr.payslip'].create({
             'name': 'Nómina %s' % name,
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'company_id': self.company.id,
             'struct_id': self.structure.id,
             'date_from': date(2026, 9, 1),
@@ -91,7 +92,7 @@ class TestNetWage(TransactionCase):
             payslip = self._payslip('Neto %s' % code)
             self.env['hr.payslip.line'].create({
                 'slip_id': payslip.id, 'salary_rule_id': regla.id, 'code': code,
-                'name': code, 'contract_id': payslip.contract_id.id,
+                'name': code, 'version_id': payslip.version_id.id,
                 'employee_id': payslip.employee_id.id,
                 'quantity': 1.0, 'rate': 100.0, 'amount': 777000.0,
                 # hr.payslip.line.total es un Monetary plano, NO computado: lo escribe el motor

@@ -21,6 +21,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -56,7 +57,7 @@ class TestDiasTrabajadosCommon(TransactionCase):
             # bank_account_id (UX-02) -- sin interés aquí, 'Efectivo' evita datos bancarios falsos.
             'l10n_co_ne_payment_method': '10',
         })
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name,
             'employee_id': employee.id,
             'company_id': self.company.id,
@@ -72,7 +73,7 @@ class TestDiasTrabajadosCommon(TransactionCase):
         return self.env['hr.payslip'].create({
             'name': 'Nómina %s' % employee.name,
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'company_id': self.company.id,
             'struct_id': self.structure.id,
             'date_from': date_from,
@@ -153,8 +154,8 @@ class TestNeDiasPagables(TestDiasTrabajadosCommon):
         payslip.worked_days_line_ids
         # AUD-DIAN-34 (2026-10-05): modelo real 'hr.payslip.worked_days' (guion bajo), no
         # 'hr.payslip.worked.days' -- confirmado contra enterprise/hr_payroll/models/
-        # hr_payslip_worked_days.py en el servidor (Tech Lead). contract_id ahí es un
-        # related de payslip_id.contract_id, no se escribe en el create().
+        # hr_payslip_worked_days.py en el servidor (Tech Lead). version_id ahí es un
+        # related de payslip_id.version_id, no se escribe en el create().
         self.env['hr.payslip.worked_days'].create({
             'payslip_id': payslip.id,
             'work_entry_type_id': work_entry_type.id,
@@ -170,8 +171,8 @@ class TestNeDiasPagablesLiquidacion(TestDiasTrabajadosCommon):
     SueldoTrabajado="900000.00">, un sueldo de 15 días (15 x 60.000) con un DiasTrabajados de
     11 sin relación con ese sueldo.
 
-    Causa: en Liquidación, date_from es contract.date_start (wizard/hr_liquidacion_wizard.py:
-    'date_from': contract.date_start) y el período puede abarcar meses o años -- intersectarlo
+    Causa: en Liquidación, date_from es contract.contract_date_start (wizard/hr_liquidacion_wizard.py:
+    'date_from': contract.contract_date_start) y el período puede abarcar meses o años -- intersectarlo
     completo contra el contrato (como hacía _ne_dias_pagables() antes) devuelve el total de
     días de TODO el contrato, no el tramo pendiente del último mes que realmente paga
     CO_LIQ_SALARIOS (los meses anteriores ya se pagaron en nóminas mensuales regulares).
@@ -186,7 +187,7 @@ class TestNeDiasPagablesLiquidacion(TestDiasTrabajadosCommon):
         """Estos casos son de LIQUIDACION: el recorte al ultimo mes es solo de esa estructura (M1-1, doc 61), asi que el
         recibo usa la estructura real de liquidacion y no la generica de la prueba."""
         return self.env['hr.payslip'].create({
-            'name': 'Liquidación %s' % employee.name, 'employee_id': employee.id, 'contract_id': contract.id,
+            'name': 'Liquidación %s' % employee.name, 'employee_id': employee.id, 'version_id': contract.id,
             'company_id': self.company.id, 'date_from': date_from, 'date_to': date_to,
             'struct_id': self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion').id})
 
@@ -196,7 +197,7 @@ class TestNeDiasPagablesLiquidacion(TestDiasTrabajadosCommon):
             'LiqH009', date_start=date(2024, 10, 5), date_end=date(2026, 11, 15),
             wage=1800000.0)
         payslip = self._make_payslip(
-            employee, contract, contract.date_start, date(2026, 11, 15))
+            employee, contract, contract.contract_date_start, date(2026, 11, 15))
         self.assertEqual(payslip._ne_dias_pagables(), 15)
 
     def test_liquidacion_sueldo_coherente_con_dias_via_regla_real(self):
@@ -212,10 +213,10 @@ class TestNeDiasPagablesLiquidacion(TestDiasTrabajadosCommon):
         payslip = self.env['hr.payslip'].create({
             'name': 'Liquidación %s' % employee.name,
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'company_id': self.company.id,
             'struct_id': liquidacion_struct.id,
-            'date_from': contract.date_start,
+            'date_from': contract.contract_date_start,
             'date_to': date(2026, 11, 15),
         })
         payslip.compute_sheet()
@@ -229,14 +230,14 @@ class TestNeDiasPagablesLiquidacion(TestDiasTrabajadosCommon):
         cualquier mes siempre equivale al día comercial 30, no 31-1+1=31."""
         employee, contract = self._make_contract(
             'LiqRetiro31', date_start=date(2024, 1, 1), date_end=date(2026, 1, 31))
-        payslip = self._make_payslip(employee, contract, contract.date_start, date(2026, 1, 31))
+        payslip = self._make_payslip(employee, contract, contract.contract_date_start, date(2026, 1, 31))
         self.assertEqual(payslip._ne_dias_pagables(), 30)
 
     def test_retiro_dia_30_cuenta_como_mes_comercial_completo(self):
         """(b) Retiro el día 30 (mes real de 30 días) -- caso simple, día 30 = día comercial 30."""
         employee, contract = self._make_contract(
             'LiqRetiro30', date_start=date(2024, 1, 1), date_end=date(2026, 4, 30))
-        payslip = self._make_payslip(employee, contract, contract.date_start, date(2026, 4, 30))
+        payslip = self._make_payslip(employee, contract, contract.contract_date_start, date(2026, 4, 30))
         self.assertEqual(payslip._ne_dias_pagables(), 30)
 
     def test_retiro_en_febrero_cuenta_como_mes_comercial_completo(self):
@@ -245,7 +246,7 @@ class TestNeDiasPagablesLiquidacion(TestDiasTrabajadosCommon):
         convención real (último día calendario = día comercial 30, igual que CO_BASICO)."""
         employee, contract = self._make_contract(
             'LiqRetiroFeb', date_start=date(2024, 1, 1), date_end=date(2026, 2, 28))
-        payslip = self._make_payslip(employee, contract, contract.date_start, date(2026, 2, 28))
+        payslip = self._make_payslip(employee, contract, contract.contract_date_start, date(2026, 2, 28))
         self.assertEqual(payslip._ne_dias_pagables(), 30)
 
     def test_liquidacion_con_contrato_de_menos_de_un_mes(self):
@@ -254,7 +255,7 @@ class TestNeDiasPagablesLiquidacion(TestDiasTrabajadosCommon):
         pagable es la intersección normal de siempre (día 10 a día 22 = 13 días)."""
         employee, contract = self._make_contract(
             'LiqCorto', date_start=date(2026, 9, 10), date_end=date(2026, 9, 22))
-        payslip = self._make_payslip(employee, contract, contract.date_start, date(2026, 9, 22))
+        payslip = self._make_payslip(employee, contract, contract.contract_date_start, date(2026, 9, 22))
         self.assertEqual(payslip._ne_dias_pagables(), 13)
 
 
@@ -283,7 +284,7 @@ class TestDevBasicoYTransporteGuard(TestDiasTrabajadosCommon):
         return self.env['hr.payslip.line'].create({
             'slip_id': payslip.id,
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'salary_rule_id': rule.id,
             'code': rule.code,
             'name': rule.name,

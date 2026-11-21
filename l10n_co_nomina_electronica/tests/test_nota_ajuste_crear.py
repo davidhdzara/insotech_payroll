@@ -40,7 +40,7 @@ class TestNotaAjusteCrear(DocumentoFixture, TransactionCase):
 
     def _recibo_nuevo(self, doc, dia_pago=20):
         slip = self.env['hr.payslip'].create({
-            'name': 'Recibo tardío', 'employee_id': doc.employee_id.id, 'contract_id': doc.contract_id.id,
+            'name': 'Recibo tardío', 'employee_id': doc.employee_id.id, 'version_id': doc.version_id.id,
             'company_id': self.company.id, 'struct_id': self.struct.id,
             'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
         slip.write({'state': 'paid', 'paid_date': date(2026, 3, dia_pago)})
@@ -207,8 +207,8 @@ class TestNotaAjusteCrear(DocumentoFixture, TransactionCase):
         self.assertEqual(nota.adjustment_type, '1')
         self.assertEqual(nota.parent_id, self.padre)
         self.assertEqual(nota.adjustment_ref_cune, self.padre.cune)
-        self.assertEqual((nota.period, nota.employee_id, nota.company_id, nota.contract_id),
-                         (self.padre.period, self.padre.employee_id, self.company, self.padre.contract_id))
+        self.assertEqual((nota.period, nota.employee_id, nota.company_id, nota.version_id),
+                         (self.padre.period, self.padre.employee_id, self.company, self.padre.version_id))
         self.assertEqual(nota.etapa, 'draft')
         self.assertFalse(nota.state)
         self.assertFalse(nota.consecutive)   # no gasta consecutivo

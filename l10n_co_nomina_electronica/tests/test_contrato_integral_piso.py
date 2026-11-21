@@ -13,6 +13,7 @@ from odoo.exceptions import ValidationError
 from odoo.fields import Date
 from odoo.tests.common import TransactionCase, tagged
 from odoo.tools.misc import format_amount
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -38,7 +39,7 @@ class TestContratoIntegralPiso(TransactionCase):
             'l10n_co_ne_integral_salary': integral}
 
     def _contrato(self, *args, **kwargs):
-        return self.env['hr.contract'].create(self._vals(*args, **kwargs))
+        return crear_contrato(self.env, self._vals(*args, **kwargs))
 
     def test_en_el_piso_exacto_guarda(self):
         self.assertTrue(self._contrato(22761765.0, date(2026, 1, 1)))
@@ -83,7 +84,7 @@ class TestContratoIntegralPiso(TransactionCase):
         """Un contrato integral historico bajo el piso se puede editar en otros campos."""
         contrato = self._contrato(30000000.0, date(2026, 1, 1))
         self.env.cr.execute(
-            'UPDATE hr_contract SET wage = 1000000 WHERE id = %s', (contrato.id,))
+            'UPDATE hr_version SET wage = 1000000 WHERE id = %s', (contrato.id,))
         contrato.invalidate_recordset()
         contrato.name = 'Contrato renombrado'
         self.assertEqual(contrato.name, 'Contrato renombrado')

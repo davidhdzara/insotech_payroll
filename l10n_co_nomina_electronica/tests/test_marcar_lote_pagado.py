@@ -22,10 +22,11 @@ class TestMarcarLotePagado(DocumentoFixture, TransactionCase):
         cls._fixture_documento('Compañía Marcar Lote Pagado')
 
     def _lote(self):
-        """Lote cerrado con los recibos del fixture en estado Hecho y sin fecha de pago."""
+        """Lote con los recibos del fixture en estado Hecho (``validated``) y sin fecha de pago. v19: el estado del lote es CALCULADO desde
+        los recibos (``01_ready/02_close/03_paid/04_cancel``, ``hr_payslip_run.py:31-39``, ``:192-193`` según el plan): no se fija al crearlo."""
         recibos = self._documento(date(2024, 3, 1)).payslip_ids
-        recibos.write({'state': 'done', 'paid_date': False})
-        lote = self.env['hr.payslip.run'].create({'name': 'Lote E-5 %s' % self.n, 'state': 'close'})
+        recibos.write({'state': 'validated', 'paid_date': False})
+        lote = self.env['hr.payslip.run'].create({'name': 'Lote E-5 %s' % self.n})
         recibos.write({'payslip_run_id': lote.id})
         return lote
 
@@ -40,8 +41,8 @@ class TestMarcarLotePagado(DocumentoFixture, TransactionCase):
         self.assertEqual(accion['target'], 'new')
         self.assertEqual(sorted(accion['context']['active_ids']), sorted(lote.slip_ids.ids))
         self.assertEqual(accion['context']['ne_payslip_run_ids'], lote.ids)
-        self.assertEqual(set(lote.slip_ids.mapped('state')), {'done'})        # nada se marco
-        self.assertEqual(lote.state, 'close')
+        self.assertEqual(set(lote.slip_ids.mapped('state')), {'validated'})        # nada se marco
+        self.assertEqual(lote.state, '02_close')
         self.assertFalse(lote.slip_ids.filtered('paid_date'))
 
     def test_confirmar_el_asistente_deja_la_fecha_elegida_y_el_lote_pagado(self):
@@ -49,14 +50,14 @@ class TestMarcarLotePagado(DocumentoFixture, TransactionCase):
         self._asistente(lote, date(2026, 3, 31)).action_registrar_pago()
         self.assertEqual(set(lote.slip_ids.mapped('state')), {'paid'})
         self.assertEqual(set(lote.slip_ids.mapped('paid_date')), {date(2026, 3, 31)})     # no la de hoy
-        self.assertEqual(lote.state, 'paid')
+        self.assertEqual(lote.state, '03_paid')
 
     def test_una_fecha_futura_se_rechaza(self):
         lote = self._lote()
         manana = fields.Date.context_today(lote) + timedelta(days=1)
         with self.assertRaises(UserError):
             self._asistente(lote, manana).action_registrar_pago()
-        self.assertEqual(lote.state, 'close')
+        self.assertEqual(lote.state, '02_close')
 
     def test_con_fuente_contabilidad_se_conserva_el_comportamiento_nativo(self):
         lote = self._lote()
@@ -64,13 +65,13 @@ class TestMarcarLotePagado(DocumentoFixture, TransactionCase):
         self.assertIsNot(type(lote.action_paid()), dict)        # sin asistente: el nativo marca y devuelve None/True
         self.assertEqual(set(lote.slip_ids.mapped('state')), {'paid'})
         self.assertEqual(set(lote.slip_ids.mapped('paid_date')), {fields.Date.context_today(lote)})
-        self.assertEqual(lote.state, 'paid')
+        self.assertEqual(lote.state, '03_paid')
 
     def test_una_compania_no_colombiana_conserva_el_comportamiento_nativo(self):
         lote = self._lote()
         with patch.object(type(self.company), '_ne_es_colombia', lambda s: False):
             self.assertIsNot(type(lote.action_paid()), dict)
-        self.assertEqual(lote.state, 'paid')
+        self.assertEqual(lote.state, '03_paid')
 
     def test_el_asistente_avisa_que_la_fecha_decide_el_mes_del_documento(self):
         vista = self.env.ref('l10n_co_nomina_electronica.hr_payslip_registrar_pago_view_form')

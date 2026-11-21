@@ -11,6 +11,7 @@
 import os
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -47,7 +48,7 @@ class TestStructureTypeDefault(TransactionCase):
             # (constraint _check_bank_account_for_transfer, H-021) y esta prueba no la necesita.
             'l10n_co_ne_payment_method': '10',
         })
-        contrato = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contrato = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Reasignación (.102)',
             'employee_id': empleado.id,
             'company_id': compania.id,

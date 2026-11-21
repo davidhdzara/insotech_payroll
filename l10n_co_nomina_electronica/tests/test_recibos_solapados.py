@@ -7,6 +7,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -25,7 +26,7 @@ class TestRecibosSolapados(TransactionCase):
         cls.employee = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Luis Mora', 'company_id': cls.company.id,
             'l10n_co_ne_payment_method': '10'})
-        cls.contract = cls.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        cls.contract = crear_contrato(cls.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Solapes', 'employee_id': cls.employee.id,
             'company_id': cls.company.id, 'structure_type_id': cls.structure_type.id,
             'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open'})
@@ -33,12 +34,12 @@ class TestRecibosSolapados(TransactionCase):
     def _recibo(self, ini, fin, estado='draft', struct=None, **extra):
         return self.env['hr.payslip'].create({
             'name': 'Recibo %s' % ini, 'employee_id': self.employee.id,
-            'contract_id': self.contract.id, 'company_id': self.company.id,
+            'version_id': self.contract.id, 'company_id': self.company.id,
             'struct_id': (struct or self.structure).id,
             'date_from': ini, 'date_to': fin, 'state': estado, **extra})
 
     def test_cruce_misma_estructura_es_error_y_nombra_al_otro(self):
-        existente = self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'done')
+        existente = self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'validated')
         nuevo = self._recibo(date(2026, 9, 15), date(2026, 10, 15))
         with self.assertRaises(UserError) as ctx:
             nuevo._ne_validar_sin_solape()
@@ -50,16 +51,16 @@ class TestRecibosSolapados(TransactionCase):
             self._recibo(date(2026, 9, 30), date(2026, 9, 30))._ne_validar_sin_solape()
 
     def test_otra_estructura_se_permite(self):
-        self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'done')
+        self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'validated')
         self._recibo(date(2026, 9, 1), date(2026, 9, 30), struct=self.otra_estructura
                      )._ne_validar_sin_solape()
 
     def test_periodos_contiguos_se_permiten(self):
-        self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'done')
+        self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'validated')
         self._recibo(date(2026, 10, 1), date(2026, 10, 31))._ne_validar_sin_solape()
 
     def test_nota_de_ajuste_se_permite(self):
-        self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'done')
+        self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'validated')
         ajuste = self._recibo(
             date(2026, 9, 1), date(2026, 9, 30), l10n_co_ne_is_adjustment=True,
             l10n_co_ne_adjustment_ref_cune='CUNE-ORIGINAL')
@@ -69,7 +70,7 @@ class TestRecibosSolapados(TransactionCase):
         self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'cancel')
         self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'draft')
         propio = self._recibo(date(2026, 9, 10), date(2026, 9, 20))
-        # los de arriba no son 'done': no hay conflicto con ellos. Se valida SU recibo, no «el ultimo borrador de la base»
+        # los de arriba no son 'validated': no hay conflicto con ellos. Se valida SU recibo, no «el ultimo borrador de la base»
         # (la base de staging es compartida con QA y trae borradores reales que si se solapan).
         propio._ne_validar_sin_solape()
 

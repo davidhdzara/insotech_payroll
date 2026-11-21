@@ -33,7 +33,7 @@ class TestHistoriaHabilitacion(DocumentoFixture, TransactionCase):
     def _nuevo(self, estado='paid', pago=date(2026, 3, 20)):
         """Otro recibo de marzo del mismo empleado (sin documento)."""
         slip = self.env['hr.payslip'].create({
-            'name': 'Recibo extra', 'employee_id': self.empleado.id, 'contract_id': self.doc.contract_id.id,
+            'name': 'Recibo extra', 'employee_id': self.empleado.id, 'version_id': self.doc.version_id.id,
             'company_id': self.company.id, 'struct_id': self.struct.id,
             'date_from': date(2026, 3, 16), 'date_to': date(2026, 3, 31)})
         slip.write({'state': estado, 'paid_date': pago})
@@ -102,9 +102,9 @@ class TestHistoriaHabilitacion(DocumentoFixture, TransactionCase):
         # el documento tiene solo la primera quincena; la segunda es una nota por recibo y hay otra de pruebas
         self.b.write({'l10n_co_ne_documento_id': False, 'l10n_co_ne_is_adjustment': True,
                       'l10n_co_ne_adjustment_ref_cune': 'a' * 96})
-        prueba = self._nuevo('done', False)
+        prueba = self._nuevo('validated', False)
         prueba.write({'l10n_co_ne_hab_set_id': 'SET1', 'name': 'Recibo de prueba de habilitacion'})
-        pendiente = self._nuevo('done', False)
+        pendiente = self._nuevo('validated', False)
         pendiente.name = 'Recibo pendiente real'     # nombres DISTINTOS: el assertNotIn compara por nombre
         self.assertNotEqual(prueba.display_name, pendiente.display_name)
         faltan = self.Doc._ne_recibos_que_faltan(self.company, self.empleado, date(2026, 3, 1), self.a)

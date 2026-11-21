@@ -5,6 +5,7 @@ from datetime import date
 from unittest.mock import patch
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -21,7 +22,7 @@ class TestDesgloseRecibo(TransactionCase):
         cls.empleado = cls.env['hr.employee'].create({
             'name': 'Empleado Desglose', 'company_id': cls.company.id, 'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        cls.contrato = cls.env['hr.contract'].create({
+        cls.contrato = crear_contrato(cls.env, {
             'name': 'Contrato Desglose', 'employee_id': cls.empleado.id, 'company_id': cls.company.id,
             'structure_type_id': cls.tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open',
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00'})
@@ -29,7 +30,7 @@ class TestDesgloseRecibo(TransactionCase):
     def _recibo(self, estructura, *lineas, pagado=None):
         recibo = self.env['hr.payslip'].create({
             'name': 'Recibo %s' % estructura.name, 'employee_id': self.empleado.id,
-            'contract_id': self.contrato.id, 'company_id': self.company.id, 'struct_id': estructura.id,
+            'version_id': self.contrato.id, 'company_id': self.company.id, 'struct_id': estructura.id,
             'date_from': date(2026, 6, 1), 'date_to': date(2026, 6, 15)})
         for codigo, total in lineas:
             regla = self.env['hr.salary.rule'].search(
@@ -37,10 +38,10 @@ class TestDesgloseRecibo(TransactionCase):
             self.assertTrue(regla, 'Falta la regla %s en %s' % (codigo, estructura.name))
             self.env['hr.payslip.line'].create({
                 'slip_id': recibo.id, 'salary_rule_id': regla.id, 'code': codigo, 'name': regla.name,
-                'contract_id': self.contrato.id, 'employee_id': self.empleado.id, 'quantity': 1.0, 'rate': 100.0,
+                'version_id': self.contrato.id, 'employee_id': self.empleado.id, 'quantity': 1.0, 'rate': 100.0,
                 'amount': total, 'total': total})
         if pagado:
-            recibo.write({'state': 'done', 'paid_date': pagado})
+            recibo.write({'state': 'validated', 'paid_date': pagado})
         return recibo
 
     def _estructura(self, xmlid):
@@ -105,7 +106,7 @@ class TestDesgloseRecibo(TransactionCase):
     def test_sin_fecha_de_pago_el_desglose_no_falla_y_da_false(self):
         recibo = self._recibo(self._estructura('co_nomina'), ('CO_BASICO', 1000.0), ('CO_NETO', 1000.0))
         self.assertFalse(recibo._ne_desglose()['paid_date'])
-        recibo.write({'state': 'done', 'paid_date': False})
+        recibo.write({'state': 'validated', 'paid_date': False})
         self.assertFalse(recibo._ne_desglose()['paid_date'])
 
     def test_no_recalcula_ni_escribe(self):

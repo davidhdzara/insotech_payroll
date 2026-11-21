@@ -11,6 +11,7 @@ from decimal import Decimal
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import documento_merge as dm
+from .common_version import crear_contrato
 
 _logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class TestDocumentoFusionReal(TransactionCase):
             'name': 'Fusion %s' % mes, 'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10', 'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00'})
-        contrato = self.env['hr.contract'].create({
+        contrato = crear_contrato(self.env, {
             'name': 'C', 'employee_id': empleado.id, 'company_id': self.company.id,
             'structure_type_id': self.tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 3, 1),
             'state': 'open', 'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01',
@@ -42,7 +43,7 @@ class TestDocumentoFusionReal(TransactionCase):
         recibos = self.env['hr.payslip']
         for ini, fin in ((1, 15), (16, ultimo_dia)):
             recibo = self.env['hr.payslip'].create({
-                'name': 'Q %s-%s' % (mes, ini), 'employee_id': empleado.id, 'contract_id': contrato.id,
+                'name': 'Q %s-%s' % (mes, ini), 'employee_id': empleado.id, 'version_id': contrato.id,
                 'company_id': self.company.id, 'struct_id': self.est.id,
                 'date_from': date(2026, mes, ini), 'date_to': date(2026, mes, fin)})
             recibo.compute_sheet()

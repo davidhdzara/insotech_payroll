@@ -13,6 +13,7 @@ prueba con compute_sheet real en los tests de nomina real.
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -49,13 +50,13 @@ class TestAsientoTercero(TransactionCase):
             'l10n_co_tercero_origen': 'distribution'})
         employee = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Empleado Asiento', 'company_id': cls.company.id})
-        contract = cls.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(cls.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Asiento', 'employee_id': employee.id,
             'company_id': cls.company.id, 'wage': 3000000,
             'date_start': '2026-01-01', 'state': 'draft'})
         cls.slip = cls.env['hr.payslip'].create({
             'name': 'Nomina Asiento', 'employee_id': employee.id,
-            'contract_id': contract.id, 'company_id': cls.company.id,
+            'version_id': contract.id, 'company_id': cls.company.id,
             'struct_id': cls.structure.id,
             'date_from': '2026-03-01', 'date_to': '2026-03-31'})
 
@@ -65,7 +66,7 @@ class TestAsientoTercero(TransactionCase):
             'code': regla.code, 'name': regla.name,
             'category_id': regla.category_id.id,
             'employee_id': self.slip.employee_id.id,
-            'contract_id': self.slip.contract_id.id,
+            'version_id': self.slip.version_id.id,
             'total': total, 'amount': total, 'quantity': 1, 'rate': 100})
 
     def _reparto(self, filas):

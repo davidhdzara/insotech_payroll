@@ -4,12 +4,13 @@ recibos confirmados del empleado en el mes; independiente del orden de confirmac
 PILA incluye recibos 'paid' y liquidaciones (se filtra por date_to).
 
 Nivel de verificacion: _refrescar sobre recibos reales calculados con compute_sheet (el
-estado 'done' se fija directo para no depender de la contabilidad); el archivo PILA
+estado 'validated' se fija directo para no depender de la contabilidad); el archivo PILA
 completo y el reporte UGPP en Excel se prueban en servidor."""
 
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -27,7 +28,7 @@ class TestIbcMensual(TransactionCase):
     def _empleado(self, name, wage):
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': wage, 'date_start': date(2024, 1, 1), 'state': 'open'})
@@ -36,14 +37,14 @@ class TestIbcMensual(TransactionCase):
     def _recibo(self, employee, contract, ini, fin):
         slip = self.env['hr.payslip'].create({
             'name': 'Nómina %s' % employee.name, 'employee_id': employee.id,
-            'contract_id': contract.id, 'company_id': self.company.id,
+            'version_id': contract.id, 'company_id': self.company.id,
             'struct_id': self.structure.id, 'date_from': ini, 'date_to': fin})
         slip.compute_sheet()
         return slip
 
     def _confirmar(self, *slips):
         for s in slips:
-            s.state = 'done'
+            s.state = 'validated'
         slips[0]._ne_refrescar_ibc_mensual()
 
     def test_un_solo_recibo_el_consolidado_es_igual_al_recibo(self):
@@ -74,19 +75,19 @@ class TestIbcMensual(TransactionCase):
         employee, contract = self._empleado('Orden', 80000000.0)
         a = self._recibo(employee, contract, date(2026, 9, 1), date(2026, 9, 15))
         b = self._recibo(employee, contract, date(2026, 9, 16), date(2026, 9, 30))
-        b.state = 'done'
+        b.state = 'validated'
         b._ne_refrescar_ibc_mensual()
         parcial = self.Consolidado.search([('employee_id', '=', employee.id)]).ibc_sp
-        a.state = 'done'
+        a.state = 'validated'
         a._ne_refrescar_ibc_mensual()
         orden_1 = self.Consolidado.search([('employee_id', '=', employee.id)]).ibc_sp
         # reiniciar y confirmar en el orden inverso
         a.state = b.state = 'draft'
         a._ne_refrescar_ibc_mensual()
         self.assertFalse(self.Consolidado.search([('employee_id', '=', employee.id)]))
-        a.state = 'done'
+        a.state = 'validated'
         a._ne_refrescar_ibc_mensual()
-        b.state = 'done'
+        b.state = 'validated'
         b._ne_refrescar_ibc_mensual()
         orden_2 = self.Consolidado.search([('employee_id', '=', employee.id)]).ibc_sp
         self.assertAlmostEqual(orden_1, orden_2, delta=0.01)
@@ -105,15 +106,15 @@ class TestIbcMensual(TransactionCase):
         estructura = self.structure
         # Recibo normal pagado
         normal = self.env['hr.payslip'].create({
-            'name': 'Nómina Pila', 'employee_id': employee.id, 'contract_id': contract.id,
+            'name': 'Nómina Pila', 'employee_id': employee.id, 'version_id': contract.id,
             'company_id': self.company.id, 'struct_id': estructura.id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30), 'state': 'paid'})
         # Tipo liquidacion: date_from = inicio de contrato, date_to en el mes (creado ya
         # con sus fechas: mutar date_from de un recibo existente dispara recalculo nativo)
         liquidacion = self.env['hr.payslip'].create({
-            'name': 'Liquidación Pila', 'employee_id': employee.id, 'contract_id': contract.id,
+            'name': 'Liquidación Pila', 'employee_id': employee.id, 'version_id': contract.id,
             'company_id': self.company.id, 'struct_id': estructura.id,
-            'date_from': date(2024, 1, 1), 'date_to': date(2026, 9, 20), 'state': 'done'})
+            'date_from': date(2024, 1, 1), 'date_to': date(2026, 9, 20), 'state': 'validated'})
         wizard = self.env['l10n.co.hr.pila.wizard.v2']
         encontrados = wizard._get_period_payslips(self.company, 2026, 9)
         self.assertIn(normal, encontrados)

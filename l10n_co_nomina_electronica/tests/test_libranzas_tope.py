@@ -9,6 +9,7 @@ reales; la regla salarial completa se prueba al correr -u + suite en servidor.
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -17,12 +18,12 @@ class TestLibranzasTope(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.employee = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'name': 'Empleado Libranzas'})
-        cls.contract = cls.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        cls.contract = crear_contrato(cls.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Libranzas', 'employee_id': cls.employee.id,
             'wage': 5000000, 'date_start': '2026-01-01', 'state': 'draft'})
         cls.slip = cls.env['hr.payslip'].create({
             'name': 'Nomina Libranzas', 'employee_id': cls.employee.id,
-            'contract_id': cls.contract.id,
+            'version_id': cls.contract.id,
             'struct_id': cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina').id,
             'date_from': '2026-03-01', 'date_to': '2026-03-31'})
         cls.tipo = cls.env.ref('l10n_co_nomina_electronica.input_l10n_co_libranza')
@@ -125,13 +126,13 @@ class TestLibranzasNominaReal(TransactionCase):
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': wage, 'date_start': '2024-01-01', 'state': 'open'})
         return self.env['hr.payslip'].create({
             'name': 'Nómina %s' % name, 'employee_id': employee.id,
-            'contract_id': contract.id, 'company_id': self.company.id,
+            'version_id': contract.id, 'company_id': self.company.id,
             'struct_id': self.structure.id,
             'date_from': '2026-09-01', 'date_to': '2026-09-30'})
 

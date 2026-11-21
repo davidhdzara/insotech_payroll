@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """.98 (2026-10-11, hallazgo de Tech Lead en staging):
 l10n.co.ne.certification.wizard._auto_select_period() elegía el periodo
-del último hr.payslip 'done' de Nómina General por order='date_to desc'
+del último hr.payslip 'validated' de Nómina General por order='date_to desc'
 sin filtrar fechas. En staging había payslips de prueba con date_to hasta
 2027-01-31 (datos de habilitación anteriores), y el asistente terminaba
 eligiendo un periodo futuro que todavía no empieza.
@@ -18,6 +18,7 @@ from dateutil.relativedelta import relativedelta
 
 from odoo import fields
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -27,7 +28,7 @@ class TestCertificationWizardPeriod(TransactionCase):
         super().setUpClass()
         # Compañía dedicada y descartable (ver AUD-DIAN-34 en test_dian_matching.py)
         # -- sin esto, el fallback de esta prueba podría chocar con payslips
-        # 'done' reales de la compañía por defecto en la copia de la BD de
+        # 'validated' reales de la compañía por defecto en la copia de la BD de
         # staging/Guapante sobre la que corre la build.
         cls.company = cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 
             'name': 'Compañía de Prueba Periodo Habilitación',
@@ -55,7 +56,7 @@ class TestCertificationWizardPeriod(TransactionCase):
             'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10',
         })
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name,
             'employee_id': employee.id,
             'company_id': self.company.id,
@@ -67,16 +68,16 @@ class TestCertificationWizardPeriod(TransactionCase):
         return self.env['hr.payslip'].create({
             'name': 'Nómina %s' % name,
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'company_id': self.company.id,
             'struct_id': self.struct.id,
             'date_from': date_from,
             'date_to': date_to,
-            'state': 'done',
+            'state': 'validated',
         })
 
     def test_periodo_futuro_se_ignora_gana_el_ya_iniciado(self):
-        """Caso real de staging: payslip 'done' en periodo futuro (aún no
+        """Caso real de staging: payslip 'validated' en periodo futuro (aún no
         empieza) convive con uno en periodo ya iniciado -- debe ganar el
         ya iniciado, nunca el futuro, aunque el futuro tenga date_to
         mayor (lo que antes lo hacía ganar por order='date_to desc')."""
@@ -96,7 +97,7 @@ class TestCertificationWizardPeriod(TransactionCase):
         self.assertEqual(date_to, ya_iniciado.date_to)
 
     def test_sin_payslips_cae_al_mes_actual(self):
-        """Sin ningún payslip 'done' (compañía nueva, aislada de las
+        """Sin ningún payslip 'validated' (compañía nueva, aislada de las
         demás pruebas) -- fallback sin cambios: mes calendario actual
         completo."""
         hoy = fields.Date.context_today(self.wizard)

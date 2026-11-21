@@ -17,6 +17,7 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import dian_utils
+from .common_version import crear_contrato
 
 
 class _FakeCertificate:
@@ -118,7 +119,7 @@ class TestDianPaisMoneda(TransactionCase):
             'l10n_co.national_citizen_id').id
         if work_address is not None:
             employee.address_id = work_address.id
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Prueba',
             'employee_id': employee.id,
             'company_id': self.company.id,
@@ -130,7 +131,7 @@ class TestDianPaisMoneda(TransactionCase):
         return self.env['hr.payslip'].create({
             'name': 'Nómina Prueba',
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'company_id': self.company.id,
             'struct_id': self.structure.id,
             'date_from': date(2026, 9, 1),

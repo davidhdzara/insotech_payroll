@@ -6,6 +6,7 @@ Nivel de verificación: lógica de los resolvers (empleado/contrato -> empresa),
 y bloqueo al apagar "¿Maneja empleados en diferentes ciudades?". Valores esperados a mano."""
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -20,7 +21,7 @@ class TestAjustesGenerales(TransactionCase):
         cls.comfenalco = Partner.create({'name': 'Comfenalco', 'l10n_co_entity_type': 'ccf'})
         cls.empleado = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Empleado Ajustes', 'company_id': cls.company.id})
-        cls.contrato = cls.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        cls.contrato = crear_contrato(cls.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Ajustes', 'employee_id': cls.empleado.id,
             'company_id': cls.company.id, 'wage': 2000000.0,
             'date_start': '2026-01-01', 'state': 'open'})

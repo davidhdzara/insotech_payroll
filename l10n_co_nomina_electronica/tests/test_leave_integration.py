@@ -2,6 +2,7 @@
 from odoo.tests.common import TransactionCase, tagged
 from odoo import fields
 from datetime import datetime, date
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -62,7 +63,7 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
             'name': 'Nómina Regular',
             'type_id': self.structure_type.id,
         })
-        self.contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        self.contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Juan Pérez',
             'employee_id': self.employee.id,
             'structure_type_id': self.structure_type.id,
@@ -120,7 +121,7 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
         # Crear payslip del 1 al 30 de junio de 2026
         payslip = self.env['hr.payslip'].create({
             'employee_id': self.employee.id,
-            'contract_id': self.contract.id,
+            'version_id': self.contract.id,
             'struct_id': self.structure.id,
             'date_from': date(2026, 6, 1),
             'date_to': date(2026, 6, 30),
@@ -156,7 +157,7 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
         self.env['hr.payslip.line'].create({
             'slip_id': payslip.id,
             'employee_id': self.employee.id,
-            'contract_id': self.contract.id,
+            'version_id': self.contract.id,
             'salary_rule_id': rule_inc.id,
             'code': 'INC_PAGO',
             'name': 'Incapacidad Pago',
@@ -182,7 +183,7 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
         self.env['hr.payslip.line'].create({
             'slip_id': payslip.id,
             'employee_id': self.employee.id,
-            'contract_id': self.contract.id,
+            'version_id': self.contract.id,
             'salary_rule_id': rule_vac.id,
             'code': 'VAC_PAGO',
             'name': 'Vacaciones Comunes Pago',

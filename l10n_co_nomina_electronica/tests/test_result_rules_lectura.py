@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from odoo.addons.hr_payroll.models.hr_payslip import DefaultDictPayroll
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 CODIGOS_AUSENCIA = ('CO_INC_COMUN', 'CO_INC_LABORAL', 'CO_LIC_MAT', 'CO_LIC_PAT')
 
@@ -47,12 +48,12 @@ class TestResultRulesLectura(TransactionCase):
         empleado = cls.env['hr.employee'].create({
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'name': 'Empleado Lectura RR',
             'company_id': cls.company.id, 'l10n_co_ne_payment_method': '10'})
-        cls.contrato = cls.env['hr.contract'].create({
+        cls.contrato = crear_contrato(cls.env, {
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
             'name': 'Contrato Lectura RR', 'employee_id': empleado.id, 'company_id': cls.company.id,
             'structure_type_id': tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 3, 1), 'state': 'open'})
         cls.recibo = cls.env['hr.payslip'].create({
-            'name': 'Recibo Lectura RR', 'employee_id': empleado.id, 'contract_id': cls.contrato.id,
+            'name': 'Recibo Lectura RR', 'employee_id': empleado.id, 'version_id': cls.contrato.id,
             'company_id': cls.company.id,
             'struct_id': cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina').id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 15)})

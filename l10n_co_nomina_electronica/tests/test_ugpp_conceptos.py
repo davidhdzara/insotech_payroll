@@ -8,6 +8,7 @@ from odoo.exceptions import UserError, ValidationError
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.models import l10n_co_nomina_ugpp as ugpp
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -98,20 +99,20 @@ class TestUgppConceptos(TransactionCase):
         empleado = self.env['hr.employee'].create({
             'name': 'Empleado U3b', 'company_id': self.company.id, 'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = self.env['hr.contract'].create({
+        contrato = crear_contrato(self.env, {
             'name': 'Contrato U3b', 'employee_id': empleado.id, 'company_id': self.company.id,
             'structure_type_id': tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open',
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01',
             'l10n_co_pila_subtipo_cotizante': '00'})
         recibo = self.env['hr.payslip'].create({
-            'name': 'Recibo U3b', 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'Recibo U3b', 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': self.company.id,
             'struct_id': self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina').id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30)})
         for regla, total in valores:
             self.env['hr.payslip.line'].create({
                 'slip_id': recibo.id, 'salary_rule_id': regla.id, 'code': regla.code, 'name': regla.name,
-                'category_id': regla.category_id.id, 'employee_id': empleado.id, 'contract_id': contrato.id,
+                'category_id': regla.category_id.id, 'employee_id': empleado.id, 'version_id': contrato.id,
                 'total': total, 'amount': total, 'quantity': 1, 'rate': 100})
         return recibo
 

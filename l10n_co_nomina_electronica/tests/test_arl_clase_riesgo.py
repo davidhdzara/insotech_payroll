@@ -13,6 +13,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 TARIFAS = {'1': 0.522, '2': 1.044, '3': 2.436, '4': 4.350, '5': 6.960}
 
@@ -36,7 +37,7 @@ class TestArlClaseRiesgo(TransactionCase):
             'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10',
         })
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato ARL %s' % clase,
             'employee_id': employee.id,
             'company_id': self.company.id,
@@ -49,7 +50,7 @@ class TestArlClaseRiesgo(TransactionCase):
         payslip = self.env['hr.payslip'].create({
             'name': 'Nómina ARL %s' % clase,
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'company_id': self.company.id,
             'struct_id': self.structure.id,
             'date_from': date(2026, 9, 1),
@@ -92,7 +93,7 @@ class TestArlClaseRiesgo(TransactionCase):
 
     def test_sin_clase_levanta_usererror_y_nombra_al_empleado(self):
         payslip = self._payslip('1')
-        payslip.contract_id.l10n_co_pila_clase_riesgo = False
+        payslip.version_id.l10n_co_pila_clase_riesgo = False
         payslip.company_id.l10n_co_pila_clase_riesgo = False  # .161: tampoco hay general
         with self.assertRaises(UserError) as exc:
             payslip._ne_pct_arl()

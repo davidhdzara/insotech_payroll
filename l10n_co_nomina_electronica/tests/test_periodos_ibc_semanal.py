@@ -15,6 +15,7 @@ from odoo.tests.common import TransactionCase, tagged
 from odoo.addons.l10n_co_nomina_electronica.services import documento_merge as dm
 
 from .test_documento_merge import PERIODO, _recibo as _datos_recibo
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -41,7 +42,7 @@ class TestPeriodosIbcSemanal(TransactionCase):
         empleado = self.env['hr.employee'].create({
             'name': 'Empleado IBC %s %s' % (periodicidad, self.n), 'company_id': self.company.id,
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = self.env['hr.contract'].create({
+        contrato = crear_contrato(self.env, {
             'name': 'Contrato IBC %s' % self.n, 'employee_id': empleado.id, 'company_id': self.company.id,
             'structure_type_id': self.tipos[periodicidad].id, 'l10n_co_ne_contract_type': '2',
             'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
@@ -50,14 +51,14 @@ class TestPeriodosIbcSemanal(TransactionCase):
 
     def _recibo(self, empleado, contrato, ini, fin):
         recibo = self.env['hr.payslip'].create({
-            'name': 'Recibo IBC %s' % fin, 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'Recibo IBC %s' % fin, 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': self.company.id, 'struct_id': self.estructura.id, 'date_from': ini, 'date_to': fin})
         recibo.compute_sheet()
         return recibo
 
     def _consolidado(self, empleado, recibos, mes):
         for recibo in recibos:
-            recibo.state = 'done'
+            recibo.state = 'validated'
         recibos[0]._ne_refrescar_ibc_mensual()
         return self.env['l10n.co.ibc.mensual'].search([('employee_id', '=', empleado.id), ('period', '=', mes)])
 

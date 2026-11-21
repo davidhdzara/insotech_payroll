@@ -10,6 +10,7 @@ from unittest.mock import patch
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.models import l10n_co_nomina_ugpp as ugpp
+from .common_version import crear_contrato
 
 PDF = b'%PDF-1.4 prueba'
 
@@ -28,15 +29,15 @@ class TestUgppSoportes(TransactionCase):
         cls.empleado = cls.env['hr.employee'].create({
             'name': 'Empleado Soportes', 'company_id': cls.company.id, 'identification_id': '1020304050',
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        cls.contrato = cls.env['hr.contract'].create({
+        cls.contrato = crear_contrato(cls.env, {
             'name': 'Contrato Soportes', 'employee_id': cls.empleado.id, 'company_id': cls.company.id,
             'structure_type_id': tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open',
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00'})
         cls.recibo = cls.env['hr.payslip'].create({
-            'name': 'Recibo Soportes', 'employee_id': cls.empleado.id, 'contract_id': cls.contrato.id,
+            'name': 'Recibo Soportes', 'employee_id': cls.empleado.id, 'version_id': cls.contrato.id,
             'company_id': cls.company.id, 'struct_id': cls.estructura.id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30)})
-        cls.recibo.state = 'done'
+        cls.recibo.state = 'validated'
         cls.reporte = cls.env['l10n_co_nomina.ugpp'].create({
             'year': 2026, 'month': '9', 'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30),
             'company_id': cls.company.id})
@@ -58,7 +59,7 @@ class TestUgppSoportes(TransactionCase):
         self.assertIn('planilla PILA', item['faltan'][1])
 
     def test_los_pdf_del_contrato_del_empleado_y_del_contacto_se_incluyen_y_otros_tipos_no(self):
-        self._adjunto('hr.contract', self.contrato.id, 'contrato')
+        self._adjunto('hr.version', self.contrato.id, 'contrato')
         self._adjunto('hr.employee', self.empleado.id, 'cedula')
         self._adjunto('res.partner', self.empleado.work_contact_id.id, 'rut')
         self._adjunto('hr.employee', self.empleado.id, 'foto', mimetype='image/png', raw=b'x')
@@ -89,7 +90,7 @@ class TestUgppSoportes(TransactionCase):
         self.assertNotRegex(largo[:-4], r'[^A-Za-z0-9_]')
 
     def test_el_boton_arma_el_zip_y_el_resumen(self):
-        self._adjunto('hr.contract', self.contrato.id, 'contrato')
+        self._adjunto('hr.version', self.contrato.id, 'contrato')
         self._adjunto('res.partner', self.empleado.work_contact_id.id, 'rut')
         accion = self.reporte.action_generar_soportes()
         self.assertEqual(accion['type'], 'ir.actions.act_url')
@@ -100,7 +101,7 @@ class TestUgppSoportes(TransactionCase):
         self.assertIn('no es un error del módulo', self.reporte.soportes_resumen)
 
     def test_aviso_si_los_soportes_pasan_de_100_mb(self):
-        self._adjunto('hr.contract', self.contrato.id, 'contrato')
+        self._adjunto('hr.version', self.contrato.id, 'contrato')
         with patch.object(ugpp, '_UGPP_MAX_BYTES_SOPORTES', 1):
             self.reporte.action_generar_soportes()
         self.assertIn('100 MB', self.reporte.soportes_resumen)

@@ -8,6 +8,7 @@ from unittest.mock import patch
 from odoo import fields
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -44,7 +45,7 @@ class TestDocumentoPreparar(TransactionCase):
         empleado = cls.env['hr.employee'].create({
             'name': nombre, 'company_id': cls.company.id, 'identification_id': '1020304050',
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = cls.env['hr.contract'].create({
+        contrato = crear_contrato(cls.env, {
             'name': 'Contrato %s' % nombre, 'employee_id': empleado.id, 'company_id': cls.company.id,
             'structure_type_id': cls.structure_type.id, 'l10n_co_ne_contract_type': '2',
             'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
@@ -66,7 +67,7 @@ class TestDocumentoPreparar(TransactionCase):
 
     def _recibo(self, empleado, contrato, desde, hasta, pagado=None, estado='paid'):
         slip = self.env['hr.payslip'].create({
-            'name': 'Recibo %s %s' % (empleado.name, hasta), 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'Recibo %s %s' % (empleado.name, hasta), 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': self.company.id, 'struct_id': self.struct.id, 'date_from': desde, 'date_to': hasta})
         slip.write({'state': estado, 'paid_date': pagado})
         return slip
@@ -92,7 +93,7 @@ class TestDocumentoPreparar(TransactionCase):
         self.assertEqual(a2.l10n_co_ne_documento_id, doc_a)
         self.assertEqual(doc_a.payslip_ids, a1 | a2)
         self.assertEqual(doc_a.period, date(2026, 3, 1))
-        self.assertEqual(doc_a.contract_id, self.contract_a)
+        self.assertEqual(doc_a.version_id, self.contract_a)
         self.assertEqual(b1.l10n_co_ne_documento_id.payslip_ids, b1)
         self.assertNotEqual(doc_a, b1.l10n_co_ne_documento_id)
 
@@ -111,7 +112,7 @@ class TestDocumentoPreparar(TransactionCase):
         self.assertEqual(len(despues), 2)
 
     def test_recibo_sin_fecha_o_no_hecho_no_pertenece_a_ningun_mes(self):
-        sin_fecha = self._recibo(self.emp_a, self.contract_a, date(2026, 3, 1), date(2026, 3, 15), None, 'done')
+        sin_fecha = self._recibo(self.emp_a, self.contract_a, date(2026, 3, 1), date(2026, 3, 15), None, 'validated')
         borrador = self._recibo(self.emp_b, self.contract_b, date(2026, 3, 1), date(2026, 3, 15), None, 'draft')
         res = self._preparar(sin_fecha | borrador)
         self.assertFalse(res['documentos'])
@@ -160,7 +161,7 @@ class TestDocumentoPreparar(TransactionCase):
 
     def test_un_recibo_sin_fecha_de_pago_sigue_disparando_faltan_recibos(self):
         a1, a2, _b1 = self._marzo()
-        a2.write({'state': 'done', 'paid_date': False})
+        a2.write({'state': 'validated', 'paid_date': False})
         doc = self._preparar(a1)['documentos']
         self.assertIn('faltan_recibos', self._claves(doc))
 
@@ -247,7 +248,7 @@ class TestDocumentoPreparar(TransactionCase):
 
     # ── Plazo de las notas de ajuste (doc 53 §28.4): mes siguiente al CONOCIMIENTO del error ──
     def _nota(self, error_conocido_el, **vals):
-        datos = {'company_id': self.company.id, 'employee_id': self.emp_a.id, 'contract_id': self.contract_a.id,
+        datos = {'company_id': self.company.id, 'employee_id': self.emp_a.id, 'version_id': self.contract_a.id,
                  'period': date(2026, 3, 1), 'is_adjustment': True, 'adjustment_type': '1',
                  'adjustment_ref_cune': 'x' * 96, 'error_conocido_el': error_conocido_el}
         datos.update(vals)

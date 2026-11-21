@@ -10,6 +10,7 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.models import l10n_co_nomina_ugpp as ugpp
+from .common_version import crear_contrato
 
 try:
     import openpyxl
@@ -43,7 +44,7 @@ class TestUgppDias(TransactionCase):
         cedula = self.env['l10n_latam.identification.type'].search(
             [('l10n_co_ne_dian_document_code', '=', '13')], limit=1)
         employee.work_contact_id.l10n_latam_identification_type_id = cedula   # U5: el documento sale del contacto
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato UGPP', 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open'})
@@ -51,7 +52,7 @@ class TestUgppDias(TransactionCase):
 
     def _recibo(self, employee, contract, ini, fin):
         slip = self.env['hr.payslip'].create({
-            'name': 'Nómina UGPP', 'employee_id': employee.id, 'contract_id': contract.id,
+            'name': 'Nómina UGPP', 'employee_id': employee.id, 'version_id': contract.id,
             'company_id': self.company.id, 'struct_id': self.structure.id,
             'date_from': ini, 'date_to': fin})
         slip.compute_sheet()
@@ -59,7 +60,7 @@ class TestUgppDias(TransactionCase):
 
     def _confirmar(self, *slips):
         for s in slips:
-            s.state = 'done'
+            s.state = 'validated'
         slips[0]._ne_refrescar_ibc_mensual()
 
     def _filas(self, slips):
@@ -127,7 +128,7 @@ class TestUgppDias(TransactionCase):
     def test_sin_consolidado_es_error_y_no_asume_30(self):
         employee, contract = self._empleado()
         slip = self._recibo(employee, contract, date(2026, 9, 1), date(2026, 9, 30))
-        slip.state = 'done'  # sin refrescar el consolidado ni líneas de IBC
+        slip.state = 'validated'  # sin refrescar el consolidado ni líneas de IBC
         slip.line_ids.filtered(lambda l: l.code.startswith('CO_IBC')).unlink()
         with self.assertRaises(UserError):
             self._filas(slip)
@@ -150,10 +151,10 @@ class TestUgppDias(TransactionCase):
         # Contratos virtuales (``new``): un contrato abierto no admite quedarse sin tipo de cotizante (validación nativa).
         employee, _contract = self._empleado()
         reporte = self.Ugpp.new({})
-        contrato = self.env['hr.contract'].new({
+        contrato = self.env['hr.version'].new({
             'l10n_co_pila_tipo_cotizante': '21', 'l10n_co_pila_subtipo_cotizante': '00'})
         self.assertEqual(reporte._ugpp_cotizante(employee, contrato), (20, 0))
-        sin_tipo = self.env['hr.contract'].new({'l10n_co_pila_subtipo_cotizante': '00'})
+        sin_tipo = self.env['hr.version'].new({'l10n_co_pila_subtipo_cotizante': '00'})
         with self.assertRaisesRegex(UserError, 'Ana Gómez'):
             reporte._ugpp_cotizante(employee, sin_tipo)
 

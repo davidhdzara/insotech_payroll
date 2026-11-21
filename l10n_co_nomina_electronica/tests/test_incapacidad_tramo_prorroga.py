@@ -14,6 +14,7 @@ Piso diario 2026 = 1.750.905 / 30 = 58.363,5 (no domina: 66,67 % y 50 % de 200.0
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 PCT = 0.6667
 VALOR_DIA = 200000.0
@@ -36,7 +37,7 @@ class TestIncapacidadTramoProrroga(TransactionCase):
     def _empleado(self, name):
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 6000000.0, 'date_start': date(2026, 1, 1), 'state': 'open'})
@@ -53,7 +54,7 @@ class TestIncapacidadTramoProrroga(TransactionCase):
     def _pago(self, employee, contract, desde, hasta):
         slip = self.env['hr.payslip'].create({
             'name': 'Quincena %s' % desde, 'employee_id': employee.id,
-            'contract_id': contract.id, 'company_id': self.company.id,
+            'version_id': contract.id, 'company_id': self.company.id,
             'struct_id': self.nomina.id, 'date_from': desde, 'date_to': hasta})
         slip.compute_sheet()
         linea = slip.line_ids.filtered(lambda l: l.code == 'CO_INC_COMUN')

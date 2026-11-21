@@ -226,7 +226,7 @@ class TestDocumentoAsistente(DocumentoFixture, TransactionCase):
 
     def _recibo_tardio(self, doc, dia_pago=20):
         slip = self.env['hr.payslip'].create({
-            'name': 'Recibo tardío', 'employee_id': doc.employee_id.id, 'contract_id': doc.contract_id.id,
+            'name': 'Recibo tardío', 'employee_id': doc.employee_id.id, 'version_id': doc.version_id.id,
             'company_id': self.company.id, 'struct_id': self.struct.id,
             'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
         slip.write({'state': 'paid', 'paid_date': date(2026, 3, dia_pago)})

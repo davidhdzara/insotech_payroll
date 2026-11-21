@@ -25,6 +25,7 @@ from unittest.mock import patch
 
 from odoo.tests.common import TransactionCase, tagged
 from odoo.tools import float_compare
+from .common_version import crear_contrato
 
 NETOS = ('CO_NETO', 'CO_LIQ_NETO', 'CO_PRIMA_NETO', 'CO_BON_NETO')
 
@@ -48,13 +49,13 @@ class TestNetoEntradasMultiples(TransactionCase):
         empleado = self.env['hr.employee'].create({
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'name': name,
             'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        contrato = self.env['hr.contract'].create({
+        contrato = crear_contrato(self.env, {
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
             'name': 'Contrato %s' % name, 'employee_id': empleado.id, 'company_id': self.company.id,
             'structure_type_id': self.structure_type.id, 'wage': salario, 'date_start': date(2024, 3, 1),
             'state': 'open'})
         return self.env['hr.payslip'].create({
-            'name': name, 'employee_id': empleado.id, 'contract_id': contrato.id, 'company_id': self.company.id,
+            'name': name, 'employee_id': empleado.id, 'version_id': contrato.id, 'company_id': self.company.id,
             'struct_id': self.est_general.id, 'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 15)})
 
     def _entradas(self, recibo, xmlid_tipo, codigo, *montos):

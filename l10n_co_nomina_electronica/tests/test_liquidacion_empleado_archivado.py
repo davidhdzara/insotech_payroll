@@ -26,8 +26,8 @@ class TestLiquidacionEmpleadoArchivado(DocumentoFixture, TransactionCase):
     def _retirado(self, archivar=True):
         """Empleado con contrato cerrado por la fecha de retiro (como deja el asistente de retiro de RRHH) y, por defecto, archivado."""
         documento = self._documento(date(2024, 3, 1))
-        empleado, contrato = documento.employee_id, documento.contract_id
-        contrato.write({'date_end': date(2026, 3, 31), 'state': 'close'})
+        empleado, contrato = documento.employee_id, documento.version_id
+        contrato.write({'contract_date_end': date(2026, 3, 31)})
         if archivar:
             empleado.write({'active': False})
         return empleado, contrato
@@ -51,18 +51,18 @@ class TestLiquidacionEmpleadoArchivado(DocumentoFixture, TransactionCase):
         empleado, contrato = self._retirado()
         asistente = self.Wizard.new({'employee_id': empleado.id})
         asistente._onchange_employee_id()
-        self.assertEqual(asistente.contract_id, contrato)
+        self.assertEqual(asistente.version_id, contrato)
         self.assertEqual(asistente.date_end, date(2026, 3, 31))      # la fecha de retiro sale del contrato
 
     def test_la_liquidacion_de_un_empleado_archivado_genera_el_recibo(self):
         empleado, contrato = self._retirado()
         asistente = self.Wizard.create({
-            'employee_id': empleado.id, 'contract_id': contrato.id, 'date_end': date(2026, 3, 31), 'cause': 'renuncia'})
+            'employee_id': empleado.id, 'version_id': contrato.id, 'date_end': date(2026, 3, 31), 'cause': 'renuncia'})
         accion = asistente.action_create_liquidacion()
         recibo = self.env['hr.payslip'].browse(accion['res_id'])
         self.assertEqual(recibo.employee_id, empleado)
         self.assertEqual(recibo.struct_id, self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion'))
-        self.assertEqual((recibo.date_from, recibo.date_to), (contrato.date_start, date(2026, 3, 31)))
+        self.assertEqual((recibo.date_from, recibo.date_to), (contrato.contract_date_start, date(2026, 3, 31)))
         self.assertEqual(recibo.l10n_co_ne_liquidacion_cause, 'renuncia')
         self.assertFalse(recibo.employee_id.active)
 
@@ -70,7 +70,7 @@ class TestLiquidacionEmpleadoArchivado(DocumentoFixture, TransactionCase):
         """Pregunta de TL: ¿falla el calculo con empleado archivado? Si esta prueba falla en la regresion, ese es el defecto real."""
         empleado, contrato = self._retirado()
         asistente = self.Wizard.create({
-            'employee_id': empleado.id, 'contract_id': contrato.id, 'date_end': date(2026, 3, 31), 'cause': 'renuncia'})
+            'employee_id': empleado.id, 'version_id': contrato.id, 'date_end': date(2026, 3, 31), 'cause': 'renuncia'})
         recibo = self.env['hr.payslip'].browse(asistente.action_create_liquidacion()['res_id'])
         recibo.compute_sheet()
         self.assertTrue(recibo.line_ids.filtered(lambda l: l.code == 'CO_LIQ_NETO'))
@@ -78,7 +78,7 @@ class TestLiquidacionEmpleadoArchivado(DocumentoFixture, TransactionCase):
     def test_un_empleado_activo_sigue_funcionando_igual(self):
         empleado, contrato = self._retirado(archivar=False)
         asistente = self.Wizard.create({
-            'employee_id': empleado.id, 'contract_id': contrato.id, 'date_end': date(2026, 3, 31), 'cause': 'mutuo_acuerdo'})
+            'employee_id': empleado.id, 'version_id': contrato.id, 'date_end': date(2026, 3, 31), 'cause': 'mutuo_acuerdo'})
         recibo = self.env['hr.payslip'].browse(asistente.action_create_liquidacion()['res_id'])
         self.assertEqual(recibo.employee_id, empleado)
         self.assertTrue(recibo.employee_id.active)

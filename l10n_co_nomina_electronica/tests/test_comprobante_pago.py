@@ -8,6 +8,7 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from .common_importes import valores_monetarios
+from .common_version import crear_contrato
 
 REPORTE = 'l10n_co_nomina_electronica.action_report_comprobante_pago'
 PROHIBIDOS = ('DIAN', 'Resolucion', 'Resolución', 'CUNE', 'Estado NE', '/report/barcode', 'QR', 'Firma del empleado')
@@ -35,7 +36,7 @@ class TestComprobantePago(TransactionCase):
         emp = cls.env['hr.employee'].create({
             'name': empleado, 'company_id': company.id, 'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = cls.env['hr.contract'].create({
+        contrato = crear_contrato(cls.env, {
             'name': 'Contrato %s' % empleado, 'employee_id': emp.id, 'company_id': company.id,
             'structure_type_id': cls.tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open',
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00'})
@@ -44,16 +45,16 @@ class TestComprobantePago(TransactionCase):
     def _recibo(self, company, emp, contrato, estructura, lineas, pagado, nombre, desde=date(2026, 6, 1),
                 hasta=date(2026, 6, 15)):
         recibo = self.env['hr.payslip'].create({
-            'name': nombre, 'employee_id': emp.id, 'contract_id': contrato.id, 'company_id': company.id,
+            'name': nombre, 'employee_id': emp.id, 'version_id': contrato.id, 'company_id': company.id,
             'struct_id': estructura.id, 'date_from': desde, 'date_to': hasta})
         for codigo, total in lineas:
             regla = self.env['hr.salary.rule'].search(
                 [('code', '=', codigo), ('struct_id', '=', estructura.id)], limit=1)
             self.env['hr.payslip.line'].create({
                 'slip_id': recibo.id, 'salary_rule_id': regla.id, 'code': codigo, 'name': regla.name,
-                'contract_id': contrato.id, 'employee_id': emp.id, 'quantity': 1.0, 'rate': 100.0,
+                'version_id': contrato.id, 'employee_id': emp.id, 'quantity': 1.0, 'rate': 100.0,
                 'amount': total, 'total': total})
-        recibo.write({'state': 'done', 'paid_date': pagado})
+        recibo.write({'state': 'validated', 'paid_date': pagado})
         return recibo
 
     def _quincena(self, pagado=date(2026, 6, 15), compania=None):

@@ -4,6 +4,7 @@ quincenas, 15/30 ni que la prima viaje con otro recibo. Calendarios: mensual, qu
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -29,15 +30,15 @@ class TestComprobantesAgrupador(TransactionCase):
         emp = cls.env['hr.employee'].create({
             'name': nombre, 'company_id': cls.company.id, 'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = cls.env['hr.contract'].create({
+        contrato = crear_contrato(cls.env, {
             'name': 'Contrato %s' % nombre, 'employee_id': emp.id, 'company_id': cls.company.id,
             'structure_type_id': cls.tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open',
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00'})
         return emp, contrato
 
-    def _recibo(self, empleado, contrato, estructura, desde, hasta, pagado, nombre, estado='done'):
+    def _recibo(self, empleado, contrato, estructura, desde, hasta, pagado, nombre, estado='validated'):
         recibo = self.env['hr.payslip'].create({
-            'name': nombre, 'employee_id': empleado.id, 'contract_id': contrato.id, 'company_id': self.company.id,
+            'name': nombre, 'employee_id': empleado.id, 'version_id': contrato.id, 'company_id': self.company.id,
             'struct_id': estructura.id, 'date_from': desde, 'date_to': hasta})
         recibo.write({'state': estado, 'paid_date': pagado})
         return recibo

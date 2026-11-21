@@ -20,6 +20,7 @@ from lxml import etree
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import xml_signer
+from .common_version import crear_contrato
 
 _logger = logging.getLogger(__name__)
 CAJA = Path(__file__).resolve().parent.parent / 'DIAN' / 'Caja-de-Herramientas-Nomina-Electronica-V1-0'
@@ -63,7 +64,7 @@ class TestDocumentoGenerarReal(TransactionCase):
             'address_id': cls.company.partner_id.id})
         if tipo_id:
             cls.empleado.work_contact_id.l10n_latam_identification_type_id = tipo_id
-        cls.contrato = env['hr.contract'].create({
+        cls.contrato = crear_contrato(env, {
             'name': 'Contrato Generar Real', 'employee_id': cls.empleado.id, 'company_id': cls.company.id,
             'structure_type_id': tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 3, 1), 'state': 'open',
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01',
@@ -72,7 +73,7 @@ class TestDocumentoGenerarReal(TransactionCase):
         cls.recibos = env['hr.payslip']
         for ini, fin in ((1, 15), (16, 31)):
             recibo = env['hr.payslip'].create({
-                'name': 'Q %s-%s' % (ini, fin), 'employee_id': cls.empleado.id, 'contract_id': cls.contrato.id,
+                'name': 'Q %s-%s' % (ini, fin), 'employee_id': cls.empleado.id, 'version_id': cls.contrato.id,
                 'company_id': cls.company.id, 'struct_id': estructura.id,
                 'date_from': date(2026, 3, ini), 'date_to': date(2026, 3, fin)})
             recibo.compute_sheet()

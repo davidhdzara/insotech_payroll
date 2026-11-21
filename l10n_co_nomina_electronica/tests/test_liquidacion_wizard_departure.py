@@ -23,6 +23,7 @@ from datetime import date
 
 from odoo import fields
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -50,7 +51,7 @@ class TestLiquidacionWizardDeparture(TransactionCase):
             'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10',
         })
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name,
             'employee_id': employee.id,
             'company_id': self.company.id,
@@ -59,14 +60,14 @@ class TestLiquidacionWizardDeparture(TransactionCase):
             'date_start': date_start,
             'state': 'open',
         })
-        employee.contract_id = contract.id
+        employee.version_id = contract.id
         return employee, contract
 
     def _registrar_retiro(self, employee, contract, departure_date, reason_xmlid=None):
         """Simula lo que deja hr.departure.wizard con 'Set Contract End Date' marcado
         (ver docstring del módulo) -- no se instancia ese wizard porque no pertenece a este
         módulo; se escriben directamente los campos reales que él mismo escribiría."""
-        contract.write({'date_end': departure_date, 'state': 'close'})
+        contract.write({'contract_date_end': departure_date})
         employee.departure_date = departure_date
         if reason_xmlid:
             employee.departure_reason_id = self.env.ref(reason_xmlid)
@@ -83,7 +84,7 @@ class TestLiquidacionWizardDeparture(TransactionCase):
         wizard.employee_id = employee
         wizard._onchange_employee_id()
 
-        self.assertEqual(wizard.contract_id.id, contract.id)
+        self.assertEqual(wizard.version_id.id, contract.id)
         self.assertEqual(wizard.date_end, date(2026, 11, 15))
 
     def test_con_retiro_registrado_sin_set_date_end_usa_departure_date_del_empleado(self):
@@ -96,7 +97,7 @@ class TestLiquidacionWizardDeparture(TransactionCase):
         wizard.employee_id = employee
         wizard._onchange_employee_id()
 
-        self.assertFalse(contract.date_end)
+        self.assertFalse(contract.contract_date_end)
         self.assertEqual(wizard.date_end, date(2026, 11, 20))
 
     def test_motivo_resigned_prellena_causal_renuncia(self):
@@ -182,7 +183,7 @@ class TestLiquidacionWizardDeparture(TransactionCase):
 
         wizard_manual = self.env['l10n.co.hr.liquidacion.wizard'].create({
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'date_end': date(2026, 11, 15),
             'cause': 'sin_justa_causa',
             'dias_restantes_contrato': 100,

@@ -493,7 +493,7 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
     # ── D6 (doc 53 §28.7): un documento con envío fallido NO se recompone ──────────────────────────────────
     def _recibo_nuevo_del_mes(self):
         slip = self.env['hr.payslip'].create({
-            'name': 'Recibo tardío', 'employee_id': self.doc.employee_id.id, 'contract_id': self.doc.contract_id.id,
+            'name': 'Recibo tardío', 'employee_id': self.doc.employee_id.id, 'version_id': self.doc.version_id.id,
             'company_id': self.company.id, 'struct_id': self.struct.id,
             'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
         slip.write({'state': 'paid', 'paid_date': date(2026, 3, 20)})

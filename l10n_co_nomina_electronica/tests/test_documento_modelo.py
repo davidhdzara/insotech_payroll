@@ -12,6 +12,7 @@ from lxml import etree
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests.common import TransactionCase, tagged
 from odoo.tools.safe_eval import safe_eval
+from .common_version import crear_contrato
 
 CUNE_A = 'a' * 96
 CUNE_B = 'b' * 96
@@ -51,12 +52,12 @@ class TestDocumentoModelo(TransactionCase):
         cls.employee = cls._crear_empleado('Empleado Documento', cls.company)
         cls.employee2 = cls._crear_empleado('Otro Empleado Documento', cls.company)
         cls.employee_b = cls._crear_empleado('Empleado Documento B', cls.company_b)
-        cls.contract = cls.env['hr.contract'].create({
+        cls.contract = crear_contrato(cls.env, {
             'name': 'Contrato Documento', 'employee_id': cls.employee.id, 'company_id': cls.company.id,
             'structure_type_id': cls.structure_type.id, 'l10n_co_ne_contract_type': '2',
             'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
             'wage': 3000000.0, 'date_start': date(2025, 1, 1), 'state': 'open'})
-        cls.contract2 = cls.env['hr.contract'].create({
+        cls.contract2 = crear_contrato(cls.env, {
             'name': 'Contrato Documento 2', 'employee_id': cls.employee2.id, 'company_id': cls.company.id,
             'structure_type_id': cls.structure_type.id, 'l10n_co_ne_contract_type': '2',
             'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
@@ -70,7 +71,7 @@ class TestDocumentoModelo(TransactionCase):
             'name': 'Recibo %s' % mes, 'employee_id': employee.id, 'company_id': employee.company_id.id,
             'struct_id': self.struct.id, 'date_from': date(2026, mes, 1), 'date_to': date(2026, mes, 28)}
         if contract:
-            datos['contract_id'] = contract.id
+            datos['version_id'] = contract.id
         datos.update(vals)
         return self.env['hr.payslip'].create(datos)
 
@@ -381,7 +382,7 @@ class TestDocumentoModelo(TransactionCase):
 
             def oculto(documento, estado_recibo, _condicion=condicion):
                 return bool(safe_eval(_condicion, {
-                    'country_code': 'CO', 'state': 'done', 'l10n_co_ne_is_adjustment': False,
+                    'country_code': 'CO', 'state': 'validated', 'l10n_co_ne_is_adjustment': False,
                     'l10n_co_ne_documento_id': documento, 'l10n_co_ne_state': estado_recibo,
                     'l10n_co_ne_en_produccion': False}))
             self.assertFalse(oculto(False, estado), '%s: recibo sin documento debe verlo' % texto)
@@ -402,11 +403,11 @@ class TestDocumentoModelo(TransactionCase):
             return bool(safe_eval(condicion, {
                 'country_code': 'CO', 'state': estado_recibo, 'l10n_co_ne_documento_id': documento,
                 'l10n_co_ne_state': estado_ne, 'l10n_co_ne_en_produccion': False}))
-        self.assertFalse(oculto(1, 'done'))                 # con documento: visible
+        self.assertFalse(oculto(1, 'validated'))                 # con documento: visible
         self.assertFalse(oculto(1, 'paid'))
         self.assertTrue(oculto(1, 'draft'))                 # un recibo sin confirmar nunca
-        self.assertFalse(oculto(False, 'done', 'generated'))   # sin documento: igual que antes
-        self.assertTrue(oculto(False, 'done', 'accepted'))
+        self.assertFalse(oculto(False, 'validated', 'generated'))   # sin documento: igual que antes
+        self.assertTrue(oculto(False, 'validated', 'accepted'))
         self.assertTrue(oculto(False, 'paid', 'draft'))
 
     # ── Bloqueo del ciclo por recibo cuando el recibo va en un documento mensual (doc 53 §23.6) ──

@@ -6,6 +6,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -23,12 +24,12 @@ class TestInerciaInformes(TransactionCase):
         empleado = cls.env['hr.employee'].create({
             'name': 'Empleado MX Informes', 'company_id': cls.mx.id,
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00'})
-        contrato = cls.env['hr.contract'].create({
+        contrato = crear_contrato(cls.env, {
             'name': 'Contrato MX Informes', 'employee_id': empleado.id, 'company_id': cls.mx.id,
             'structure_type_id': tipo.id, 'wage': 1000000.0, 'date_start': date(2026, 1, 1), 'state': 'open',
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00'})
         cls.recibo = cls.env['hr.payslip'].create({
-            'name': 'Recibo MX Informes', 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'Recibo MX Informes', 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': cls.mx.id, 'struct_id': struct.id,
             'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
 

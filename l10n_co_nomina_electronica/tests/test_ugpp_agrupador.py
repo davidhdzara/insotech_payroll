@@ -6,6 +6,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -32,7 +33,7 @@ class TestUgppAgrupador(TransactionCase):
         cls.empleado = cls.env['hr.employee'].create({
             'name': 'Empleado Agrupador', 'company_id': cls.company.id, 'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        cls.contrato = cls.env['hr.contract'].create({
+        cls.contrato = crear_contrato(cls.env, {
             'name': 'Contrato Agrupador', 'employee_id': cls.empleado.id, 'company_id': cls.company.id,
             'structure_type_id': cls.tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open',
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01',
@@ -47,14 +48,14 @@ class TestUgppAgrupador(TransactionCase):
 
     def _recibo(self, nombre, ini, fin, pagado, *valores):
         recibo = self.env['hr.payslip'].create({
-            'name': nombre, 'employee_id': self.empleado.id, 'contract_id': self.contrato.id,
+            'name': nombre, 'employee_id': self.empleado.id, 'version_id': self.contrato.id,
             'company_id': self.company.id, 'struct_id': self.estructura.id, 'date_from': ini, 'date_to': fin})
         for regla, total in valores:
             self.env['hr.payslip.line'].create({
                 'slip_id': recibo.id, 'salary_rule_id': regla.id, 'code': regla.code, 'name': regla.name,
                 'category_id': regla.category_id.id, 'employee_id': self.empleado.id,
-                'contract_id': self.contrato.id, 'total': total, 'amount': total, 'quantity': 1, 'rate': 100})
-        recibo.write({'state': 'done', 'paid_date': pagado})
+                'version_id': self.contrato.id, 'total': total, 'amount': total, 'quantity': 1, 'rate': 100})
+        recibo.write({'state': 'validated', 'paid_date': pagado})
         return recibo
 
     def _valores(self, reporte):

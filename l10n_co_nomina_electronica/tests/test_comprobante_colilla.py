@@ -6,6 +6,7 @@ from datetime import date
 from odoo.tests.common import TransactionCase, tagged
 
 from .common_importes import valores_monetarios
+from .common_version import crear_contrato
 
 REPORTE = 'l10n_co_nomina_electronica.action_report_payslip_ne'
 PROHIBIDOS = ('DIAN', 'Resolucion', 'Resolución', 'CUNE', 'Estado NE', '/report/barcode', 'QR', 'Firma del empleado')
@@ -30,12 +31,12 @@ class TestComprobanteColilla(TransactionCase):
         emp = cls.env['hr.employee'].create({
             'name': empleado, 'company_id': company.id, 'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = cls.env['hr.contract'].create({
+        contrato = crear_contrato(cls.env, {
             'name': 'Contrato %s' % empleado, 'employee_id': emp.id, 'company_id': company.id,
             'structure_type_id': cls.tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open',
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00'})
         recibo = cls.env['hr.payslip'].create({
-            'name': 'Recibo %s' % empleado, 'employee_id': emp.id, 'contract_id': contrato.id,
+            'name': 'Recibo %s' % empleado, 'employee_id': emp.id, 'version_id': contrato.id,
             'company_id': company.id, 'struct_id': cls.estructura.id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30)})
         for codigo, total in (('CO_BASICO', 3000000.0), ('CO_SALUD_EMP', -120000.0), ('CO_NETO', 2880000.0)):
@@ -43,7 +44,7 @@ class TestComprobanteColilla(TransactionCase):
                 [('code', '=', codigo), ('struct_id', '=', cls.estructura.id)], limit=1)
             cls.env['hr.payslip.line'].create({
                 'slip_id': recibo.id, 'salary_rule_id': regla.id, 'code': codigo, 'name': regla.name,
-                'contract_id': contrato.id, 'employee_id': emp.id, 'quantity': 1.0, 'rate': 100.0,
+                'version_id': contrato.id, 'employee_id': emp.id, 'quantity': 1.0, 'rate': 100.0,
                 'amount': total, 'total': total})
         return recibo
 

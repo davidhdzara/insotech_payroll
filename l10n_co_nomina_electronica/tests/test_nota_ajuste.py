@@ -174,7 +174,7 @@ class TestDocumentoNotaXml(DocumentoFixture, TransactionCase):
 
     def _nota(self, tipo='1', **vals):
         datos = {'company_id': self.company.id, 'employee_id': self.padre.employee_id.id,
-                 'contract_id': self.padre.contract_id.id, 'period': self.padre.period, 'is_adjustment': True,
+                 'version_id': self.padre.version_id.id, 'period': self.padre.period, 'is_adjustment': True,
                  'adjustment_type': tipo, 'adjustment_ref_cune': self.padre.cune, 'parent_id': self.padre.id}
         datos.update(vals)
         return self.env['l10n.co.ne.documento'].create(datos)

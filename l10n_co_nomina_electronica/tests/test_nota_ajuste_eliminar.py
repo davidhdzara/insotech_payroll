@@ -20,6 +20,7 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import nomina_xml_builder
+from .common_version import crear_contrato
 
 
 class _FakeCertificate:
@@ -84,13 +85,13 @@ class TestNotaAjusteEliminar(TransactionCase):
             'l10n_co_ne_payment_method': '10',
         })
         employee.l10n_co_ne_identification_type_id = self.env.ref('l10n_co.national_citizen_id').id
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Eliminar', 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 1800000.0, 'date_start': date(2024, 1, 1), 'state': 'open',
         })
         vals = {
-            'name': 'Nómina Eliminar', 'employee_id': employee.id, 'contract_id': contract.id,
+            'name': 'Nómina Eliminar', 'employee_id': employee.id, 'version_id': contract.id,
             'company_id': self.company.id, 'struct_id': self.structure.id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30),
         }
@@ -200,7 +201,7 @@ class TestNotaAjusteEliminar(TransactionCase):
         no debe rechazarlo por eso (puede rechazarlo por otras causas, p. ej. nómina sin
         confirmar, pero no con el mensaje de "CUNE sin definir")."""
         nota = self._nota_eliminar(self._original_aceptado())
-        nota.state = 'done'
+        nota.state = 'validated'
         try:
             nota._validate_ne_prerequisites()
         except UserError as e:

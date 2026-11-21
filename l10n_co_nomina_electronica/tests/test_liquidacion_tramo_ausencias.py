@@ -16,6 +16,7 @@ da 10 dias (15 - 5).
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 RETIRO = date(2026, 8, 15)
 
@@ -41,7 +42,7 @@ class TestLiquidacionTramoAusencias(TransactionCase):
     def _liquidacion_con_vacaciones(self, name, vac_desde, vac_hasta, leave_type=None):
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 1800000.0, 'date_start': date(2026, 1, 1), 'state': 'open'})
@@ -55,9 +56,9 @@ class TestLiquidacionTramoAusencias(TransactionCase):
         # Como lo crea el asistente: date_from = inicio de contrato.
         slip = self.env['hr.payslip'].create({
             'name': 'Liquidación %s' % name, 'employee_id': employee.id,
-            'contract_id': contract.id, 'company_id': self.company.id,
+            'version_id': contract.id, 'company_id': self.company.id,
             'struct_id': self.liquidacion.id,
-            'date_from': contract.date_start, 'date_to': RETIRO})
+            'date_from': contract.contract_date_start, 'date_to': RETIRO})
         slip.compute_sheet()
         return slip
 
@@ -110,7 +111,7 @@ class TestLiquidacionTramoAusencias(TransactionCase):
         """ausencias = [(tipo, desde, hasta), ...] validadas antes de calcular la liquidacion."""
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 1800000.0, 'date_start': date(2026, 1, 1), 'state': 'open'})
@@ -122,9 +123,9 @@ class TestLiquidacionTramoAusencias(TransactionCase):
             leave.action_validate()
         slip = self.env['hr.payslip'].create({
             'name': 'Liquidación %s' % name, 'employee_id': employee.id,
-            'contract_id': contract.id, 'company_id': self.company.id,
+            'version_id': contract.id, 'company_id': self.company.id,
             'struct_id': self.liquidacion.id,
-            'date_from': contract.date_start, 'date_to': RETIRO})
+            'date_from': contract.contract_date_start, 'date_to': RETIRO})
         slip.compute_sheet()
         return slip
 
@@ -183,22 +184,22 @@ class TestLiquidacionTramoAusencias(TransactionCase):
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'IbcPrevio', 'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato IbcPrevio', 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 1800000.0, 'date_start': date(2026, 1, 1), 'state': 'open'})
         general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
         previa = self.env['hr.payslip'].create({
-            'name': 'Nómina julio', 'employee_id': employee.id, 'contract_id': contract.id,
+            'name': 'Nómina julio', 'employee_id': employee.id, 'version_id': contract.id,
             'company_id': self.company.id, 'struct_id': general.id,
             'date_from': date(2026, 7, 1), 'date_to': date(2026, 7, 31)})
         regla = self.env['hr.salary.rule'].search(
             [('code', '=', 'CO_SS_BASE_IBC'), ('struct_id', '=', general.id)], limit=1)
         self.env['hr.payslip.line'].create({
             'slip_id': previa.id, 'salary_rule_id': regla.id, 'code': 'CO_SS_BASE_IBC',
-            'name': 'IBC', 'contract_id': contract.id, 'employee_id': employee.id,
+            'name': 'IBC', 'version_id': contract.id, 'employee_id': employee.id,
             'quantity': 1.0, 'rate': 100.0, 'amount': 2100000.0, 'total': 2100000.0})
-        previa.state = 'done'
+        previa.state = 'validated'
         contract.generate_work_entries(date(2026, 1, 1), RETIRO)
         leave = self.env['hr.leave'].create({
             'employee_id': employee.id, 'holiday_status_id': self.leave_type_vac.id,
@@ -206,8 +207,8 @@ class TestLiquidacionTramoAusencias(TransactionCase):
         leave.action_validate()
         slip = self.env['hr.payslip'].create({
             'name': 'Liquidación IbcPrevio', 'employee_id': employee.id,
-            'contract_id': contract.id, 'company_id': self.company.id,
-            'struct_id': self.liquidacion.id, 'date_from': contract.date_start,
+            'version_id': contract.id, 'company_id': self.company.id,
+            'struct_id': self.liquidacion.id, 'date_from': contract.contract_date_start,
             'date_to': RETIRO})
         slip.compute_sheet()
         self.assertAlmostEqual(self._linea(slip, 'CO_IBC_SALARIAL').total, 950000.0, places=2)

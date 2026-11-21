@@ -16,6 +16,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -33,15 +34,15 @@ class TestRedondeoDiasXml(TransactionCase):
         employee = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Empleado Redondeo', 'company_id': cls.company.id,
             'l10n_co_ne_payment_method': '10'})
-        cls.contract = cls.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        cls.contract = crear_contrato(cls.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Redondeo', 'employee_id': employee.id,
             'company_id': cls.company.id, 'structure_type_id': cls.structure_type.id,
             'wage': 3000000.0, 'date_start': date(2025, 1, 1), 'state': 'open'})
         cls.slip = cls.env['hr.payslip'].create({
             'name': 'Liquidación Redondeo', 'employee_id': employee.id,
-            'contract_id': cls.contract.id, 'company_id': cls.company.id,
+            'version_id': cls.contract.id, 'company_id': cls.company.id,
             'struct_id': cls.liquidacion.id,
-            'date_from': cls.contract.date_start, 'date_to': date(2025, 12, 31)})
+            'date_from': cls.contract.contract_date_start, 'date_to': date(2025, 12, 31)})
 
     def _dias(self, valor, modo):
         self.company.l10n_co_ne_redondeo_dias = modo

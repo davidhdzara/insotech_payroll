@@ -24,6 +24,7 @@ from odoo.tests.common import TransactionCase, tagged
 from odoo.addons.l10n_co_nomina_electronica.services import soap_client, xml_signer
 
 from .test_documento_enviar import ACEPTADA
+from .common_version import crear_contrato
 
 MODULO = 'odoo.addons.l10n_co_nomina_electronica'
 _SIGN_XML_REAL = xml_signer.sign_xml      # la función real, antes de que el setUp la parchee
@@ -78,7 +79,7 @@ class TestHoraBogota(TransactionCase):
             'address_id': cls.company.partner_id.id})
         if tipo_id:
             cls.empleado.work_contact_id.l10n_latam_identification_type_id = tipo_id
-        cls.contrato = env['hr.contract'].create({
+        cls.contrato = crear_contrato(env, {
             'name': 'Contrato Hora Bogotá', 'employee_id': cls.empleado.id, 'company_id': cls.company.id,
             'structure_type_id': tipo.id, 'wage': 3000000.0, 'date_start': date(2024, 3, 1), 'state': 'open',
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00'})
@@ -86,7 +87,7 @@ class TestHoraBogota(TransactionCase):
         cls.recibos = env['hr.payslip']
         for ini, fin in ((1, 15), (16, 31)):
             recibo = env['hr.payslip'].create({
-                'name': 'Q %s-%s' % (ini, fin), 'employee_id': cls.empleado.id, 'contract_id': cls.contrato.id,
+                'name': 'Q %s-%s' % (ini, fin), 'employee_id': cls.empleado.id, 'version_id': cls.contrato.id,
                 'company_id': cls.company.id, 'struct_id': estructura.id,
                 'date_from': date(2026, 3, ini), 'date_to': date(2026, 3, fin)})
             recibo.compute_sheet()

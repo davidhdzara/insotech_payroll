@@ -25,6 +25,7 @@ de David: "como parametros").
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 WAGE = 2310000.0
 
@@ -42,7 +43,7 @@ class TestJornada15Julio(TransactionCase):
         employee = cls.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Empleado Jornada', 'company_id': cls.company.id,
             'l10n_co_ne_payment_method': '10'})
-        cls.contract = cls.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        cls.contract = crear_contrato(cls.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Jornada', 'employee_id': employee.id,
             'company_id': cls.company.id, 'structure_type_id': structure_type.id,
             'wage': WAGE, 'date_start': date(2024, 3, 1), 'state': 'open'})
@@ -51,7 +52,7 @@ class TestJornada15Julio(TransactionCase):
     def _quincena(self, date_from, date_to):
         slip = self.env['hr.payslip'].create({
             'name': 'Quincena %s' % date_from, 'employee_id': self.employee.id,
-            'contract_id': self.contract.id, 'company_id': self.company.id,
+            'version_id': self.contract.id, 'company_id': self.company.id,
             'struct_id': self.nomina.id, 'date_from': date_from, 'date_to': date_to})
         for xmlid, code, horas in (
                 ('input_co_hed', 'CO_HED', 4.0), ('input_co_hrddf', 'CO_HRDDF', 6.0)):

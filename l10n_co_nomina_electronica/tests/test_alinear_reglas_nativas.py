@@ -7,6 +7,7 @@ coincidia con CO_BASICO en periodos completos (Zapata, ingreso 12-jun: 318.346,3
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -31,12 +32,12 @@ class TestAlinearReglasNativas(TransactionCase):
         empleado = self.env['hr.employee'].create({
             'name': 'Empleado Alinear %s' % ingreso, 'company_id': self.company.id, 'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = self.env['hr.contract'].create({
+        contrato = crear_contrato(self.env, {
             'name': 'Contrato Alinear %s' % ingreso, 'employee_id': empleado.id, 'company_id': self.company.id,
             'structure_type_id': self.tipo.id, 'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01',
             'l10n_co_pila_subtipo_cotizante': '00', 'wage': wage, 'date_start': ingreso, 'state': 'open'})
         recibo = self.env['hr.payslip'].create({
-            'name': 'Recibo Alinear %s' % desde, 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'Recibo Alinear %s' % desde, 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': self.company.id, 'struct_id': self.general.id, 'date_from': desde, 'date_to': hasta})
         recibo.compute_sheet()
         return recibo

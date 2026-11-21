@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Los parametros normativos de la liquidacion se resuelven a la fecha de RETIRO (date_to).
 
-El asistente crea el recibo con date_from = contract.date_start, que puede ser de anos atras:
+El asistente crea el recibo con date_from = contract.contract_date_start, que puede ser de anos atras:
 resolver SMMLV/auxilio/topes a esa fecha usaba los valores del ingreso (o ningun valor, si el
 contrato es anterior al primer parametro cargado, 2024-01-01). Estas pruebas reproducen la
 forma real del recibo del asistente (date_from = inicio de contrato). Los valores esperados
@@ -13,6 +13,7 @@ SMMLV 2024 = 1.300.000, 2025 = 1.423.500, 2026 = 1.750.905; auxilio 2024 = 162.0
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 RETIRO = date(2026, 8, 15)
 SMMLV_2026 = 1750905.0
@@ -38,16 +39,16 @@ class TestLiquidacionFechaParametros(TransactionCase):
         """Recibo de liquidacion como lo crea el asistente: date_from = inicio de contrato."""
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': wage, 'date_start': date_start, 'state': 'open',
             'l10n_co_ne_contract_type': contract_type})
         vals = {
             'name': 'Liquidación %s' % name, 'employee_id': employee.id,
-            'contract_id': contract.id, 'company_id': self.company.id,
+            'version_id': contract.id, 'company_id': self.company.id,
             'struct_id': self.liquidacion.id,
-            'date_from': contract.date_start, 'date_to': RETIRO}
+            'date_from': contract.contract_date_start, 'date_to': RETIRO}
         if cause:
             vals['l10n_co_ne_liquidacion_cause'] = cause
         return self.env['hr.payslip'].create(vals)
@@ -123,7 +124,7 @@ class TestLiquidacionFechaParametros(TransactionCase):
         self.assertEqual(liquidacion._ne_fecha_parametros(), RETIRO)
         mensual = self.env['hr.payslip'].create({
             'name': 'Nómina mensual', 'employee_id': liquidacion.employee_id.id,
-            'contract_id': liquidacion.contract_id.id, 'company_id': self.company.id,
+            'version_id': liquidacion.version_id.id, 'company_id': self.company.id,
             'struct_id': self.nomina.id,
             'date_from': date(2026, 7, 1), 'date_to': date(2026, 7, 31)})
         self.assertEqual(mensual._ne_fecha_parametros(), date(2026, 7, 1))

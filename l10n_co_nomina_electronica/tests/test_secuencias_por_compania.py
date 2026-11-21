@@ -9,6 +9,7 @@ import os
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 def _migracion():
@@ -44,12 +45,12 @@ class TestSecuenciasPorCompania(TransactionCase):
     def _con_consecutivo(self, company, numero, prefijo='NE'):
         empleado = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Emp %s %s' % (company.name, numero), 'company_id': company.id})
-        contrato = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contrato = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'C', 'employee_id': empleado.id, 'company_id': company.id,
             'structure_type_id': self.tipo.id, 'wage': 1000000.0,
             'date_start': date(2026, 1, 1), 'state': 'open'})
         slip = self.env['hr.payslip'].create({
-            'name': 'R', 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'R', 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': company.id, 'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
         slip.l10n_co_ne_consecutive = '%s%010d' % (prefijo, numero)
         return slip

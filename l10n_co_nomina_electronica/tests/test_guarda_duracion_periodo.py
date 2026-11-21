@@ -11,6 +11,7 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from .common_documento import DocumentoFixture
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -32,13 +33,13 @@ class TestGuardaDuracionPeriodo(DocumentoFixture, TransactionCase):
         empleado = self.env['hr.employee'].create({
             'name': 'Empleado Guarda %s' % self.n, 'company_id': company.id, 'identification_id': '1020304050',
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = self.env['hr.contract'].create({
+        contrato = crear_contrato(self.env, {
             'name': 'Contrato Guarda %s' % self.n, 'employee_id': empleado.id, 'company_id': company.id,
             'structure_type_id': self.tipos[periodicidad].id, 'l10n_co_ne_contract_type': '2',
             'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
             'wage': 3000000.0, 'date_start': ingreso, 'state': 'open'})
         return self.env['hr.payslip'].create({
-            'name': 'Recibo Guarda %s' % self.n, 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'Recibo Guarda %s' % self.n, 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': company.id, 'struct_id': (struct or self.general).id, 'date_from': desde, 'date_to': hasta})
 
     def _pasa(self, recibo):
@@ -115,6 +116,6 @@ class TestGuardaDuracionPeriodo(DocumentoFixture, TransactionCase):
     # ── recibos ya confirmados ───────────────────────────────────────
     def test_un_recibo_confirmado_antiguo_no_se_revalida_al_consultarlo(self):
         recibo = self._recibo(date(2026, 1, 4), date(2026, 4, 15))
-        recibo.state = 'done'
+        recibo.state = 'validated'
         recibo.read(['name', 'state'])            # consultar no valida nada
-        self.assertEqual(recibo.state, 'done')
+        self.assertEqual(recibo.state, 'validated')

@@ -18,6 +18,7 @@ import re
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 REPORTE = 'l10n_co_nomina_electronica.action_report_payslip_ne'
 MODELO_INFORME = 'report.l10n_co_nomina_electronica.report_payslip_ne'
@@ -40,12 +41,12 @@ class TestColillaDiasPagados(TransactionCase):
     def _recibo(self, estructura, name='Recibo', date_from=date(2026, 9, 1), date_to=date(2026, 9, 30)):
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00',
             'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open'})
         return self.env['hr.payslip'].create({
-            'name': name, 'employee_id': employee.id, 'contract_id': contract.id,
+            'name': name, 'employee_id': employee.id, 'version_id': contract.id,
             'company_id': self.company.id, 'struct_id': estructura.id,
             'date_from': date_from, 'date_to': date_to})
 
@@ -54,7 +55,7 @@ class TestColillaDiasPagados(TransactionCase):
         self.assertTrue(regla, 'Falta la regla %s en %s' % (code, slip.struct_id.name))
         return self.env['hr.payslip.line'].create({
             'slip_id': slip.id, 'salary_rule_id': regla.id, 'code': code, 'name': code,
-            'contract_id': slip.contract_id.id, 'employee_id': slip.employee_id.id,
+            'version_id': slip.version_id.id, 'employee_id': slip.employee_id.id,
             'quantity': quantity, 'rate': 100.0, 'amount': total / quantity, 'total': total})
 
     def _con_work100(self, slip, dias):
@@ -120,7 +121,7 @@ class TestColillaDiasPagados(TransactionCase):
         slip = self._recibo(self.est_general, 'Cambio posterior')
         slip.compute_sheet()
         self.assertEqual(self._dias_impresos(self._html(slip)), 30.0)
-        slip.contract_id.date_start = date(2026, 9, 11)
+        slip.version_id.contract_date_start = date(2026, 9, 11)
         self.assertEqual(slip._ne_dias_pagables(), 20.0, 'Premisa: el recálculo ya daría otra cifra')
         self.assertEqual(slip.line_ids.filtered(lambda l: l.code == 'CO_BASICO').quantity, 30.0)
         self.assertEqual(self._dias_impresos(self._html(slip)), 30.0)

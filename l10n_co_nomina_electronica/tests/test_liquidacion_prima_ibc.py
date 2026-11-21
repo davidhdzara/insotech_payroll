@@ -8,6 +8,7 @@ neto sube exactamente el valor de la prima."""
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 RETIRO = date(2026, 8, 15)
 
@@ -28,15 +29,15 @@ class TestLiquidacionPrimaIbc(TransactionCase):
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Prima IBC', 'company_id': self.company.id,
             'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato Prima IBC', 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 3000000.0, 'date_start': date(2024, 3, 1), 'state': 'open'})
         return self.env['hr.payslip'].create({
             'name': 'Liquidación Prima IBC', 'employee_id': employee.id,
-            'contract_id': contract.id, 'company_id': self.company.id,
+            'version_id': contract.id, 'company_id': self.company.id,
             'struct_id': self.liquidacion.id,
-            'date_from': contract.date_start, 'date_to': RETIRO})
+            'date_from': contract.contract_date_start, 'date_to': RETIRO})
 
     def _total(self, slip, code):
         return sum(slip.line_ids.filtered(lambda l: l.code == code).mapped('total'))

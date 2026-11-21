@@ -7,6 +7,7 @@ from datetime import date
 from unittest.mock import patch
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 NATIVO = 'hr_payroll.report_payslip_lang'
 NATIVO_LIGERO = 'hr_payroll.report_light_payslip_lang'
@@ -36,12 +37,12 @@ class TestInformeReciboColombiano(TransactionCase):
         empleado = self.env['hr.employee'].create({
             'name': 'Empleado Informe %s' % company.id, 'company_id': company.id, 'l10n_co_ne_worker_type': '01',
             'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = self.env['hr.contract'].create({
+        contrato = crear_contrato(self.env, {
             'name': 'Contrato Informe %s' % company.id, 'employee_id': empleado.id, 'company_id': company.id,
             'structure_type_id': self.tipo.id, 'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01',
             'l10n_co_pila_subtipo_cotizante': '00', 'wage': 1750905.0, 'date_start': date(2024, 1, 1), 'state': 'open'})
         recibo = self.env['hr.payslip'].create({
-            'name': 'Recibo Informe %s' % company.id, 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'Recibo Informe %s' % company.id, 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': company.id, 'struct_id': self.general.id, 'date_from': date(2026, 6, 1), 'date_to': date(2026, 6, 15)})
         if calcular:
             recibo.compute_sheet()

@@ -8,6 +8,7 @@ usa. Ninguna regla de estas estructuras lee worked_days: el neto no depende de e
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -25,12 +26,12 @@ class TestEstructurasSinDiasTrabajados(TransactionCase):
     def _recibo(self, estructura, name, date_from, date_to):
         employee = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': name, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato %s' % name, 'employee_id': employee.id,
             'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
             'wage': 3000000.0, 'date_start': date(2024, 3, 1), 'state': 'open'})
         return self.env['hr.payslip'].create({
-            'name': name, 'employee_id': employee.id, 'contract_id': contract.id,
+            'name': name, 'employee_id': employee.id, 'version_id': contract.id,
             'company_id': self.company.id, 'struct_id': estructura.id,
             'date_from': date_from, 'date_to': date_to})
 

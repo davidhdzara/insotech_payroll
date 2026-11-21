@@ -9,6 +9,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 def _migracion():
@@ -38,12 +39,12 @@ class TestRetefuenteConfigCompartida(TransactionCase):
     def _recibo(self, company, anio=2027):
         empleado = self.env['hr.employee'].create({'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 
             'name': 'Emp %s' % company.name, 'company_id': company.id})
-        contrato = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contrato = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'C', 'employee_id': empleado.id, 'company_id': company.id,
             'structure_type_id': self.tipo.id, 'wage': 3000000.0,
             'date_start': date(2024, 3, 1), 'state': 'open'})
         return self.env['hr.payslip'].create({
-            'name': 'Prima', 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'Prima', 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': company.id, 'struct_id': self.est.id,
             'date_from': date(anio, 7, 1), 'date_to': date(anio, 12, 31)})
 

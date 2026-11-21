@@ -20,6 +20,7 @@ from unittest.mock import patch
 
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -241,7 +242,7 @@ class TestIdentificacionSincronizada(TransactionCase):
             'name': 'Nómina Prueba Sin Codigo Dian',
             'type_id': structure_type.id,
         })
-        contract = self.env['hr.contract'].create({'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
+        contract = crear_contrato(self.env, {'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 
             'name': 'Contrato TipoSinCodigoDian',
             'employee_id': employee.id,
             'company_id': self.company.id,
@@ -253,7 +254,7 @@ class TestIdentificacionSincronizada(TransactionCase):
         payslip = self.env['hr.payslip'].create({
             'name': 'Nómina TipoSinCodigoDian',
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'company_id': self.company.id,
             'struct_id': structure.id,
             'date_from': date(2026, 9, 1),

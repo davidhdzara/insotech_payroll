@@ -46,6 +46,7 @@ from datetime import date, datetime
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -151,7 +152,7 @@ class TestAusenciasNomina(TransactionCase):
         }
         if calendar is not None:
             contract_vals['resource_calendar_id'] = calendar.id
-        contract = self.env['hr.contract'].create(contract_vals)
+        contract = crear_contrato(self.env, contract_vals)
         return employee, contract
 
     def _make_calendar_martes_a_domingo(self):
@@ -177,7 +178,7 @@ class TestAusenciasNomina(TransactionCase):
         return self.env['hr.payslip'].create({
             'name': 'Nómina %s' % employee.name,
             'employee_id': employee.id,
-            'contract_id': contract.id,
+            'version_id': contract.id,
             'company_id': self.company.id,
             'struct_id': self.structure.id,
             'date_from': date_from,
@@ -1038,7 +1039,7 @@ class TestAusenciasNomina(TransactionCase):
 
     def test_ibc_ss_usa_ultimo_ibc_de_nomina_anterior_no_salario_actual(self):
         """Punto (a) del diseño: con historial, "último IBC anterior" se lee de
-        CO_SS_BASE_IBC de la última nómina 'done' del mismo contrato/estructura, NO
+        CO_SS_BASE_IBC de la última nómina 'validated' del mismo contrato/estructura, NO
         del salario actual -- lectura literal de la regla de David, confirmada por
         Tech Lead incluso con cambio salarial reciente entre el mes anterior y el de
         la novedad."""
@@ -1048,7 +1049,7 @@ class TestAusenciasNomina(TransactionCase):
         payslip_anterior = self._make_payslip(
             employee, contract, date(2026, 8, 1), date(2026, 8, 31))
         payslip_anterior.compute_sheet()
-        payslip_anterior.write({'state': 'done'})
+        payslip_anterior.write({'state': 'validated'})
         linea_ibc_anterior = payslip_anterior.line_ids.filtered(
             lambda l: l.code == 'CO_SS_BASE_IBC')
         self.assertTrue(linea_ibc_anterior)

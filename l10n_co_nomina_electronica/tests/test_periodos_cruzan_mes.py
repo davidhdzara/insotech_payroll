@@ -12,6 +12,7 @@ from datetime import date
 from odoo.tests.common import TransactionCase, tagged
 
 from .common_documento import DocumentoFixture
+from .common_version import crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -29,13 +30,13 @@ class TestPeriodosCruzanMes(DocumentoFixture, TransactionCase):
         empleado = self.env['hr.employee'].create({
             'name': 'Empleado M1 %s' % self.n, 'company_id': self.company.id, 'identification_id': '1020304050',
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = self.env['hr.contract'].create({
+        contrato = crear_contrato(self.env, {
             'name': 'Contrato M1 %s' % self.n, 'employee_id': empleado.id, 'company_id': self.company.id,
             'structure_type_id': (self.tipo_semanal if semanal else self.structure_type).id,
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
             'wage': 3000000.0, 'date_start': ingreso, 'state': 'open'})
         return self.env['hr.payslip'].create({
-            'name': 'Recibo M1 %s' % self.n, 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'name': 'Recibo M1 %s' % self.n, 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': self.company.id, 'struct_id': (struct or self.struct).id,
             'date_from': desde, 'date_to': hasta})
 
