@@ -3,7 +3,7 @@
 
 """Script de SOLO LECTURA -- diagnostico del IBC de PILA ya reportado (H-017b). Nunca escribe.
 
-Compara, por recibo confirmado (done/paid), el IBC que el archivo PILA anterior reportaba
+Compara, por recibo confirmado (validated/paid), el IBC que el archivo PILA anterior reportaba
 (CO_BRUTO, o factor x salario si es integral: todo lo devengado, incluido el auxilio de
 transporte y los pagos no salariales) con el IBC que dan las reglas nuevas (parte salarial
 + exceso del 40% de los pactados, techo de 25 SMMLV y piso de 1 SMMLV prorrateado).
@@ -43,12 +43,12 @@ def _diagnostico(env):
     ], order='date_to, employee_id')
     filas = []
     for slip in slips:
-        contract = slip.contract_id
+        version = slip.version_id
         lineas = slip.line_ids
         bruto = sum(lineas.filtered(lambda l: l.code == 'CO_BRUTO').mapped('total'))
         factor = slip._rule_parameter('l10n_co_factor_integral_salary', slip.date_from)
-        integral = bool(contract.l10n_co_ne_integral_salary)
-        anterior = contract.wage * factor if integral else (bruto or contract.wage)
+        integral = bool(version.l10n_co_ne_integral_salary)
+        anterior = version.wage * factor if integral else (bruto or version.wage)
 
         salarial = sum(l.total for l in lineas if l.salary_rule_id.category_id.code == 'DEV_SAL')
         pactados = sum(
@@ -59,9 +59,9 @@ def _diagnostico(env):
             l.code for l in lineas
             if l.salary_rule_id.category_id.code == 'DEV_NOSAL' and l.total
             and not l.salary_rule_id.l10n_co_pila_origen_no_salarial]
-        remuneracion = contract.wage if integral else salarial
+        remuneracion = version.wage if integral else salarial
         if integral:
-            salarial = contract.wage * factor
+            salarial = version.wage * factor
         incap = sum(l.total for l in lineas if l.code in (
             'CO_INC_COMUN', 'CO_INC_LABORAL', 'CO_LIC_MAT', 'CO_LIC_PAT'))
         dias = min(slip._ne_dias_bajo_contrato(),

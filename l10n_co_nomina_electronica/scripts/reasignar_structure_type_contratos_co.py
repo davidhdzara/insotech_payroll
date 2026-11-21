@@ -3,22 +3,22 @@
 
 """Script de UN SOLO USO -- NO se ejecuta solo (no vive en migrations/ a propósito).
 
-Reasigna ``structure_type_id`` de los contratos colombianos que quedaron con un tipo de
-estructura genérico (sin país), al tipo "Empleado Colombia" de este módulo
-(``l10n_co_nomina_electronica.hr_payroll_structure_type_co``).
+Reasigna ``structure_type_id`` de las VERSIONES (v19: el contrato vive en ``hr.version``) de compañías
+colombianas que quedaron con un tipo de estructura genérico (sin país), al tipo "Empleado Colombia" de este
+módulo (``l10n_co_nomina_electronica.hr_payroll_structure_type_co``).
 
-POR QUÉ HACE FALTA (causa raíz, leída por el Tech Lead en hr_contract/models/hr_contract.py
-del servidor, 2026-11-09): ``_compute_structure_type_id`` solo corrige un tipo si NO hay uno o
-si el tipo tiene un país DISTINTO al de la compañía. Un contrato que ya tiene el tipo genérico
+POR QUÉ HACE FALTA (causa raíz, leída por el Tech Lead en v18 el 2026-11-09 y confirmada para v19 en
+``odoo/addons/hr/models/hr_version.py:548-550``): ``_compute_structure_type_id`` solo corrige un tipo si NO
+hay uno o si el tipo tiene un país DISTINTO al de la compañía. Una versión que ya tiene el tipo genérico
 ("Employee", ``country_id`` vacío) nunca se vuelve a evaluar: ni instalar el módulo ni poner
 ``default_struct_id`` lo arregla. Por eso el fix del módulo (default_struct_id) es necesario
-pero NO alcanza para contratos que ya existen.
+pero NO alcanza para versiones que ya existen.
 
 ALCANCE (acotado a propósito -- no toca otras localizaciones):
-- Solo contratos de compañías cuyo país (``partner_id.country_id``) es Colombia.
-- Solo contratos cuyo ``structure_type_id`` es ``False`` o tiene ``country_id`` vacío
+- Solo versiones de compañías cuyo país (``partner_id.country_id``) es Colombia.
+- Solo versiones cuyo ``structure_type_id`` es ``False`` o tiene ``country_id`` vacío
   (genérico). Un contrato con un tipo de OTRO país o con un tipo colombiano distinto no se
-  toca.
+  toca. Se incluyen versiones archivadas (``active_test=False``).
 - Idempotente: lo que ya apunta al tipo colombiano se omite.
 
 USO (solo con autorización puntual de David sobre el ambiente que sea; NO en producción
@@ -41,20 +41,20 @@ _XMLID = 'l10n_co_nomina_electronica.hr_payroll_structure_type_co'
 
 def _reasignar(env, aplicar):
     tipo_co = env.ref(_XMLID)
-    contratos = env['hr.contract'].with_context(active_test=False).search([
+    contratos = env['hr.version'].with_context(active_test=False).search([
         ('company_id.partner_id.country_id.code', '=', 'CO'),
         '|', ('structure_type_id', '=', False), ('structure_type_id.country_id', '=', False),
     ])
     print('Tipo destino: %s (id=%s)' % (tipo_co.display_name, tipo_co.id))
-    print('Contratos colombianos con tipo genérico o vacío: %d' % len(contratos))
+    print('Versiones (contratos) colombianas con tipo genérico o vacío: %d' % len(contratos))
     for c in contratos:
-        print('  contrato id=%s | %s | empleado=%s | tipo actual=%s | estado=%s' % (
-            c.id, c.name, c.employee_id.name,
-            c.structure_type_id.display_name or '(vacío)', c.state))
+        print('  versión id=%s | %s | empleado=%s | tipo actual=%s | vigente desde=%s' % (
+            c.id, c.display_name, c.employee_id.name,
+            c.structure_type_id.display_name or '(vacío)', c.date_version))
     if aplicar and contratos:
         contratos.write({'structure_type_id': tipo_co.id})
         env.cr.commit()
-        print('APLICADO y confirmado (commit) sobre %d contratos.' % len(contratos))
+        print('APLICADO y confirmado (commit) sobre %d versiones.' % len(contratos))
     else:
         print('SIMULACIÓN: no se escribió nada. Use APLICAR=1 para aplicar.')
     return contratos
