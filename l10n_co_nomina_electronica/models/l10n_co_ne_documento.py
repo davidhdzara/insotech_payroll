@@ -151,13 +151,13 @@ class L10nCoNeDocumento(models.Model):
         'El consecutivo de nómina electrónica debe ser único por empresa.',
     )
 
-    def init(self):
-        """Un original activo por (compañía, empleado, mes): índice parcial (el ORM no lo expresa)."""
-        self.env.cr.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS l10n_co_ne_documento_mes_unico
-            ON l10n_co_ne_documento (company_id, employee_id, period)
-            WHERE is_adjustment IS NOT TRUE AND legacy IS NOT TRUE AND eliminado IS NOT TRUE
-        """)
+    # v19: un original activo por (compañía, empleado, mes). Antes ``init()`` creaba el índice único PARCIAL con SQL a mano;
+    # ahora es el mecanismo nativo ``models.UniqueIndex(definición, mensaje)`` (``hr/models/hr_version.py:202-205``: misma
+    # forma, con ``WHERE`` incluido). Decisión de TL 2026-11-21.
+    _mes_unico = models.UniqueIndex(
+        '(company_id, employee_id, period) WHERE is_adjustment IS NOT TRUE AND legacy IS NOT TRUE AND eliminado IS NOT TRUE',
+        'Ya existe un documento de nómina electrónica original activo de este empleado para ese mes.',
+    )
 
     # ──────────────────────────────────────────────────────────────────
     # Calculados
@@ -1712,7 +1712,7 @@ class L10nCoNeDocumento(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         """Un original activo por (compañía, empleado, mes): se comprueba ANTES del INSERT para dar el mensaje claro
-        (el índice parcial ``l10n_co_ne_documento_mes_unico`` queda como respaldo ante concurrencia)."""
+        (el índice único parcial ``_mes_unico`` queda como respaldo ante concurrencia)."""
         vistos = set()
         for vals in vals_list:
             if vals.get('is_adjustment') or vals.get('legacy') or vals.get('eliminado') or not vals.get('period'):
