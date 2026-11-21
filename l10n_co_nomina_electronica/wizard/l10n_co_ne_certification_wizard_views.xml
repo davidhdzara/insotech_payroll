@@ -77,7 +77,7 @@
                         <field name="payslip_individual_ids" readonly="1">
                             <list>
                                 <field name="employee_id"/>
-                                <field name="number"/>
+                                <field name="l10n_co_ne_consecutive"/>
                                 <field name="l10n_co_ne_state"/>
                                 <field name="l10n_co_ne_cune"/>
                             </list>
@@ -113,7 +113,7 @@
                         <field name="payslip_ajuste_ids" readonly="1">
                             <list>
                                 <field name="employee_id"/>
-                                <field name="number"/>
+                                <field name="l10n_co_ne_consecutive"/>
                                 <field name="l10n_co_ne_state"/>
                                 <field name="l10n_co_ne_cune"/>
                                 <field name="l10n_co_ne_adjustment_ref_cune"/>

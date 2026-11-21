@@ -36,7 +36,7 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
             excluido = Documento._ne_motivo_no_entra(slip)
             if excluido:
                 motivo = excluido
-            elif slip.state not in ('done', 'paid'):
+            elif slip.state not in ('validated', 'paid'):
                 motivo = _('El recibo "%s" no está confirmado (hecho o pagado).', slip.display_name)
             else:
                 try:

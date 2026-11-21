@@ -77,7 +77,7 @@ class TestMultiempresaInercia(TransactionCase):
             m.action_payslip_done()
             for clave, recibos in llamadas.items():
                 self.assertTrue(all(not r for r in recibos), clave)  # solo conjuntos vacios
-            self.assertEqual(m.number or '', '')  # sin numeracion PRE-NOM
+            self.assertEqual(m.l10n_co_ne_consecutive or '', '')  # sin numeracion PRE-NOM
             a.action_payslip_done()
             for clave, recibos in llamadas.items():
                 self.assertEqual(recibos[-1], a, clave)

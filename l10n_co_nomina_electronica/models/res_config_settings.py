@@ -196,7 +196,7 @@ class ResConfigSettings(models.TransientModel):
         for settings in self:
             settings.l10n_co_ne_has_payroll_entries = bool(self.env['hr.payslip'].search_count([
                 ('company_id', '=', settings.company_id.id),
-                ('state', 'in', ('done', 'paid')),
+                ('state', 'in', ('validated', 'paid')),
             ]))
 
     def action_reload_payroll_package(self):

@@ -231,13 +231,12 @@ class L10nCoNominaUgpp(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # SQL Constraints
     # ──────────────────────────────────────────────────────────────────
-    _sql_constraints = [
-        (
-            'unique_period_company',
-            'UNIQUE(year, month, company_id)',
-            'Ya existe un reporte UGPP para este período y empresa.',
-        ),
-    ]
+    # v19: ``_sql_constraints`` ya no crea nada (solo un aviso en el log, ``orm/model_classes.py:162-164``): se usa
+    # ``models.Constraint(definicion, mensaje)`` (``hr_payroll/models/hr_rule_parameter.py:27-30``).
+    _unique_period_company = models.Constraint(
+        'UNIQUE(year, month, company_id)',
+        'Ya existe un reporte UGPP para este período y empresa.',
+    )
 
     # ──────────────────────────────────────────────────────────────────
     # Campos computados
@@ -862,7 +861,7 @@ class L10nCoNominaUgpp(models.Model):
         self.ensure_one()
         base = [
             ('company_id', '=', self.company_id.id),
-            ('state', 'in', ('done', 'paid')),
+            ('state', 'in', ('validated', 'paid')),
             # doc 39 (2026-10-04): los empleados sintéticos del asistente de habilitación DIAN no son personal real.
             ('employee_id.l10n_co_ne_is_habilitacion_test', '=', False),
         ]

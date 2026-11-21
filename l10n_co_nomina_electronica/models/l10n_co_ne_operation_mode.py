@@ -56,14 +56,12 @@ class L10nCoNeOperationMode(models.Model):
         ondelete='cascade',
     )
 
-    _sql_constraints = [
-        (
-            'uniq_operation_mode_company',
-            'UNIQUE(company_id)',
-            'Solo puede haber un modo de operación de nómina electrónica '
-            'por compañía.',
-        ),
-    ]
+    # v19: ``_sql_constraints`` ya no crea nada (solo un aviso en el log, ``orm/model_classes.py:162-164``): se usa
+    # ``models.Constraint(definicion, mensaje)`` (``hr_payroll/models/hr_rule_parameter.py:27-30``).
+    _uniq_operation_mode_company = models.Constraint(
+        'UNIQUE(company_id)',
+        'Solo puede haber un modo de operación de nómina electrónica por compañía.',
+    )
 
     def _compute_display_name(self):
         for record in self:

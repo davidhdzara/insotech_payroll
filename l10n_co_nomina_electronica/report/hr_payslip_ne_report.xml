@@ -31,7 +31,7 @@
             <div class="col-4 text-end">
                 <p class="mb-0">
                     <strong>No.:</strong>
-                    <span t-out="o.number or o.name"/>
+                    <span t-out="o.l10n_co_ne_consecutive or o.name"/>
                 </p>
                 <p class="mb-0" t-if="o.paid_date">
                     <strong>Fecha de pago:</strong>

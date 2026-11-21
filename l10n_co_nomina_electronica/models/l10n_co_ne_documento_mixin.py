@@ -329,22 +329,21 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
              'PREFIJO + número secuencial.',
     )
 
+    def _ne_referencia(self):
+        """Referencia visible del recibo: el consecutivo de nómina electrónica y, mientras no lo tenga, ``name``.
+
+        v19 (Y-2): ``hr.payslip`` ya no tiene ``number`` (solo ``name``, ``hr_payroll/models/hr_payslip.py:48-50``). En
+        v18 el módulo copiaba ``l10n_co_ne_consecutive`` a ``number``; esa copia se retiró y el consecutivo vive solo en
+        ``l10n_co_ne_consecutive`` (una sola fuente por dato)."""
+        self.ensure_one()
+        return self.l10n_co_ne_consecutive or self.name
+
     # ──────────────────────────────────────────────────────────────────
     # SQL Constraints
     # ──────────────────────────────────────────────────────────────────
-    _sql_constraints = [
-        (
-            'l10n_co_ne_cune_unique',
-            'UNIQUE(l10n_co_ne_cune)',
-            'El CUNE debe ser único. Ya existe un documento de nómina '
-            'electrónica con este CUNE.',
-        ),
-        (
-            'l10n_co_ne_consecutive_company_unique',
-            'UNIQUE(l10n_co_ne_consecutive, company_id)',
-            'El consecutivo de nómina electrónica debe ser único por empresa.',
-        ),
-    ]
+    # v19: las 2 restricciones únicas (CUNE y consecutivo por compañía) viven en la clase concreta ``HrPayslip``
+    # (``models/hr_payslip.py``): este mixin es abstracto y no hay lectura de v19 sobre si una ``models.Constraint``
+    # declarada aquí se aplica al modelo que lo hereda.
 
     # ──────────────────────────────────────────────────────────────────
     # Validaciones
@@ -360,7 +359,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
                 raise ValidationError(_(
                     'Para una nota de ajuste debe indicar el CUNE de la '
                     'nómina electrónica original. Nómina: %s',
-                    payslip.number or payslip.name,
+                    payslip._ne_referencia(),
                 ))
 
     def action_generate_ne_xml(self):
@@ -458,7 +457,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
 
         _logger.info(
             'XML de nómina electrónica generado para %s (CUNE: %s)',
-            self.number or self.name,
+            self._ne_referencia(),
             cune_value,
         )
         return True
@@ -503,14 +502,12 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
             # transmisión real SendNominaSync al webservice de la DIAN.
             # No aplica a action_send_test_set() (habilitación real).
             self.l10n_co_ne_state = 'accepted'
-            if self.l10n_co_ne_consecutive:
-                self.number = self.l10n_co_ne_consecutive
             self._ne_marcar_original_eliminado()
             self.message_post(
                 body=_(
                     'Nómina electrónica %s validada localmente en Modo '
                     'Demo (sin transmisión real a la DIAN).',
-                    self.number or self.name,
+                    self._ne_referencia(),
                 ),
                 message_type='comment',
                 subtype_xmlid='mail.mt_note',
@@ -553,12 +550,10 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
 
         if is_valid:
             self.l10n_co_ne_state = 'accepted'
-            if self.l10n_co_ne_consecutive:
-                self.number = self.l10n_co_ne_consecutive
             self._ne_marcar_original_eliminado()
             _logger.info(
                 'Nómina electrónica %s ACEPTADA por DIAN (CUNE: %s)',
-                self.number or self.name,
+                self._ne_referencia(),
                 self.l10n_co_ne_cune,
             )
 
@@ -568,7 +563,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
             detail = '; '.join(error_messages) if error_messages else response.get('ErrorMessage', 'Sin detalle')
             _logger.warning(
                 'Nómina electrónica %s RECHAZADA por DIAN. Errores: %s',
-                self.number or self.name,
+                self._ne_referencia(),
                 detail,
             )
             
@@ -658,7 +653,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
     def action_mass_generate_ne_xml(self):
         """Genera XML de nómina electrónica para múltiples nóminas."""
         records = self.filtered(
-            lambda p: p.state == 'done'
+            lambda p: p.state == 'validated'
             and p.l10n_co_ne_state in ('draft', False)
         )
         if not records:
@@ -669,7 +664,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
             try:
                 payslip.action_generate_ne_xml()
             except Exception as e:
-                errors.append(f'{payslip.number or payslip.name}: {e}')
+                errors.append(f'{payslip._ne_referencia()}: {e}')
 
         if errors:
             raise UserError(_(
@@ -693,7 +688,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
             try:
                 payslip.action_send_ne_dian()
             except Exception as e:
-                errors.append(f'{payslip.number or payslip.name}: {e}')
+                errors.append(f'{payslip._ne_referencia()}: {e}')
 
         if errors:
             raise UserError(_(
@@ -952,8 +947,6 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
                 # veredicto viejo de aceptación del original al reconsultarlo.
                 if valid and slip.l10n_co_ne_state not in ('accepted', 'eliminated'):
                     slip.l10n_co_ne_state = 'accepted'
-                    if slip.l10n_co_ne_consecutive:
-                        slip.number = slip.l10n_co_ne_consecutive
                     slip._ne_marcar_original_eliminado()
                 elif not valid and is_rejection and slip.l10n_co_ne_state not in ('accepted', 'eliminated'):
                     slip.l10n_co_ne_state = 'rejected'
@@ -1218,7 +1211,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         """Valida que la nómina cumpla los prerequisitos para generar XML."""
         self.ensure_one()
 
-        if self.state != 'done':
+        if self.state != 'validated':
             raise UserError(_(
                 'La nómina debe estar confirmada (estado "Hecho") antes '
                 'de generar el XML de nómina electrónica.'
@@ -1244,7 +1237,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         if not contract:
             raise UserError(_(
                 'La nómina %s no tiene contrato asociado.',
-                self.number or self.name,
+                self._ne_referencia(),
             ))
 
         # H-021: antes de que action_generate_ne_xml() asigne el consecutivo.

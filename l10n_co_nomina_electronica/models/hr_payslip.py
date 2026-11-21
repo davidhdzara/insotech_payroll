@@ -109,6 +109,19 @@ class HrPayslip(models.Model):
     _name = 'hr.payslip'
     _inherit = ['hr.payslip', 'l10n.co.ne.documento.mixin']
 
+    # v19 (antes en el mixin ``l10n.co.ne.documento.mixin``): ``_sql_constraints`` ya no crea nada (solo un aviso en el
+    # log, ``orm/model_classes.py:162-164``): se usa ``models.Constraint(definicion, mensaje)``
+    # (``hr_payroll/models/hr_rule_parameter.py:27-30``).
+    _l10n_co_ne_cune_unique = models.Constraint(
+        'UNIQUE(l10n_co_ne_cune)',
+        'El CUNE debe ser único. Ya existe un documento de nómina electrónica con este CUNE.',
+    )
+
+    _l10n_co_ne_consecutive_company_unique = models.Constraint(
+        'UNIQUE(l10n_co_ne_consecutive, company_id)',
+        'El consecutivo de nómina electrónica debe ser único por empresa.',
+    )
+
     # Documento mensual DIAN al que pertenece el recibo (doc 53 §3.2, etapa 1b). El ciclo DIAN por recibo
     # (campos del mixin) sigue intacto hasta la etapa 5; esto solo agrega el enlace.
     l10n_co_ne_documento_id = fields.Many2one(
@@ -794,7 +807,6 @@ class HrPayslip(models.Model):
             if company.l10n_co_ne_pre_sequence_id:
                 if not rec.l10n_co_ne_consecutive or rec.l10n_co_ne_consecutive.startswith('PRE-NOM'):
                     temporal_number = company.l10n_co_ne_pre_sequence_id.next_by_id()
-                    rec.number = temporal_number
                     rec.l10n_co_ne_consecutive = temporal_number
         return res
 
@@ -812,7 +824,7 @@ class HrPayslip(models.Model):
                 ('employee_id', '=', slip.employee_id.id),
                 ('company_id', '=', slip.company_id.id),
                 ('struct_id', '=', slip.struct_id.id),
-                ('state', 'in', ('done', 'paid')),
+                ('state', 'in', ('validated', 'paid')),
                 ('credit_note', '=', False),
                 ('l10n_co_ne_is_adjustment', '=', False),
                 ('date_from', '<=', slip.date_to),
@@ -830,8 +842,8 @@ class HrPayslip(models.Model):
                     'cruza con "%(otro)s" (%(o_desde)s a %(o_hasta)s) del mismo empleado '
                     '%(employee)s y la misma estructura, y duplicaría días e IBC. Corrija las '
                     'fechas o cancele uno de los dos recibos.',
-                    slip=slip.number or slip.name, desde=slip.date_from, hasta=slip.date_to,
-                    otro=otro.number or otro.name, o_desde=otro.date_from,
+                    slip=slip._ne_referencia(), desde=slip.date_from, hasta=slip.date_to,
+                    otro=otro._ne_referencia(), o_desde=otro.date_from,
                     o_hasta=otro.date_to, employee=slip.employee_id.name))
 
 
@@ -882,7 +894,7 @@ class HrPayslip(models.Model):
             raise UserError(_('El comprobante de pago se envía por empleado: los recibos son de %s empleados.',
                               len(self.employee_id)))
         for recibo in self:
-            if recibo.state not in ('done', 'paid'):
+            if recibo.state not in ('validated', 'paid'):
                 raise UserError(_('El recibo "%s" no está confirmado (hecho o pagado): no se envía el comprobante.',
                                   recibo.display_name))
         empleado = self.employee_id
@@ -1232,7 +1244,7 @@ class HrPayslip(models.Model):
         """Primera fecha de pago del recibo o False si no se puede resolver (sin fecha, sin fuente configurada o sin
         recibo hecho). No lanza: sirve para agrupar y para el desglose; quien exige la fecha usa ``_ne_fecha_pago``."""
         self.ensure_one()
-        if self.state not in ('done', 'paid'):
+        if self.state not in ('validated', 'paid'):
             return False
         try:
             return self._ne_fecha_pago()
@@ -1249,7 +1261,7 @@ class HrPayslip(models.Model):
         if not fecha:
             return self.browse()
         dominio = [('company_id', '=', self.company_id.id), ('employee_id', '=', self.employee_id.id),
-                   ('state', 'in', ('done', 'paid')), ('credit_note', '=', False),
+                   ('state', 'in', ('validated', 'paid')), ('credit_note', '=', False),
                    ('l10n_co_ne_is_adjustment', '=', False)]
         if self.company_id.l10n_co_ne_fuente_fecha_pago == 'recibo':
             candidatos = self.search(dominio + [('paid_date', '=', fecha)])
@@ -1268,7 +1280,7 @@ class HrPayslip(models.Model):
         resultado = {'grupos': [], 'sin_fecha': []}
         vistos = set()
         for recibo in recibos.sorted(lambda s: (s.company_id.id, s.employee_id.name or '', s.date_to, s.id)):
-            if recibo.state not in ('done', 'paid'):
+            if recibo.state not in ('validated', 'paid'):
                 resultado['sin_fecha'].append((recibo, _('El recibo "%s" no está confirmado (hecho o pagado).',
                                                          recibo.display_name)))
                 continue
@@ -2349,7 +2361,7 @@ class HrPayslip(models.Model):
         2026-10-11, punto a del diseño -- decisión de David + Tech Lead).
 
         Mismo patrón que Procedure2.action_calculate_retention_procedure2()
-        (hr_contract_retefuente.py): última nómina 'done' del mismo contrato y
+        (hr_contract_retefuente.py): última nómina 'validated' del mismo contrato y
         estructura, antes del date_from de esta nómina, leyendo su línea
         invisible CO_SS_BASE_IBC. Sin historial (primera nómina del contrato):
         fallback a self._ne_salario(contract) -- confirmado el caso real de los 18 empleados

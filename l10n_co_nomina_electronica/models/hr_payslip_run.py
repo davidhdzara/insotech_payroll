@@ -17,7 +17,7 @@ class HrPayslipRun(models.Model):
     def action_paid(self):
         if not self.env.context.get('ne_fecha_pago_definida'):
             recibos = self.slip_ids.filtered(
-                lambda s: s.state == 'done' and s.company_id._ne_es_colombia()
+                lambda s: s.state == 'validated' and s.company_id._ne_es_colombia()
                 and s.company_id.l10n_co_ne_fuente_fecha_pago == 'recibo')
             if recibos:
                 return {

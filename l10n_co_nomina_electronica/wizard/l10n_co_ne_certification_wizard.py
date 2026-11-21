@@ -218,7 +218,7 @@ class L10nCoNeCertificationWizard(models.TransientModel):
         """Resuelve el periodo de Fase 1 sin pedirlo en pantalla.
 
         Regla: el periodo del último ``hr.payslip`` confirmado
-        (``state='done'``) de la estructura Nómina General de la
+        (``state='validated'``) de la estructura Nómina General de la
         compañía YA INICIADO (``date_from`` <= hoy) -- refleja el ciclo
         de nómina real más reciente. Si no hay ninguno todavía, cae al
         mes calendario actual completo.
@@ -235,7 +235,7 @@ class L10nCoNeCertificationWizard(models.TransientModel):
         last = self.env['hr.payslip'].search([
             ('company_id', '=', self.company_id.id),
             ('struct_id', '=', struct.id),
-            ('state', '=', 'done'),
+            ('state', '=', 'validated'),
             ('date_from', '<=', today),
         ], order='date_to desc', limit=1)
         if last:

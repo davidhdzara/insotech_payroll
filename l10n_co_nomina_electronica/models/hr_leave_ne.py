@@ -259,7 +259,7 @@ class HrPayslipLeaveIntegration(models.Model):
             'Novedades detectadas para %s [nómina %s]: '
             'Inc=%d, Mat=%d, Vac=%d, LicRem=%d, LicNR=%d',
             self.employee_id.name,
-            self.number or self.id,
+            self._ne_referencia(),
             totals.get('incapacidad', 0),
             totals.get('licencia_mat', 0),
             totals.get('vacaciones', 0),

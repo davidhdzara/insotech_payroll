@@ -28,7 +28,7 @@ class HrPayslipRegistrarPago(models.TransientModel):
         recibos = self.payslip_ids
         if self.fecha > fields.Date.context_today(self):
             raise UserError(_('La fecha de pago no puede ser futura.'))
-        no_listos = recibos.filtered(lambda s: s.state != 'done')
+        no_listos = recibos.filtered(lambda s: s.state != 'validated')
         if no_listos:
             raise UserError(_(
                 'Solo se registra el pago de recibos en estado "Hecho". No lo están: %(recibos)s.',

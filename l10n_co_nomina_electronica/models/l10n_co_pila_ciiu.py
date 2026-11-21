@@ -40,10 +40,12 @@ class L10nCoPilaCiiu(models.Model):
     date_start = fields.Date(string='Vigente desde')
     date_end = fields.Date(string='Vigente hasta')
 
-    _sql_constraints = [
-        ('code_start_uniq', 'unique(code, date_start)',
-         'Ya existe esa actividad con la misma fecha de inicio de vigencia.'),
-    ]
+    # v19: ``_sql_constraints`` ya no crea nada (solo un aviso en el log, ``orm/model_classes.py:162-164``): se usa
+    # ``models.Constraint(definicion, mensaje)`` (``hr_payroll/models/hr_rule_parameter.py:27-30``).
+    _code_start_uniq = models.Constraint(
+        'unique(code, date_start)',
+        'Ya existe esa actividad con la misma fecha de inicio de vigencia.',
+    )
 
     @api.constrains('date_start', 'date_end')
     def _check_vigencia(self):

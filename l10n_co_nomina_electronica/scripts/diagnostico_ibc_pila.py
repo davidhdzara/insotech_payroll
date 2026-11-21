@@ -36,7 +36,7 @@ def _diagnostico(env):
     desde = _fecha('DESDE', date(2000, 1, 1))
     hasta = _fecha('HASTA', date(2100, 1, 1))
     slips = env['hr.payslip'].with_context(active_test=False).search([
-        ('state', 'in', ('done', 'paid')),
+        ('state', 'in', ('validated', 'paid')),
         ('date_to', '>=', desde), ('date_to', '<=', hasta),
         ('employee_id.l10n_co_ne_is_habilitacion_test', '=', False),
         ('line_ids.code', '=', 'CO_BRUTO'),
@@ -82,7 +82,7 @@ def _imprimir(filas):
         afectados += 1
         print('%-8s %-34s %-12s %16.0f %16.0f %16.0f%s' % (
             slip.date_to.strftime('%Y-%m'), (slip.employee_id.name or '')[:34],
-            (slip.number or str(slip.id))[:12], anterior, nuevo, dif,
+            (slip.l10n_co_ne_consecutive or str(slip.id))[:12], anterior, nuevo, dif,
             '   SIN CLASIFICAR: %s' % ','.join(sin_clasificar) if sin_clasificar else ''))
     total = sum(f[3] for f in filas)
     print('Recibos con diferencia: %d de %d. Suma de diferencias (IBC): %.0f' % (

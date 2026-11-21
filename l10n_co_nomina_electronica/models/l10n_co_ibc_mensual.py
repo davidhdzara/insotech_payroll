@@ -65,10 +65,12 @@ class L10nCoIbcMensual(models.Model):
         help='El IBC consolidado cambió después de generarse la planilla: si ya se '
              'presentó, hay que corregirla con una planilla tipo N.')
 
-    _sql_constraints = [
-        ('unico_empleado_mes', 'unique(company_id, employee_id, period)',
-         'Ya existe el IBC consolidado de este empleado para ese mes.'),
-    ]
+    # v19: ``_sql_constraints`` ya no crea nada (solo un aviso en el log, ``orm/model_classes.py:162-164``): se usa
+    # ``models.Constraint(definicion, mensaje)`` (``hr_payroll/models/hr_rule_parameter.py:27-30``).
+    _unico_empleado_mes = models.Constraint(
+        'unique(company_id, employee_id, period)',
+        'Ya existe el IBC consolidado de este empleado para ese mes.',
+    )
 
     @api.depends('ibc_sp', 'ibc_arl', 'ibc_paraf',
                  'ibc_recibos_sp', 'ibc_recibos_arl', 'ibc_recibos_paraf')
@@ -96,7 +98,7 @@ class L10nCoIbcMensual(models.Model):
         slips = self.env['hr.payslip'].search([
             ('company_id', '=', company.id),
             ('employee_id', '=', employee.id),
-            ('state', 'in', ('done', 'paid')),
+            ('state', 'in', ('validated', 'paid')),
             ('date_to', '>=', period), ('date_to', '<', siguiente),
         ], order='date_to, id')
         return slips.filtered(lambda s: s.line_ids.filtered(lambda l: l.code == 'CO_IBC_SP'))

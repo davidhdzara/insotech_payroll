@@ -107,13 +107,12 @@ class L10nCoRetefuenteUvt(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # SQL Constraint — un solo registro de UVT por año + compañía
     # ──────────────────────────────────────────────────────────────────
-    _sql_constraints = [
-        (
-            'year_company_uniq',
-            'UNIQUE(year, company_id)',
-            'Ya existe una configuración de UVT para este año y compañía.',
-        ),
-    ]
+    # v19: ``_sql_constraints`` ya no crea nada (solo un aviso en el log, ``orm/model_classes.py:162-164``): se usa
+    # ``models.Constraint(definicion, mensaje)`` (``hr_payroll/models/hr_rule_parameter.py:27-30``).
+    _year_company_uniq = models.Constraint(
+        'UNIQUE(year, company_id)',
+        'Ya existe una configuración de UVT para este año y compañía.',
+    )
 
     # ──────────────────────────────────────────────────────────────────
     # Validaciones

@@ -139,11 +139,17 @@ class L10nCoNeDocumento(models.Model):
                           help='Lista de {"key", "level" (danger/warning), "message"} calculada al validar el documento.')
     alertas_texto = fields.Html(string='Alertas', compute='_compute_alertas_texto', sanitize=False)
 
-    _sql_constraints = [
-        ('cune_unique', 'UNIQUE(cune)', 'El CUNE debe ser único: ya existe un documento con este CUNE.'),
-        ('consecutive_company_unique', 'UNIQUE(consecutive, company_id)',
-         'El consecutivo de nómina electrónica debe ser único por empresa.'),
-    ]
+    # v19: ``_sql_constraints`` ya no crea nada (solo un aviso en el log, ``orm/model_classes.py:162-164``): se usa
+    # ``models.Constraint(definicion, mensaje)`` (``hr_payroll/models/hr_rule_parameter.py:27-30``).
+    _cune_unique = models.Constraint(
+        'UNIQUE(cune)',
+        'El CUNE debe ser único: ya existe un documento con este CUNE.',
+    )
+
+    _consecutive_company_unique = models.Constraint(
+        'UNIQUE(consecutive, company_id)',
+        'El consecutivo de nómina electrónica debe ser único por empresa.',
+    )
 
     def init(self):
         """Un original activo por (compañía, empleado, mes): índice parcial (el ORM no lo expresa)."""
@@ -267,7 +273,7 @@ class L10nCoNeDocumento(models.Model):
         las notas de ajuste por recibo, los recibos de un documento migrado (legacy) ni los de habilitación."""
         fin = (period.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
         dominio = [('company_id', '=', company.id), ('employee_id', '=', employee.id),
-                   ('state', 'in', ('done', 'paid')), ('credit_note', '=', False),
+                   ('state', 'in', ('validated', 'paid')), ('credit_note', '=', False),
                    ('l10n_co_ne_is_adjustment', '=', False)]
         if company.l10n_co_ne_fuente_fecha_pago == 'recibo':
             recibos = self.env['hr.payslip'].search(dominio + [('paid_date', '>=', period), ('paid_date', '<=', fin)])
@@ -309,7 +315,7 @@ class L10nCoNeDocumento(models.Model):
     def _ne_tiene_fecha_pago(self, slip):
         """True si el recibo está hecho o pagado y su fecha de pago se puede resolver (``_ne_fechas_pago``); sin fecha, o
         sin la fuente de la fecha configurada, es False (se trata como "sin fecha de pago")."""
-        if slip.state not in ('done', 'paid'):
+        if slip.state not in ('validated', 'paid'):
             return False
         try:
             return bool(slip._ne_fechas_pago())
@@ -334,7 +340,7 @@ class L10nCoNeDocumento(models.Model):
             if motivo:
                 resultado['sin_fecha'].append((slip, motivo))
                 continue
-            if slip.state not in ('done', 'paid'):
+            if slip.state not in ('validated', 'paid'):
                 resultado['sin_fecha'].append((slip, _('El recibo no está en estado "Hecho" ni "Pagado".')))
                 continue
             try:
@@ -630,7 +636,7 @@ class L10nCoNeDocumento(models.Model):
             raise UserError(_('El empleado %s no tiene número de identificación configurado.',
                               slip.employee_id.name))
         if not slip.version_id:
-            raise UserError(_('El recibo %s no tiene contrato asociado.', slip.number or slip.name))
+            raise UserError(_('El recibo %s no tiene contrato asociado.', slip._ne_referencia()))
         slip._ne_validar_cuenta_transferencia()
         slip.employee_id._l10n_co_nombre_dian()
 
@@ -653,7 +659,7 @@ class L10nCoNeDocumento(models.Model):
             vistos.add(padre.id)
             recibos |= padre.payslip_ids
             padre = padre.parent_id
-        return recibos.filtered(lambda slip: slip.state in ('done', 'paid'))
+        return recibos.filtered(lambda slip: slip.state in ('validated', 'paid'))
 
     def _ne_predecesor(self):
         """Bloque ``predecesor`` de una nota de ajuste: número, CUNE y fecha de emisión del documento padre (NIAE190 y

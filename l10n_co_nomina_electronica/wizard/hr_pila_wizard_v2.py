@@ -591,7 +591,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
 
         return self.env['hr.payslip'].search([
             ('company_id', '=', company.id),
-            ('state', 'in', ('done', 'paid')),
+            ('state', 'in', ('validated', 'paid')),
             # date_to y no date_from: la liquidacion tiene date_from = inicio de contrato.
             ('date_to', '>=', date_from),
             ('date_to', '<', date_to),

@@ -173,7 +173,7 @@ class HrPayslipSend(models.TransientModel):
                                          'acepte el documento (si ya está aceptado, se envió).', documento.display_name))
 
         for payslip in self.payslip_ids:
-            nombre = payslip.number or payslip.name
+            nombre = payslip._ne_referencia()
             # 1. Ciclo DIAN por recibo: SOLO compañías en habilitación (producción va por documento). Un recibo que va en un documento mensual se transmite desde él.
             if self.checkbox_send_dian and payslip in habilitacion \
                     and payslip.l10n_co_ne_state in ('draft', 'generated', 'rejected'):
@@ -198,7 +198,7 @@ class HrPayslipSend(models.TransientModel):
             agrupados = self.env['hr.payslip']._ne_comprobantes(self.payslip_ids)
             for recibo, motivo in agrupados['sin_fecha']:
                 problemas.append(_('%(recibo)s: no se envió el comprobante (%(motivo)s)',
-                                   recibo=recibo.number or recibo.name, motivo=motivo))
+                                   recibo=recibo._ne_referencia(), motivo=motivo))
             for grupo in agrupados['grupos']:
                 recibos = grupo['recibos']
                 nombre = '%s (%s)' % (grupo['empleado'].name, grupo['fecha_pago'])
