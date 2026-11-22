@@ -7,6 +7,7 @@ comparación no depende del gancho que se prueba), la supervivencia al recálcul
 aislamiento por compañía. NO EJECUTADAS en Odoo al escribirlas (el N1 necesita ``-u``: tabla, permisos y reglas de registro nuevos)."""
 
 from datetime import date
+from html import unescape
 from unittest.mock import patch
 
 from psycopg2 import IntegrityError
@@ -16,6 +17,7 @@ from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tests import Form
 from odoo.tests.common import TransactionCase, tagged
 from odoo.tools import mute_logger
+from odoo.tools.misc import format_amount
 
 from .common_version import crear_contrato
 
@@ -286,15 +288,20 @@ class TestAjusteConceptoRecibo(TransactionCase):
         recibo = self._recibo()
         sugerido = self._total(recibo, 'CO_SALUD_EMP')
         ajuste = self._ajustar(recibo, 'CO_SALUD_EMP', amount=0.0)
-        notas = self._notas(recibo)
+        moneda = recibo.company_id.currency_id
+        # El chatter guarda el HTML con el espacio de no separación del formato monetario como ``&nbsp;``: se compara el texto ya decodificado.
+        notas = unescape(self._notas(recibo))
         self.assertIn('Ajuste creado', notas)
         self.assertIn('CO_SALUD_EMP', notas)
-        self.assertIn('Sugerido: %.2f' % sugerido, notas)
-        self.assertIn('Nuevo: 0.00', notas)
+        # .293: los importes salen con el formato monetario de la compañía (símbolo, separadores y decimales de la moneda), como en pantalla.
+        # v19: se compara con ``format_amount`` (el mismo que usa el código), no con ``res.currency.format`` (sin leer en v19).
+        self.assertIn('Sugerido: %s' % format_amount(self.env, sugerido, moneda), notas)
+        self.assertIn('Nuevo: %s' % format_amount(self.env, 0.0, moneda), notas)
+        self.assertNotIn('%.2f' % sugerido, notas, 'Sin el formato crudo «%.2f» (sin separadores de miles)')
         self.assertIn(self.env.user.name, notas)
         ajuste.write({'amount': round(sugerido / 2.0 / ajuste.quantity * 100.0 / ajuste.rate, 2)})
         self.assertIn('Ajuste cambiado', self._notas(recibo))
-        self.assertIn('Anterior: 0.00', self._notas(recibo))
+        self.assertIn('Anterior: %s' % format_amount(self.env, 0.0, moneda), unescape(self._notas(recibo)))
         ajuste.unlink()
         self.assertIn('Ajuste eliminado', self._notas(recibo))
 

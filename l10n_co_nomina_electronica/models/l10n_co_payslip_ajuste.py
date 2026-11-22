@@ -17,6 +17,7 @@ incierto o aceptado. Un recibo ``done`` conserva sus ajustes como rastro de solo
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 from odoo.tools import float_compare
+from odoo.tools.misc import format_amount
 
 # Estados del documento DIAN (``l10n.co.ne.documento.state``) con los que el recibo ya no admite ajustes: «uncertain» bloquea porque no se sabe
 # si la DIAN lo aceptó.
@@ -153,17 +154,26 @@ class L10nCoPayslipAjuste(models.Model):
                 'con_sugerido': True, 'sugerido_quantity': linea.quantity, 'sugerido_rate': linea.rate, 'sugerido_amount': linea.amount,
                 'sugerido_total': linea.total, 'sugerido_al_ajustar': linea.total})
 
+    def _monto(self, valor):
+        """Un importe con el FORMATO MONETARIO de la compañía del recibo (símbolo, decimales de la moneda y separadores del idioma del usuario),
+        como se ve en pantalla. Las notas del chatter lo usan en vez de ``%.2f`` (E11 pulido UX, .293: «-35018.10» sin separadores). En v19 se usa
+        ``odoo.tools.misc.format_amount`` (el ``hr_payroll/models/hr_payslip.py`` nativo lo llama en :2060 y este módulo ya lo usa en ``hr_contract.py``) en vez
+        de ``res.currency.format`` de v18, que en v19 no se ha leído."""
+        self.ensure_one()
+        return format_amount(self.env, valor, self.slip_id.company_id.currency_id)
+
     def _nota_en_el_recibo(self, titulo, anterior=None, nuevo=None, con_nuevo=True):
-        """Nota del chatter del recibo: regla, sugerido, anterior, nuevo y usuario (texto plano, sin colores propios)."""
+        """Nota del chatter del recibo: regla, sugerido, anterior, nuevo y usuario (texto plano, sin colores propios); los importes con el formato
+        monetario de la compañía (``_monto``)."""
         self.ensure_one()
         nuevo = self.total if nuevo is None else nuevo
         partes = [_('%(titulo)s: «%(regla)s» (%(codigo)s).', titulo=titulo, regla=self.salary_rule_id.name, codigo=self.salary_rule_id.code)]
         if self.con_sugerido:
-            partes.append(_('Sugerido: %.2f.', self.sugerido_total))
+            partes.append(_('Sugerido: %s.', self._monto(self.sugerido_total)))
         if anterior is not None:
-            partes.append(_('Anterior: %.2f.', anterior))
+            partes.append(_('Anterior: %s.', self._monto(anterior)))
         if con_nuevo:
-            partes.append(_('Nuevo: %.2f.', nuevo))
+            partes.append(_('Nuevo: %s.', self._monto(nuevo)))
         partes.append(_('Por: %s.', self.env.user.name))
         self.slip_id.message_post(body=' '.join(partes), message_type='notification', subtype_xmlid='mail.mt_note')
 
@@ -193,15 +203,15 @@ class L10nCoPayslipAjuste(models.Model):
         if all(float_compare(actual, sugerido_i, precision_digits=digitos) == 0 for actual, sugerido_i, digitos in (
                 (ajuste.amount, s_amount, 2), (ajuste.quantity, s_quantity, 2), (ajuste.rate, s_rate, 4))):
             recibo.message_post(body=_(
-                'El ajuste de «%(regla)s» (%(codigo)s) quedó igual al valor sugerido (%(total).2f): se quita.',
-                regla=regla.name, codigo=regla.code, total=s_total), message_type='notification', subtype_xmlid='mail.mt_note')
+                'El ajuste de «%(regla)s» (%(codigo)s) quedó igual al valor sugerido (%(total)s): se quita.',
+                regla=regla.name, codigo=regla.code, total=ajuste._monto(s_total)), message_type='notification', subtype_xmlid='mail.mt_note')
             ajuste.unlink()
             return
         if ajuste.con_sugerido and abs(s_total - ajuste.sugerido_total) > 0.005:
             recibo.message_post(body=_(
-                'El sugerido de «%(regla)s» (%(codigo)s) cambió de %(antes).2f a %(despues).2f; se conserva el valor ajustado (%(ajustado).2f).',
-                regla=regla.name, codigo=regla.code, antes=ajuste.sugerido_total, despues=s_total, ajustado=ajuste.total),
-                message_type='notification', subtype_xmlid='mail.mt_note')
+                'El sugerido de «%(regla)s» (%(codigo)s) cambió de %(antes)s a %(despues)s; se conserva el valor ajustado (%(ajustado)s).',
+                regla=regla.name, codigo=regla.code, antes=ajuste._monto(ajuste.sugerido_total), despues=ajuste._monto(s_total),
+                ajustado=ajuste._monto(ajuste.total)), message_type='notification', subtype_xmlid='mail.mt_note')
         ajuste.write({
             'con_sugerido': True, 'sugerido_quantity': s_quantity, 'sugerido_rate': s_rate, 'sugerido_amount': s_amount,
             'sugerido_total': s_total, 'estado': 'aplicado'})
