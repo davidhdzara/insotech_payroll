@@ -13,8 +13,9 @@ hr_payslip_line.py:8-39``), así que las secciones necesitan filas propias para 
 A diferencia de la pestaña de conceptos, aquí NO se edita nada: no hay ``create``/``write``/``unlink`` de usuario (solo la regeneración, con sudo y el
 contexto ``ne_regenerar_calculo``) y el campo de la vista es de solo lectura.
 
-v19 (port de .294 en su estado final de v18 ``f10be32``): sin cambios de nombres (el modelo no usa ``contract``). ``formatLang`` de ``odoo.tools.misc`` NO está
-verificado en v19 (R-1 del registro, §10.5; igual que ``l10n_co_payslip_concepto.py``). NO EJECUTADO EN ODOO al escribirlo."""
+v19 (port de .294 en su estado final de v18 ``f10be32``): sin cambios de nombres (el modelo no usa ``contract``). ``formatLang`` de ``odoo.tools.misc`` existe en v19 con
+la misma firma (``formatLang(env, value, digits=2, ...)``, ``odoo/tools/misc.py:1342``; R-1 del registro, §10.7: lectura de la imagen local, PROVISIONAL, no del
+servidor). NO EJECUTADO EN ODOO al escribirlo."""
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
@@ -77,7 +78,7 @@ class L10nCoPayslipCalculo(models.Model):
 
     @api.model
     def _secciones_del_recibo(self, recibo, lineas):
-        """``[(titulo, [líneas])]`` en el orden de la pestaña: Bases y, después, una sección por categoría de «Costo empresa» (aportes de la empresa,
+        """``[(clave, titulo, [líneas])]`` en el orden de la pestaña: Bases y, después, una sección por categoría de «Costo empresa» (aportes de la empresa,
         provisiones; en el orden de su primera línea). Sin líneas, la sección no sale.
 
         Se decide por configuración, sin códigos de regla: la sección de la categoría de la línea (.298: ya no hay Básico, Devengos ni Deducciones)."""
@@ -88,9 +89,9 @@ class L10nCoPayslipCalculo(models.Model):
             clave = seccion if seccion == 'bases' else 'costo_%s' % linea.category_id.id
             if clave not in grupos:
                 orden, titulo = fijas.get(clave) or (1, linea.category_id.name)
-                grupos[clave] = {'orden': orden, 'primera': (linea.sequence, linea.id), 'titulo': titulo, 'lineas': []}
+                grupos[clave] = {'clave': clave, 'orden': orden, 'primera': (linea.sequence, linea.id), 'titulo': titulo, 'lineas': []}
             grupos[clave]['lineas'].append(linea)
-        return [(g['titulo'], g['lineas']) for g in sorted(grupos.values(), key=lambda g: (g['orden'], g['primera']))]
+        return [(g['clave'], g['titulo'], g['lineas']) for g in sorted(grupos.values(), key=lambda g: (g['orden'], g['primera']))]
 
     @api.model
     def _valores_del_recibo(self, recibo):
@@ -110,7 +111,7 @@ class L10nCoPayslipCalculo(models.Model):
             secuencia += 10
             return secuencia
 
-        for titulo, de_la_seccion in self._secciones_del_recibo(recibo, lineas):
+        for clave, titulo, de_la_seccion in self._secciones_del_recibo(recibo, lineas):
             valores.append({'slip_id': recibo.id, 'sequence': siguiente(), 'display_type': 'line_section', 'name': titulo})
             for linea in de_la_seccion:
                 regla = linea.salary_rule_id
@@ -124,4 +125,21 @@ class L10nCoPayslipCalculo(models.Model):
                     if ajuste.con_sugerido:
                         texto = _('Ajustado por la empresa. Sugerido: %s', formatLang(self.env, ajuste.sugerido_total, digits=2))
                     valores.append({'slip_id': recibo.id, 'sequence': siguiente(), 'display_type': 'line_note', 'name': texto})
+            if clave == 'bases':
+                valores.extend(self._fila_del_exceso(recibo, siguiente))
         return valores
+
+    @api.model
+    def _fila_del_exceso(self, recibo, siguiente):
+        """.299 (c): fila informativa del EXCESO DEL 40 % de los pagos no salariales pactados (Ley 1393/2010 art. 30) que pasa al IBC de salud, pensión y ARL,
+        al final de «Bases». Solo si el recibo tiene pagos pactados (``CO_IBC_PACTADOS`` con valor); con 0 en el exceso se muestra igual: el auditor ve que se
+        revisó el límite. No es una línea del recibo (``line_id`` vacío) y sale de la MISMA función que el IBC (``_ne_exceso_no_salarial``). Los códigos de las
+        dos bases son identificadores internos del módulo."""
+        por_codigo = {linea.code: linea.total for linea in recibo.line_ids.filtered(lambda l: l.code in ('CO_IBC_REMUN', 'CO_IBC_PACTADOS'))}
+        pactados = por_codigo.get('CO_IBC_PACTADOS', 0.0)
+        if not pactados:
+            return []
+        exceso = recibo._ne_exceso_no_salarial(por_codigo.get('CO_IBC_REMUN', 0.0), pactados)
+        return [{
+            'slip_id': recibo.id, 'sequence': siguiente(), 'quantity': 1.0, 'rate': 100.0, 'amount': exceso, 'total': exceso,
+            'name': _('Exceso del 40 % de los pagos no salariales pactados (pasa al IBC)')}]

@@ -9,9 +9,10 @@ general): en una base sin ese diario toda prueba con ``Form`` fallaba con «jour
 bonificación, en la N1 de la .290). Ahora cada clase lo fija en su ``setUpClass`` (o en su prueba): un diario nuevo, de tipo general, de la compañía
 del entorno, dentro de la transacción de la prueba (se revierte). Sin cambio de código del módulo.
 
-v19: las citas son las de v18. NO VERIFICADO en v19 si ``journal_id`` de la estructura es ``company_dependent`` (R-3 del registro, §10.5; ``hr_payroll_account/models/
-hr_payroll_structure.py``, sin leer): si no lo es, el ``with_company`` no estorba y el diario se fija igual. El ``journal_id`` del recibo sí es un ``related`` de la
-estructura en v19 (``hr_payroll_account/models/hr_payslip.py:16``)."""
+v19: ``journal_id`` de la estructura SÍ es ``company_dependent`` (``Many2one('account.journal', ..., company_dependent=True, ...)``,
+``hr_payroll_account/models/hr_payroll_structure.py:15-17``; R-3 del registro, §10.7: lectura de la imagen local, PROVISIONAL, no del servidor), y su
+restricción ``_check_journal_id`` (``:19-25``) exige que la moneda del diario coincida con la de la compañía: el diario general de prueba, sin moneda propia,
+la cumple. El ``journal_id`` del recibo es un ``related`` de la estructura en v19 (``hr_payroll_account/models/hr_payslip.py:16``)."""
 
 
 def fijar_diario_de_salarios(env, *estructuras):
