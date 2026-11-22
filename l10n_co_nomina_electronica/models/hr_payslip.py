@@ -200,10 +200,17 @@ class HrPayslip(models.Model):
                 continue    # sin el tipo «Asistencia» no hay desglose: el error ya sale al calcular los días, no al abrir el formulario
             if not clasificacion or not clasificacion['sin_entrada']:
                 continue
+            # Etiquetas de v19 (lectura L-WE3 del consultor, 2026-11-22, PROVISIONAL: imagen docker, el hr_payslip_views.xml del servidor 40509261 DIFIERE):
+            # ``compute_sheet`` NO regenera los días; los regenera la acción de servidor «Recompute Whole Sheet» (``hr_payroll.action_hr_payroll_recompute_whole_sheet``,
+            # ``hr_payroll/views/hr_payslip_views.xml:409-419``, ``binding_model_id`` = hr.payslip, ``binding_view_types`` = list,form, sequence 50), que llama
+            # ``action_refresh_from_work_entries`` (``hr_payroll/models/hr_payslip.py:846``). Menú de las entradas: «Payroll» > «Work Entries» > «Work Entries»
+            # (``hr_work_entry_enterprise/views/hr_payroll_menu.xml:6-33``, acción ``hr_work_entry.hr_work_entry_action``). Son las etiquetas en inglés del
+            # origen. Redacción de TL (2026-11-22): «Acción > Recompute Whole Sheet» (acción de servidor ligada al recibo en lista y formulario) y la ruta «Nómina >
+            # Entradas de trabajo > Entradas de trabajo». PENDIENTE: confirmar en el .po es_CO de v19 la etiqueta traducida de la acción; si difiere, se usa la traducida.
             fechas = ', '.join(dia.strftime('%d/%m/%Y') for dia in sorted(clasificacion['sin_entrada']))
             recibo.l10n_co_ne_aviso_dias = _(
                 'No hay entrada de trabajo de %(empleado)s en: %(fechas)s. Esos días se pagan como laborados con el horario del contrato. '
-                'Revise las entradas de trabajo de esas fechas (Nómina > Entradas de trabajo) y pulse «Actualizar desde entradas de trabajo».',
+                'Revise las entradas de trabajo de esas fechas (Nómina > Entradas de trabajo > Entradas de trabajo) y use «Acción > Recompute Whole Sheet».',
                 empleado=recibo.employee_id.name, fechas=fechas)
 
     @api.depends('company_id.l10n_co_ne_environment', 'company_id.l10n_co_ne_certification_process')
