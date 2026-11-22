@@ -2232,14 +2232,38 @@ class HrPayslip(models.Model):
             dominio.append(('date_from', '>=', version.contract_date_start))
         return dominio
 
-    def _ne_rango_activo(self):
-        """(ini, fin) del tramo pagable en que el contrato estuvo vigente (ini > fin si no hay ninguno). La fecha de ingreso y la de retiro
-        recortan el rango. Fuente única de ``_ne_dias_bajo_contrato`` y del desglose por fecha (.284)."""
+    def _ne_rango_de_la_version(self, periodo_ini, periodo_fin):
+        """``(ini, fin)`` = ``[periodo_ini, periodo_fin]`` ∩ la vigencia de la VERSIÓN del recibo (``ini > fin`` si no hay ninguno). H-F1-10 (solo v19, doc 82; §11.2 del registro).
+
+        Por qué la versión y no el contrato: el nativo da UN recibo por empleado y contrato con la versión vigente al INICIO del periodo (``_get_valid_version_ids``,
+        ``hr_payroll/models/hr_payslip_run.py:120-172``; ``hr.payslip.version_id = employee._get_version(date_from)``, ``hr_payslip.py:1269-1272``) y marca como ``OUT`` los
+        días fuera de ``version.date_start/_end`` (``hr_payslip.py:914-959``); los días con el sueldo nuevo de un aumento a mitad del periodo van en OTRO recibo (``date_from`` = la
+        fecha del aumento, versión nueva). Cortar por el contrato pagaba la versión vieja completa y contaba dos veces las ausencias posteriores al aumento (doble pago).
+        Vigencia de la versión (``hr/models/hr_version.py:564-580``): ``date_start = max(date_version, contract_date_start)`` (o ``date_version`` sin contrato) y
+        ``date_end = min(date_version de la SIGUIENTE versión − 1 día, contract_date_end)`` (o el que exista; vacío si ninguno). Se lee con ``sudo()``: ambos campos tienen
+        ``groups="hr.group_hr_manager"`` (``hr_version.py:162-163``) y el motor corre con el usuario de nómina.
+
+        LIQUIDACIÓN: el recorte sigue siendo el del CONTRATO. Su ``date_from`` es ``contract_date_start`` y el asistente la crea con la versión MÁS RECIENTE (``hr_liquidacion_wizard.py``):
+        recortar por el rango de ESA versión la dejaría sin los meses anteriores. (Más el mes de ``date_to``, que ya hace ``_ne_tramo_pagable_periodo``.) Borde conocido y NO resuelto
+        aquí: un aumento a mitad del último mes de una liquidación. ``FechaIngreso``/``FechaRetiro``, ``TiempoLaborado``, ING/RET de UGPP y PILA, el documento mensual y
+        ``_ne_dias_prestacion`` son fechas del CONTRATO y no pasan por aquí.
+
+        ÚNICA fuente de la intersección: ``_ne_rango_activo``, ``_ne_ausencia_calendario``, ``_ne_incapacidad_cadenas`` y ``_ne_ausencia_habil`` la llaman; ninguno la reimplementa.
+        El sueldo de cada recibo sigue siendo ``_ne_salario()`` (la versión del recibo): cada uno paga SU tramo con SU sueldo."""
         self.ensure_one()
-        contract = self.version_id
-        periodo_ini, periodo_fin = self._ne_tramo_pagable_periodo()
-        contrato_fin = contract.contract_date_end or periodo_fin
-        return max(periodo_ini, contract.contract_date_start), min(periodo_fin, contrato_fin)
+        version = self.version_id.sudo()
+        if self._ne_es_liquidacion():
+            inicio, fin = version.contract_date_start, version.contract_date_end
+        else:
+            inicio, fin = version.date_start, version.date_end
+        return (max(periodo_ini, inicio) if inicio else periodo_ini), (min(periodo_fin, fin) if fin else periodo_fin)
+
+    def _ne_rango_activo(self):
+        """(ini, fin) del tramo pagable en que la VERSIÓN del recibo estuvo vigente (ini > fin si no hay ninguno; en liquidación, el contrato). La fecha de ingreso y la de retiro
+        recortan el rango, y también un cambio de versión (aumento) a mitad del periodo (``_ne_rango_de_la_version``, H-F1-10). Fuente única de ``_ne_dias_bajo_contrato`` y del
+        desglose por fecha (.284)."""
+        self.ensure_one()
+        return self._ne_rango_de_la_version(*self._ne_tramo_pagable_periodo())
 
     def _ne_dias_bajo_contrato(self):
         """Dias (mes comercial) del tramo pagable en que el contrato estuvo vigente.
@@ -2709,8 +2733,9 @@ class HrPayslip(models.Model):
             return []
         interrupcion = int(self._rule_parameter(
             'l10n_co_dias_interrupcion_prorroga', self._ne_fecha_parametros()))
-        periodo_ini = self._ne_tramo_pagable_periodo()[0]
-        tramo_ini = max(periodo_ini, self.version_id.contract_date_start)
+        # H-F1-10: el tramo del recibo arranca en el inicio de su VERSIÓN (un aumento a mitad de una incapacidad): los días de la cadena anteriores a ese inicio, incluidos los del
+        # recibo de la versión anterior, son los ``previos`` y ocupan las posiciones 1..previos (los 2 días del empleador no se repiten).
+        tramo_ini = self._ne_rango_de_la_version(*self._ne_tramo_pagable_periodo())[0]
         todas = self.env['hr.leave'].search([
             ('employee_id', '=', self.employee_id.id),
             ('state', '=', 'validate'),
@@ -2765,13 +2790,9 @@ class HrPayslip(models.Model):
         H-013, que puede reusar esto mismo con las fechas ya recortadas).
         """
         self.ensure_one()
-        contract = self.version_id
         dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
-        periodo_ini, periodo_fin = self._ne_tramo_pagable_periodo()
-        contrato_ini = contract.contract_date_start
-        contrato_fin = contract.contract_date_end or periodo_fin
-        tramo_ini = max(periodo_ini, contrato_ini)
-        tramo_fin = min(periodo_fin, contrato_fin)
+        # H-F1-10: el recorte es el de la VERSIÓN del recibo (en liquidación, el del contrato): ``_ne_rango_de_la_version``, única fuente de la intersección.
+        tramo_ini, tramo_fin = self._ne_rango_de_la_version(*self._ne_tramo_pagable_periodo())
 
         # Tech Lead (2026-10-08, revisión .77): date_from/date_to son datetimes en UTC: una
         # ausencia que termina de noche en Colombia (UTC-5, ej. el calendario Mar-Dom de
@@ -2877,6 +2898,11 @@ class HrPayslip(models.Model):
         self.ensure_one()
         desde = desde or self.date_from
         hasta = hasta or self.date_to
+        # H-F1-10: la ventana se recorta a la vigencia de la VERSIÓN del recibo (en liquidación, al contrato): tras un aumento a mitad del periodo cada recibo cuenta SOLO las fechas
+        # de su tramo, así las horas (de la versión) y las fechas (del empleado) coinciden y una ausencia no se cuenta en los dos recibos.
+        desde, hasta = self._ne_rango_de_la_version(desde, hasta)
+        if desde > hasta:
+            return 0, []
         leaves = self.env['hr.leave'].search([
             ('employee_id', '=', self.employee_id.id),
             ('state', '=', 'validate'),

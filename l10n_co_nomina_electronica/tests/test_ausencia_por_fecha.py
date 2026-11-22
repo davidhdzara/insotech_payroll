@@ -240,7 +240,10 @@ class TestAusenciaPorFecha(TestDiasPorAsistencia):
         EMPLEADO (a propósito: la liquidación cruza versiones del mismo contrato). Empleado con la versión A hasta el lunes 8 de septiembre y la B desde el martes 9
         (mismo contrato), recibo de la quincena del 1 al 15 de la versión B y vacación del martes 8 al viernes 11: la fecha del 8 es de la versión A (1 entrada) y las
         del 9, 10 y 11 de la B (3 entradas). La línea de vacaciones del recibo de la B dice las MISMAS fechas que sus horas (3), no las del empleado (4).
-        Si falla en la N1, es el defecto que el consultor sospechaba: .300 mezcla fechas del empleado con horas de la versión del recibo."""
+        Si falla en la N1, es el defecto que el consultor sospechaba: .300 mezcla fechas del empleado con horas de la versión del recibo.
+
+        H-F1-10: con ``_ne_rango_de_la_version`` (``_ne_ausencia_habil`` recorta la ventana a la vigencia de la versión del recibo) esta prueba debe PASAR; es el caso del recibo de B
+        de la prueba 3 de ``test_rango_de_la_version`` (que suma además los dos recibos)."""
         empleado, version_a = self._contrato()
         valores_b = {campo: valor for campo, valor in VALORES_COLOMBIA.items() if campo in self.env['hr.version']._fields}
         version_b = self.env['hr.version'].create(dict(
