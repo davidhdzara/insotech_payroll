@@ -4,8 +4,10 @@
 
 Es una VISTA de lo ya calculado, no una fuente de datos: se regenera al final de cada ``compute_sheet`` a partir de ``hr.payslip.line`` (más los
 días trabajados y las novedades) y nada la lee para calcular (el XML DIAN, el asiento, la PILA, la UGPP y la colilla siguen leyendo las líneas).
-Tiene ``display_type`` para que la lista use el widget nativo ``section_and_note_one2many`` del módulo ``account`` (títulos de sección y filas de
-nota como una orden de venta).
+Tiene ``display_type`` (``line_section`` y ``line_note``) para los títulos de sección y las filas de nota. v18: la lista usa el widget nativo
+``section_and_note_one2many`` del módulo ``account`` (como una orden de venta). v19 (decisión de TL, 2026-11-22): lista one2many ESTÁNDAR, con las
+secciones en negrita por ``decoration-bf`` (el menú de filas de sección del widget no se puede ocultar: Duplicate y Delete actúan sobre la sección completa);
+las columnas de valor se ocultan por fila con ``invisible="display_type"``.
 
 Editar una fila es una ACCIÓN que se traduce a la fuente real: en una fila calculada crea o cambia el ajuste de la empresa (pieza 2b); en una fila
 de novedad cambia la novedad (``hr.payslip.input``); «Agregar concepto» crea una novedad; borrar una fila de novedad borra la novedad. El recálculo
@@ -34,7 +36,7 @@ class L10nCoPayslipConcepto(models.Model):
     sequence = fields.Integer(string='Secuencia', default=10)
     display_type = fields.Selection(
         selection=[('line_section', 'Sección'), ('line_note', 'Nota')], default=False,
-        help='Lo lee el widget de secciones y notas de la lista (títulos «Devengados» y «Deducciones» y la nota de los conceptos ajustados).')
+        help='Lo lee la lista (títulos «Devengados» y «Deducciones» y la nota de los conceptos ajustados): negrita en las secciones y cursiva en las notas.')
     name = fields.Text(string='Concepto')
     origen = fields.Selection(
         selection=[('calculado', 'Calculado'), ('novedad', 'Novedad'), ('dias', 'Días trabajados')], string='Origen', required=True,

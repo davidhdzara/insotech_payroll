@@ -5,8 +5,12 @@
          `worked_days_input`; v19 trae dos (hr_payroll/views/hr_payslip_views.xml:176 `worked_days`, con name y con su propio `invisible`, y :193 «Salary Inputs»,
          sin name): se ocultan por `//page[@name='worked_days']` (conservando la condición nativa `not use_worked_day_lines`) y por
          `//field[@name='input_line_ids']/ancestor::page`, y la pestaña nueva va después de la de novedades. Selectores por @name o por el campo que
-         contiene la página (nunca por @string), sin colores ni íconos propios. Lista con el widget nativo section_and_note_one2many del módulo account (secciones y notas como una orden de
-         venta) y SOLO «Agregar concepto» (patrón de sale/views/sale_order_views.xml:511-516 sin las opciones de sección y nota). -->
+         contiene la página (nunca por @string), sin colores ni íconos propios. Lista one2many ESTÁNDAR (decisión de TL, 2026-11-22, para v19: el widget section_and_note_one2many del módulo account pinta en cada
+         fila de sección un menú —Add a line, Add a note, Move Up/Down, Duplicate y Delete, estos dos sobre la sección completa— que no se puede ocultar; v18 conserva el
+         widget). Las secciones salen en negrita con decoration-bf (atributo nativo de la lista, no un color) y las notas en cursiva con decoration-it; las columnas de valor
+         se ocultan por fila con invisible="display_type" (lo que el widget hacía solo); sequence sin el widget handle (con él la lista estándar deja arrastrar cualquier fila,
+         incluidas las secciones: parte de vista de .300b). SOLO «Agregar concepto» (control/create, sin «Agregar sección» ni «Agregar nota»). La papelera sale también en las
+         filas de sección y su error («Las secciones no se pueden borrar.») llega al guardar. decoration-bf en la lista de v19: NO verificado (lo dirán la prueba de vista y la carga). -->
     <record id="view_payslip_form_ne_conceptos" model="ir.ui.view">
         <field name="name">hr.payslip.form.ne.conceptos</field>
         <field name="model">hr.payslip</field>
@@ -26,33 +30,32 @@
                         <strong>Revise las entradas de trabajo</strong><br/>
                         <field name="l10n_co_ne_aviso_dias" readonly="1" nolabel="1"/>
                     </div>
-                    <field name="l10n_co_concepto_ids" nolabel="1" mode="list" widget="section_and_note_one2many"
-                           readonly="state != 'draft'">
-                        <list editable="bottom">
+                    <field name="l10n_co_concepto_ids" nolabel="1" mode="list" readonly="state != 'draft'">
+                        <list editable="bottom" decoration-bf="display_type == 'line_section'" decoration-it="display_type == 'line_note'">
                             <control>
                                 <create name="add_concepto_control" string="Agregar concepto"/>
                             </control>
                             <!-- Como en la lista nativa de novedades (hr_payroll/views/hr_payslip_views.xml:172): el cliente debe enviar el recibo en el
                                  onchange de una fila nueva para calcular qué se puede editar. -->
                             <field name="slip_id" column_invisible="True" required="0"/>
-                            <field name="sequence" widget="handle"/>
+                            <field name="sequence" column_invisible="True"/>
                             <field name="display_type" column_invisible="True"/>
                             <field name="origen" column_invisible="True"/>
                             <field name="ajustado" column_invisible="True"/>
                             <field name="edita_cantidad" column_invisible="True"/>
                             <field name="edita_porcentaje" column_invisible="True"/>
                             <field name="edita_importe" column_invisible="True"/>
-                            <field name="name" widget="section_and_note_text" readonly="origen in ('calculado', 'dias')"/>
+                            <field name="name" readonly="origen in ('calculado', 'dias')"/>
                             <!-- .297/.298: en las filas calculadas el tipo sale vacío, pero en «Agregar concepto» es OBLIGATORIO y ahí se elige: columna OPCIONAL visible por
                                  defecto, el patrón nativo de las listas de Ventas (``optional="show"``; .297 la dejó en ``hide`` y el usuario no veía dónde elegirlo). -->
-                            <field name="input_type_id" optional="show" readonly="id" options="{'no_create': True, 'no_open': True}"/>
-                            <field name="quantity" readonly="not edita_cantidad"/>
-                            <field name="unidad" readonly="1"/>
+                            <field name="input_type_id" optional="show" readonly="id" invisible="display_type" options="{'no_create': True, 'no_open': True}"/>
+                            <field name="quantity" readonly="not edita_cantidad" invisible="display_type"/>
+                            <field name="unidad" readonly="1" invisible="display_type"/>
                             <!-- .297: el % se muestra SOLO si es distinto de 100 y con 2 decimales (la misma regla de la colilla). Atributo nativo ``digits`` del campo
                                  (``web/static/src/views/fields/float/float_field.js:133-139``); ``invisible`` por fila, como ``amount`` y ``total``. -->
-                            <field name="rate" digits="[16, 2]" readonly="not edita_porcentaje" invisible="origen == 'dias' or rate == 100"/>
-                            <field name="amount" readonly="not edita_importe" invisible="origen == 'dias'"/>
-                            <field name="total" readonly="1" invisible="origen == 'dias'"/>
+                            <field name="rate" digits="[16, 2]" readonly="not edita_porcentaje" invisible="display_type or origen == 'dias' or rate == 100"/>
+                            <field name="amount" readonly="not edita_importe" invisible="display_type or origen == 'dias'"/>
+                            <field name="total" readonly="1" invisible="display_type or origen == 'dias'"/>
                         </list>
                     </field>
                     <group col="12">

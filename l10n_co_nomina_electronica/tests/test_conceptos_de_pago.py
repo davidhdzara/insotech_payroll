@@ -111,16 +111,35 @@ class TestConceptosDePago(TransactionCase):
         self.assertEqual(novedades[0].get('invisible'), 'l10n_co_ne_usa_conceptos', 'La pestaña de novedades solo se oculta en estructuras con conceptos')
         self.assertTrue(novedades[0].xpath("following-sibling::page[1][@name='conceptos_de_pago']"), 'Conceptos de pago va después de las novedades')
         campo = pagina.xpath(".//field[@name='l10n_co_concepto_ids']")[0]
-        self.assertEqual(campo.get('widget'), 'section_and_note_one2many')
+        # v19 (decisión de TL, 2026-11-22): lista one2many ESTÁNDAR, sin el widget de ``account``: el menú de filas de sección del widget (Duplicate y Delete sobre la
+        # sección completa, Move Up/Down) no se puede ocultar. v18 conserva el widget.
+        self.assertIsNone(campo.get('widget'), 'Sin el widget section_and_note_one2many en v19')
+        self.assertEqual(campo.get('mode'), 'list')
+        self.assertIn('draft', campo.get('readonly') or '', 'Solo en borrador')
+        lista = campo.xpath(".//list")[0]
+        self.assertEqual(lista.get('decoration-bf'), "display_type == 'line_section'", 'Las secciones salen en negrita (atributo nativo de la lista)')
+        self.assertEqual(lista.get('decoration-it'), "display_type == 'line_note'", 'Las notas salen en cursiva')
         self.assertEqual(len(campo.xpath(".//control/create")), 1, 'Solo «Agregar concepto»')
         self.assertEqual(campo.xpath(".//control/create")[0].get('name'), 'add_concepto_control')
         self.assertFalse(campo.xpath(".//create[@context]"), 'Sin «Agregar sección» ni «Agregar nota»')
         for columna in ('display_type', 'slip_id', 'edita_cantidad', 'edita_porcentaje', 'edita_importe'):
             self.assertTrue(campo.xpath(".//list/field[@name='%s']" % columna), columna)
+        # El texto de la sección y de la nota usa el widget de texto por defecto (``section_and_note_text`` es del widget de ``account``).
+        self.assertIsNone(campo.xpath(".//list/field[@name='name']")[0].get('widget'))
+        # Lo que el widget de ``account`` ocultaba en secciones y notas, la lista estándar lo oculta por fila.
+        for columna in ('input_type_id', 'quantity', 'unidad', 'rate', 'amount', 'total'):
+            invisible = campo.xpath(".//list/field[@name='%s']" % columna)[0].get('invisible') or ''
+            self.assertIn('display_type', invisible, '%s: oculta en las filas de sección y de nota' % columna)
+        # Parte de vista de .300b: sin el widget ``handle`` la lista estándar no deja arrastrar las filas (las secciones incluidas).
+        secuencia = campo.xpath(".//list/field[@name='sequence']")[0]
+        self.assertIsNone(secuencia.get('widget'), 'Sin handle: las filas no se arrastran')
+        self.assertTrue(secuencia.get('column_invisible'), 'La secuencia no se muestra')
         self.assertFalse(pagina.xpath(".//*[@style]"), 'Sin estilos propios')
         self.assertFalse(pagina.xpath(".//i"), 'Sin íconos propios')
         texto = etree.tostring(pagina, encoding='unicode')
-        for prohibido in ('text-muted', 'decoration-', 'fa fa-'):
+        # Negrita y cursiva son atributos nativos de la lista; lo que no hay son colores ni íconos propios.
+        for prohibido in ('text-muted', 'fa fa-', 'decoration-danger', 'decoration-info', 'decoration-muted', 'decoration-primary', 'decoration-success',
+                          'decoration-warning'):
             self.assertNotIn(prohibido, texto)
 
     def test_02_la_vista_heredada_no_selecciona_por_string(self):
