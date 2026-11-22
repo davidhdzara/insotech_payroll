@@ -120,7 +120,7 @@ class TestCalculoDelSalario(TransactionCase):
         self.assertEqual(calculo['rate'].get('invisible'), 'rate == 100')
         conceptos, orden_c = self._columnas_de('conceptos_de_pago', 'l10n_co_concepto_ids')
         self.assertEqual(conceptos['cuenta'].get('optional'), 'hide')
-        self.assertLess(orden_c.index('name'), orden_c.index('cuenta'))
+        self.assertLess(orden_c.index('salary_rule_id'), orden_c.index('cuenta'), 'Con el selector, «Concepto» es la regla: Concepto | Cuenta | Importe | Total')
         self.assertLess(orden_c.index('cuenta'), orden_c.index('amount'))
         for nombre in ('quantity', 'unidad'):
             self.assertEqual(conceptos[nombre].get('invisible'), 'quantity == 1 and rate == 100 and not edita_cantidad', 'Una fila editable sí muestra la cantidad: %s' % nombre)
@@ -438,7 +438,7 @@ class TestCalculoDelSalario(TransactionCase):
         bonificacion = 500000.0
         with Form(recibo) as formulario:
             with formulario.l10n_co_concepto_ids.new() as fila:
-                fila.input_type_id = ref('l10n_co_nomina_electronica.input_co_bonif_sal')
+                fila.salary_rule_id = self.env['hr.salary.rule'].search([('code', '=', 'CO_BONIF_SAL'), ('struct_id', '=', recibo.struct_id.id)], limit=1)   # selector del concepto
                 fila.amount = bonificacion
         # 2. Ajustar un devengado: el importe diario del sueldo básico pasa de 100.000 a 110.000.
         basico = recibo.l10n_co_concepto_ids.filtered(lambda f: f.salary_rule_id.code == 'CO_BASICO')
