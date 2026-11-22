@@ -664,8 +664,9 @@ class TestDiasPorAsistencia(TransactionCase):
             resultado = recibo._ne_ajustar_dias_por_asistencia(valores)
         self.assertEqual([(r['work_entry_type_id'], r['number_of_days'], r['number_of_hours']) for r in resultado], [(asistencia.id, 30.0, 176.0)])
 
-    @unittest.skip('v19: la entrada de trabajo ya no tiene date_start/date_stop (se identifica por date y duration, hr_payroll/models/hr_version.py:216-223): '
-                   'se reescribe cuando se lea hr_work_entry/models/hr_work_entry.py (qué fecha calcula v19 para una entrada nocturna)')
+    @unittest.skip('v19: la premisa (inicio UTC -> fecha local) ya no existe: la entrada tiene date (Date simple, no calculada) y duration '
+                   '(hr_work_entry/models/hr_work_entry.py:28-29, lectura PROVISIONAL de la imagen). Un reemplazo con date/duration depende de '
+                   '_check_if_error() (:258), que puede dejar la entrada en conflicto: se escribe cuando se lea ese metodo')
     def test_la_fecha_de_una_entrada_es_la_local_del_calendario(self):
         """Una entrada de 20:00 a 23:00 (hora de Bogotá) del sábado 12 de septiembre se guarda en UTC como 01:00 a 04:00 del domingo 13: cuenta
         como trabajo del sábado (laborada, fuera del horario) y el domingo queda de descanso."""

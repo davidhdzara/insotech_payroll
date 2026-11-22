@@ -2137,7 +2137,10 @@ class HrPayslip(models.Model):
         Solo cuentan entradas ``draft`` y ``validated`` (los estados que cuenta el nativo; v19: ``hr_payroll/models/hr_version.py:216-223``).
         v19 (diferencia con v18): la entrada del nativo se busca por ``version_id`` y por ``date`` (``Date``, sin hora: ``hr_version.py:219-222``) y
         pesa ``duration``; ya no se convierte el inicio UTC de la entrada a fecha local (sí se convierten los festivos globales, que siguen
-        siendo ``resource.calendar.leaves`` con fechas-hora). NO VERIFICADO: que ``date`` sea la fecha local del calendario de la versión."""
+        siendo ``resource.calendar.leaves`` con fechas-hora). Lectura de la imagen docker local (PROVISIONAL, consultor 2026-11-22): ``date`` es un
+        ``fields.Date(required=True)`` simple, NO calculado (``hr_work_entry/models/hr_work_entry.py:28``), y ``duration`` un ``Float`` (:29); la
+        conversión de inicio/fin a ``date``/``duration`` ocurre al GENERAR las entradas (``hr.version._generate_work_entries_postprocess``,
+        ``hr_version.py:505,526-532``). NO VERIFICADO: en qué zona queda ``date`` al generar."""
         self.ensure_one()
         contrato = self.version_id
         calendario = contrato.resource_calendar_id or self.company_id.resource_calendar_id
@@ -2532,13 +2535,17 @@ class HrPayslip(models.Model):
         if not leaves:
             return 0, []
 
-        periodo_ini_dt = datetime.combine(desde, datetime.min.time())
-        periodo_fin_dt = datetime.combine(hasta + timedelta(days=1), datetime.min.time())
+        # v19 (fix-we): la entrada de trabajo ya NO tiene ``date_start``/``date_stop``: es de UN día, ``date`` (``fields.Date``, requerido, no calculado) con
+        # ``duration`` (``hr_work_entry/models/hr_work_entry.py:28-29``; los valores de trabajo con inicio y fin los convierte
+        # ``hr.version._generate_work_entries_postprocess`` a ``date``/``duration`` antes del ``create``, ``hr_version.py:505,526-532``). ``leave_id`` sigue
+        # existiendo, ahora en ``hr_work_entry_holidays`` (``hr_work_entry_holidays/models/hr_work_entry.py:12``). PROVISIONAL: lectura de la imagen docker
+        # local (``fuentes_odoo19_lectura/19_lwe_*``), no del servidor. En v18 este filtro era el cruce de intervalos [date_start, date_stop) con el periodo
+        # y el día se tomaba de ``date_start.date()`` (UTC); en v19 es ``desde <= date <= hasta`` y el día es ``date``.
         work_entries = self.env['hr.work.entry'].search([
             ('employee_id', '=', self.employee_id.id),
             ('leave_id', 'in', leaves.ids),
-            ('date_start', '<', periodo_fin_dt),
-            ('date_stop', '>', periodo_ini_dt),
+            ('date', '>=', desde),
+            ('date', '<=', hasta),
         ])
 
         entries_by_leave = defaultdict(list)
@@ -2551,7 +2558,7 @@ class HrPayslip(models.Model):
             entries = entries_by_leave.get(leave.id)
             if not entries:
                 continue
-            dias = len({entry.date_start.date() for entry in entries})
+            dias = len({entry.date for entry in entries})
             if dias > 0:
                 ini = max(leave.request_date_from, desde)
                 fin = min(leave.request_date_to, hasta)
