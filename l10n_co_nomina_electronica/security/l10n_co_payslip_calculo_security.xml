@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- E11 pieza 4a (.294): las filas de «Cálculo del salario» son una vista de SOLO LECTURA del recibo: misma visibilidad que el recibo (patrón de
+         security/l10n_co_payslip_concepto_security.xml). v19: la regla nativa del oficial de nómina es [(1, '=', 1)] (hr_payroll/security/hr_payroll_security.xml:37-42), así que la regla
+         de v18 (empleado, departamento, gerente del departamento) dejaría la pestaña vacía para un oficial que sí ve el recibo; igual que en .288 y .289. -->
+    <record id="rule_l10n_co_payslip_calculo_company" model="ir.rule">
+        <field name="name">Cálculo del salario: compañías autorizadas</field>
+        <field name="model_id" ref="model_l10n_co_payslip_calculo"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_l10n_co_payslip_calculo_oficial" model="ir.rule">
+        <field name="name">Cálculo del salario: el oficial de nómina ve todo, como en el recibo (hr_payroll_rule_officer)</field>
+        <field name="model_id" ref="model_l10n_co_payslip_calculo"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('hr_payroll.group_hr_payroll_user'))]"/>
+    </record>
+    <record id="rule_l10n_co_payslip_calculo_administrador" model="ir.rule">
+        <field name="name">Cálculo del salario: el administrador de nómina ve todo</field>
+        <field name="model_id" ref="model_l10n_co_payslip_calculo"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('hr_payroll.group_hr_payroll_manager'))]"/>
+    </record>
+</odoo>

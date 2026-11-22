@@ -150,4 +150,5 @@ from . import test_novedades_formulario
 from . import test_e11_pieza_2a
 from . import test_ajuste_concepto_recibo
 from . import test_conceptos_de_pago
+from . import test_calculo_del_salario
 from . import test_crons_inactivos
