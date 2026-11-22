@@ -22,6 +22,7 @@ from odoo.exceptions import UserError
 from odoo.tests import Form
 from odoo.tests.common import TransactionCase, tagged
 from .common_version import crear_contrato
+from .common_diario import fijar_diario_de_salarios
 
 _GRUPO_GERENTE = 'hr_payroll.group_hr_payroll_manager'
 _GRUPO_USUARIO = 'hr_payroll.group_hr_payroll_user'
@@ -44,6 +45,7 @@ class TestCalculoDelSalario(TransactionCase):
         cls.general = ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
         cls.prima = ref('l10n_co_nomina_electronica.hr_payroll_structure_co_prima')
         cls.Calculo = cls.env['l10n.co.payslip.calculo']
+        fijar_diario_de_salarios(cls.env, cls.general)      # .296: ``Form`` exige el diario; no se toma de la base
         cls.n = 0
 
     # ── fixtures ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────

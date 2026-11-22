@@ -152,4 +152,5 @@ from . import test_ajuste_concepto_recibo
 from . import test_conceptos_de_pago
 from . import test_colilla_conceptos
 from . import test_calculo_del_salario
+from . import test_diario_de_las_pruebas
 from . import test_crons_inactivos
