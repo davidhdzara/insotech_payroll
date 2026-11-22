@@ -147,3 +147,4 @@ from . import test_crear_contrato
 from . import test_novedades_recalculan_hoja
 from . import test_e11_pieza_1a
 from . import test_novedades_formulario
+from . import test_e11_pieza_2a
