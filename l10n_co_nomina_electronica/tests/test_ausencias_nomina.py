@@ -856,6 +856,31 @@ class TestAusenciasNomina(TransactionCase):
         self.assertGreater(dias_totales, 0)
         self.assertEqual(dias_totales, int(dias_worked))
 
+    def test_una_regeneracion_forzada_de_las_entradas_no_duplica_los_dias_de_la_ausencia(self):
+        """v19 (TL, 2026-11-22; lectura L-WE2 del consultor, PROVISIONAL, imagen docker): ``generate_work_entries(..., force=True)`` deja las entradas
+        NO validadas del rango con ``active=False`` y ``state='cancelled'`` (no las borra) y crea entradas nuevas (``hr_work_entry/models/hr_version.py:461-466,
+        487-495``; ``hr_work_entry.py:270-271``). Los días de la ausencia, medidos por entrada con ``duration``, son los mismos antes y después: las
+        canceladas no cuentan doble. NO EJECUTADA en Odoo: depende de que las entradas nuevas lleven ``leave_id`` (``hr_work_entry_holidays/models/hr_version.py:20-27``)."""
+        employee, contract = self._make_contract('XmlVacRegeneracion')
+        self._make_validated_leave(employee, contract, self.leave_type_vac, date(2026, 9, 16), date(2026, 9, 30))
+        payslip = self._make_payslip(employee, contract, date(2026, 9, 1), date(2026, 9, 30))
+        antes, _detalle = payslip._ne_ausencia_habil('CO_VAC')
+        self.assertGreater(antes, 0, 'Premisa: la ausencia generó entradas de trabajo')
+        entradas = self.env['hr.work.entry'].with_context(active_test=False)
+        dominio = [('employee_id', '=', employee.id), ('leave_id', '!=', False), ('date', '>=', date(2026, 9, 16)), ('date', '<=', date(2026, 9, 30))]
+        previas = entradas.search(dominio)
+        horas_antes = sum(previas.filtered('active').mapped('duration'))
+        self.assertTrue(previas, 'Premisa: hay entradas de la ausencia')
+        contract.generate_work_entries(date(2026, 9, 1), date(2026, 9, 30), force=True)
+        despues, _detalle = payslip._ne_ausencia_habil('CO_VAC')
+        self.assertEqual(despues, antes, 'Regenerar no cambia los días de la ausencia ni los duplica')
+        self.assertTrue(previas.exists() == previas, 'Las entradas viejas no se borran')
+        self.assertTrue(all(not entrada.active and entrada.state == 'cancelled' for entrada in previas),
+                        'Las viejas quedan inactivas y canceladas')
+        nuevas = entradas.search(dominio) - previas
+        self.assertTrue(nuevas, 'Se crearon entradas nuevas con la ausencia')
+        self.assertAlmostEqual(sum(nuevas.filtered('active').mapped('duration')), horas_antes, places=2)
+
     def _festivo_8_dic(self):
         return self.env['resource.calendar.leaves'].create({
             'name': 'Inmaculada Concepción (prueba)',

@@ -2562,9 +2562,16 @@ class HrPayslip(models.Model):
         # existiendo, ahora en ``hr_work_entry_holidays`` (``hr_work_entry_holidays/models/hr_work_entry.py:12``). PROVISIONAL: lectura de la imagen docker
         # local (``fuentes_odoo19_lectura/19_lwe_*``), no del servidor. En v18 este filtro era el cruce de intervalos [date_start, date_stop) con el periodo
         # y el día se tomaba de ``date_start.date()`` (UTC); en v19 es ``desde <= date <= hasta`` y el día es ``date``.
+        # Solo entradas ``draft`` o ``validated`` (TL, 2026-11-22, con L-WE2): ``generate_work_entries(..., force=True)`` deja las entradas no validadas del
+        # rango con ``active=False`` y las pasa a ``state='cancelled'`` (``hr_work_entry/models/hr_work_entry.py:270-271``; ``hr_version.py:461-466,487-489``;
+        # ``_work_entry_fields_to_nullify`` = ``['active']``, ``hr_work_entry/wizard/hr_work_entry_regeneration_wizard.py:94-95``) y crea entradas NUEVAS: las
+        # viejas no se borran y no deben contar doble. ``active_test`` ya las oculta; el filtro de estado lo deja explicito (una entrada cancelada pero
+        # activa tampoco cuenta). La ausencia se mide por DIA con ``duration`` > 0 (en v19 la entrada es de un dia y pesa ``duration``, no un intervalo).
+        # El filtro es por ``employee_id`` y no por ``version_id``: una ventana (liquidacion) puede cruzar versiones del mismo empleado, como en v18.
         work_entries = self.env['hr.work.entry'].search([
             ('employee_id', '=', self.employee_id.id),
             ('leave_id', 'in', leaves.ids),
+            ('state', 'in', ('draft', 'validated')),
             ('date', '>=', desde),
             ('date', '<=', hasta),
         ])
@@ -2579,7 +2586,10 @@ class HrPayslip(models.Model):
             entries = entries_by_leave.get(leave.id)
             if not entries:
                 continue
-            dias = len({entry.date for entry in entries})
+            duracion_por_dia = defaultdict(float)
+            for entry in entries:
+                duracion_por_dia[entry.date] += entry.duration
+            dias = len([dia for dia, horas in duracion_por_dia.items() if horas > 0])
             if dias > 0:
                 ini = max(leave.request_date_from, desde)
                 fin = min(leave.request_date_to, hasta)
