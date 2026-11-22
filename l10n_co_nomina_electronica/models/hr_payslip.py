@@ -2604,24 +2604,25 @@ class HrPayslip(models.Model):
             return valores
         return self._ne_ajustar_dias_por_asistencia(valores)
 
-    def _ne_factor_provision_periodo(self):
-        """Fraccion del mes que cubre este recibo, para las provisiones de prestaciones (CO_PROV_PRIMA, CO_PROV_CESANTIAS y
-        CO_PROV_VACACIONES; CO_PROV_INT_CES la hereda porque es un porcentaje de CO_PROV_CESANTIAS).
+    def _ne_base_prestacional(self, result_rules, campo):
+        """.303 (doc 78): base devengada de las provisiones de prestaciones = suma de lo que pagan en ESTE recibo las reglas ya calculadas con la marca ``campo``
+        (``l10n_co_ne_base_prima_cesantias`` o ``l10n_co_ne_base_vacaciones``; datos planos por regla, sembrados en el XML: sin lista de códigos aquí). La fracción del periodo
+        (mes, quincena, semana, ingreso a mitad de mes), las ausencias sin pago y el auxilio de transporte por días ya vienen en lo devengado: reemplaza al factor de periodo de
+        .279 (``_ne_factor_provision_periodo``), que provisionaba sobre el sueldo del contrato. Los ajustes de la empresa suman por la cascada del motor (``result_rules``).
 
-        Defecto (QA, prenomina de abril de 2026 de Guapante, quincenal): las 4 reglas daban el valor MENSUAL completo en cada
-        recibo, asi que dos quincenas acumulaban el doble en el mes (y en el asiento). Ahora cada regla multiplica su valor mensual
-        por este factor = ``_ne_dias_bajo_contrato()`` / ``l10n_co_dias_mes_comercial``: mes completo = 30/30 = 1.0 EXACTO (el mismo
-        valor de antes, sin diferencia de flotantes), quincena = 15/30 (1 al 15 y 16 al 30 o 31), semana = 7/30 (``_ne_contar_dias``),
-        y un ingreso o retiro a mitad de periodo recorta los dias (``_ne_dias_bajo_contrato``).
-
-        Fuente de dias (opcion A del diseno, aprobada por Tech Lead el 17-nov-2026; la formula contable la confirma David/contador):
-        NO ``_ne_dias_pagables()``. Esa resta TODA ausencia, incluidas las remuneradas (vacaciones, incapacidades, licencias) que se
-        pagan por otro concepto, y dejaria la provision en 0 en una quincena de vacaciones aunque la prestacion sigue causandose.
-        Consecuencia conocida: las ausencias NO descuentan la provision (una licencia no remunerada sobreprovisiona); si debe
-        descontarse es una decision normativa pendiente (variante C del diseno: restar solo las no remuneradas)."""
+        Una regla de la estructura que aún no se calcula (o que no aplica) no suma. v19: ``result_rules`` es un ``DefaultDictPayroll(lambda: dict(total=0, amount=0, quantity=0,
+        rate=0, ytd=0))`` (``hr_payroll/models/hr_payslip.py:25,1085`` del servidor), así que una regla que aún no corrió devuelve ``total = 0`` en vez de lanzar ``KeyError`` (el
+        ``except`` no se activa y no estorba); la lectura inserta esa entrada en el diccionario temporal de resultados, no en las líneas (que salen de ``result``, ``:1245``)."""
         self.ensure_one()
-        dias_mes = self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros())
-        return self._ne_dias_bajo_contrato() / dias_mes
+        # La estructura NO hereda (en Odoo 18 ``hr.payroll.structure`` no tiene ``parent_id``: la N2 «ct» dio 280 errores por ``AttributeError`` al subir por padres, igual que
+        # la regresión «bu» del 16-nov): las reglas con la marca son las de la estructura del recibo. En v19 se porta el mismo estado FINAL (``rule_ids`` existe, §10.13 U7).
+        total = 0.0
+        for regla in self.struct_id.rule_ids.filtered(lambda r: r[campo]):
+            try:
+                total += result_rules[regla.code]['total']
+            except (KeyError, TypeError):
+                continue
+        return total
 
     def _ne_pago_ausencia_calendario(self, codigo, dias, previos=None):
         """Valor a pagar por `dias` calendario corridos de una ausencia de pago por el empleador
