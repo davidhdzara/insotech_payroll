@@ -18,7 +18,7 @@ Referencia: Anexo Técnico V1.0, secciones 6.2.12 (Devengados) y 6.2.13
 """
 
 from odoo import _, api, fields, models
-from odoo.exceptions import ValidationError
+from odoo.exceptions import AccessError, ValidationError
 
 # ──────────────────────────────────────────────────────────────────────────
 # Constantes: conceptos de deducción según el XML DIAN
@@ -229,14 +229,20 @@ class HrSalaryRule(models.Model):
     # ──────────────────────────────────────────────────────────────────────
     # E11 pieza 2a (.287, doc 71c §2 y §7): configuración de «Conceptos de pago». Sembrada en el XML de cada regla; nada en el código.
     # ──────────────────────────────────────────────────────────────────────
+    # .298 (decisión de David, 21-nov, por el riesgo de inexactitud ante la UGPP: art. 179 Ley 1607/2012, mod. art. 314 Ley 1819/2016; Decreto 3033/2013): ya NO
+    # se calcula por la sección de la categoría; es un dato PLANO de cada regla, sembrado explícito en el XML (``True`` solo en los conceptos de pago y las
+    # deducciones voluntarias o pactadas; ``False`` en lo que sale de la ley o del cálculo) y ``False`` por defecto en una regla nueva. Un campo calculado se
+    # recalcularía y pisaría la decisión en cada actualización o al cambiar la estructura. Mismo patrón que ``l10n_co_ne_unidad``.
     l10n_co_ne_ajustable = fields.Boolean(
-        string='Permite ajuste de la empresa',
-        compute='_compute_l10n_co_ne_ajustable', store=True, readonly=False,
+        string='Permite ajuste de la empresa', default=False,
         help='Si está marcada, quien administra la nómina puede cambiar la cantidad, el porcentaje o el importe de esta regla en un recibo '
              'en borrador. El sistema conserva el valor sugerido y quién lo cambió; el ajuste es responsabilidad de la empresa. '
-             'Por defecto está marcada en las reglas de las estructuras que usan «Conceptos de pago» cuya categoría se muestra en '
-             '«Devengados» o «Deducciones» (no en costo de la empresa, bases, totales ni neto: son derivados). Se puede cambiar regla por '
-             'regla; el cambio se conserva mientras no cambie la categoría o la estructura de la regla.')
+             'Solo se marcan los conceptos de pago (sueldo, horas, recargos, bonificaciones, auxilios) y las deducciones voluntarias o '
+             'pactadas (libranzas, cooperativa, AFC, pensión voluntaria, sindicato). NO se marcan los aportes de salud, pensión y FSP del '
+             'empleado, la retención en la fuente, los embargos, los aportes de la empresa, las provisiones, las bases, las incapacidades, '
+             'las licencias ni las vacaciones: su valor sale de la ley o del cálculo y cambiarlo expone a la empresa a inexactitud ante la '
+             'UGPP. Solo el administrador del sistema puede marcarla o desmarcarla. Si se desmarca una regla, los ajustes que tenía en recibos '
+             'en borrador se retiran (con una nota en el recibo); los de recibos confirmados no se tocan.')
     l10n_co_ne_unidad = fields.Selection(
         selection=[('dias', 'Días'), ('horas', 'Horas')],
         string='Unidad de la cantidad',
@@ -263,12 +269,29 @@ class HrSalaryRule(models.Model):
             sugeridos[(recibo.id, self.id)] = tuple(resultado)
         return ajuste.amount, ajuste.quantity, ajuste.rate
 
-    @api.depends('category_id.l10n_co_ne_seccion_concepto', 'struct_id.l10n_co_ne_conceptos_de_pago')
-    def _compute_l10n_co_ne_ajustable(self):
-        for regla in self:
-            regla.l10n_co_ne_ajustable = bool(
-                regla.struct_id.l10n_co_ne_conceptos_de_pago
-                and regla.category_id.l10n_co_ne_seccion_concepto in ('devengados', 'deducciones'))
+    def _ne_exigir_administrador_para_ajustable(self):
+        """Decisión de David (21-nov, riesgo UGPP): marcar o desmarcar «Permite ajuste de la empresa» es del administrador del sistema (``base.group_system``), no del
+        gerente de nómina. El superusuario (carga de datos del módulo, ``-u``) no pasa por aquí. El campo NO usa ``groups=`` a nivel de modelo: el cálculo y las
+        filas de «Conceptos de pago» lo leen con el usuario de nómina. v19: ``has_group`` y ``env.su`` existen (``hr_payroll/models/hr_payslip.py:1730`` usa ``has_group``;
+        ``odoo/orm/environments.py:64-89`` para ``su``; lectura del consultor, §10.2)."""
+        if not self.env.su and not self.env.user.has_group('base.group_system'):
+            raise AccessError(_(
+                'Solo un administrador del sistema puede marcar o desmarcar «Permite ajuste de la empresa» en una regla salarial: decide qué conceptos '
+                'puede cambiar a mano la empresa y un cambio expone la nómina a inexactitud ante la UGPP.'))
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        if any(vals.get('l10n_co_ne_ajustable') for vals in vals_list):
+            self._ne_exigir_administrador_para_ajustable()
+        return super().create(vals_list)
+
+    def write(self, vals):
+        if 'l10n_co_ne_ajustable' in vals:
+            self._ne_exigir_administrador_para_ajustable()
+        res = super().write(vals)
+        if 'l10n_co_ne_ajustable' in vals and not vals['l10n_co_ne_ajustable']:
+            self.env['l10n.co.payslip.ajuste']._retirar_de_reglas_no_ajustables(self)
+        return res
 
     _L10N_CO_ORIGEN_NO_SALARIAL_POR_CODIGO = {
         'CO_AUX_TRANS': 'naturaleza', 'CO_VIATICOS_NOSAL': 'naturaleza',

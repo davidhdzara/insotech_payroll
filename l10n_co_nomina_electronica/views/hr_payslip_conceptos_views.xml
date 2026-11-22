@@ -63,7 +63,6 @@
                             <field name="l10n_co_total_devengado"/>
                             <field name="l10n_co_total_deducciones"/>
                             <field name="net_wage" string="Neto a pagar" class="oe_subtotal_footer_separator"/>
-                            <field name="l10n_co_costo_empresa"/>
                         </group>
                     </group>
                 </page>
