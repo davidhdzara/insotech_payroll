@@ -25,6 +25,7 @@ import base64
 import calendar
 import hashlib
 import logging
+import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
@@ -683,7 +684,16 @@ class HrPayslip(models.Model):
             # E11 pieza 2b (.288): el gancho de ``hr.salary.rule._compute_rule`` anota en este diccionario lo que SUGIRIÓ cada regla ajustada;
             # al terminar el cálculo se registra en cada ajuste (sugerido, aviso de cambio, «sin línea»).
             sugeridos = {}
-            res = super(HrPayslip, recibos.with_context(ne_sugeridos=sugeridos)).compute_sheet()
+            # .290 (v19: la causa SIGUE en ``odoo/orm/environments.py:64-89``, entorno reutilizado si ``cr``, ``uid``, ``su`` y ``context`` son iguales
+            # por valor, ``:75-77``; lectura L1 del consultor, 2026-11-21; ``compute_sheet`` v19 calcula por capas, ``hr_payslip.py:834-840``, y el contexto
+            # se comparte entre ellas: lo que se necesita). ``ne_calculo`` (token único por cálculo) NO es decoración. ``Environment.__new__``
+            # (v18: ``odoo/api.py:570``) recorre
+            # ``transaction.envs`` y devuelve el entorno que ya existe si ``(cr, uid, su, uid_origin, context)`` es IGUAL POR VALOR (``:584-587``): un
+            # ``{}`` nuevo es igual a un ``{}`` viejo. Sin el token, el cálculo recibía el entorno del cálculo anterior con SU diccionario vacío: el
+            # gancho de ``_compute_rule`` escribía lo sugerido allí y ``_ne_registrar_ajustes`` leía este ``sugeridos`` (vacío), así que el ajuste
+            # quedaba «sin línea» aunque sí se aplicaba (N2 «co» de .289: test_02 y test_03). Con el token el contexto nunca coincide con el de otro
+            # cálculo y el diccionario que lee el gancho es siempre este.
+            res = super(HrPayslip, recibos.with_context(ne_sugeridos=sugeridos, ne_calculo=uuid.uuid4().hex)).compute_sheet()
             recibos._ne_registrar_ajustes(sugeridos)
             recibos._ne_regenerar_conceptos()
         colombia._ne_validar_terceros_deducciones()
