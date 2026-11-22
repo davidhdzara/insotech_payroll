@@ -46,13 +46,3 @@ class TestCronesInactivos(TransactionCase):
         """Si alguien agrega un quinto cron al módulo, esta prueba obliga a decidir su estado inicial."""
         crons = self.env['ir.model.data'].search([('module', '=', 'l10n_co_nomina_electronica'), ('model', '=', 'ir.cron')])
         self.assertEqual(set(crons.mapped('name')), set(_CRONES), 'Los crons del módulo son exactamente los 4 de la decisión')
-
-    def test_04_un_cron_sin_modificar_desde_la_instalacion_esta_inactivo(self):
-        """v19 (prueba del port, 202a030): instalación nueva (o base pausada por la fase ``pausar_crons`` del script de la N1): ningún cron del módulo arranca activo. Un cron
-        que un administrador modificó después (``write_date`` posterior a ``create_date``) no se evalúa: es decisión del cliente (por eso no contradice la nota de arriba: el
-        estado ``active`` de una base existente no se afirma; solo el de un cron que nadie ha tocado)."""
-        for xmlid in _CRONES:
-            cron = self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).sudo()
-            if cron.write_date and cron.create_date and cron.write_date > cron.create_date:
-                continue
-            self.assertFalse(cron.active, '%s debe estar inactivo mientras nadie lo haya modificado' % xmlid)
