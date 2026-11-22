@@ -23,6 +23,7 @@ entradas de trabajo». Valores a mano: septiembre de 2026 empieza en martes (22 
 compañía de prueba = 40 h/semana, 8 h por día. NO EJECUTADAS en Odoo.
 """
 
+import json
 import logging
 import unittest
 from datetime import date, datetime, time, timedelta
@@ -510,28 +511,25 @@ class TestDiasPorAsistencia(TransactionCase):
 
     # ── .281: vista de la pestaña ─────────────────────────────────────
     def _pagina_de_dias(self):
+        """v19: la página de los días es ``worked_days`` (``hr_payroll/views/hr_payslip_views.xml:176``)."""
         arch = self.env['hr.payslip'].get_view(view_type='form')['arch']
-        paginas = etree.fromstring(arch).xpath("//page[@name='worked_days_input']")
-        self.assertEqual(len(paginas), 1, 'Falta la página «Días trabajados y entradas» del formulario del recibo')
+        paginas = etree.fromstring(arch).xpath("//page[@name='worked_days']")
+        self.assertEqual(len(paginas), 1, 'Falta la página «Días trabajados» del formulario del recibo')
         return paginas[0]
 
-    @unittest.skip('v19: la página «worked_days_input» no existe (lecturas L11); la vista se rehace en el bloque 2')
-    def test_la_vista_cambia_la_etiqueta_de_las_entradas_por_novedades_de_nomina(self):
-        pagina = self._pagina_de_dias()
-        # Se verifica el RESULTADO (no el selector de la herencia): los separadores directos de la página, en orden.
-        separadores = pagina.xpath('./separator')
-        etiquetas = [separador.get('string') for separador in separadores]
-        self.assertEqual(etiquetas.count('Novedades de nómina'), 1, etiquetas)
-        nuevo = separadores[etiquetas.index('Novedades de nómina')]
-        self.assertTrue(nuevo.xpath("following-sibling::field[@name='input_line_ids']"), 'Va antes de la lista de entradas')
-        self.assertTrue(nuevo.xpath("preceding-sibling::field[@name='worked_days_line_ids']"), 'Va después de la lista de días')
-        self.assertEqual(len(nuevo.xpath('preceding-sibling::separator')), len(separadores) - 1 - len(nuevo.xpath('following-sibling::separator')))
-        # El separador original (el que queda justo antes del nuevo) está oculto: el usuario ve una sola etiqueta para las entradas.
-        original = nuevo.xpath('preceding-sibling::separator[1]')[0]
-        self.assertIn(original.get('invisible'), ('1', 'True', 'true'), 'El separador original queda oculto')
-        self.assertNotEqual(original.get('string'), 'Novedades de nómina')
+    def _pagina_de_novedades(self):
+        """v19: la página de las entradas no tiene ``name`` (:193): se encuentra por el campo que contiene."""
+        arch = self.env['hr.payslip'].get_view(view_type='form')['arch']
+        paginas = etree.fromstring(arch).xpath("//field[@name='input_line_ids']/ancestor::page")
+        self.assertEqual(len(paginas), 1, 'Falta la página de las novedades del formulario del recibo')
+        return paginas[0]
 
-    @unittest.skip('v19: la página «worked_days_input» no existe (lecturas L11); la vista se rehace en el bloque 2')
+    def test_la_vista_cambia_la_etiqueta_de_las_entradas_por_novedades_de_nomina(self):
+        """v18 cambiaba un separador; v19 tiene una página propia para las entradas: su etiqueta es «Novedades de nómina» y la página de los días
+        no la lleva."""
+        self.assertEqual(self._pagina_de_novedades().get('string'), 'Novedades de nómina')
+        self.assertNotEqual(self._pagina_de_dias().get('string'), 'Novedades de nómina')
+
     def test_la_vista_oculta_por_defecto_importe_y_horas_de_la_lista_de_dias(self):
         pagina = self._pagina_de_dias()
         for campo in ('amount', 'number_of_hours'):
@@ -684,7 +682,6 @@ class TestDiasPorAsistencia(TransactionCase):
         self.assertNotIn(date(2026, 9, 13), clasificacion['laborados'])
         self.assertIn(date(2026, 9, 13), clasificacion['descansos'])
 
-    @unittest.skip('v19: la página «worked_days_input» no existe; la vista se rehace en la pieza V-dias')
     def test_la_vista_muestra_el_aviso_de_entradas_antes_de_la_lista_de_dias(self):
         pagina = self._pagina_de_dias()
         campos = pagina.xpath("./div//field[@name='l10n_co_ne_aviso_dias']")
@@ -725,3 +722,19 @@ class TestDiasPorAsistencia(TransactionCase):
             for tipo, dias, _horas in lineas:
                 if tipo.code != 'CO_AJUSTE_MES':
                     self.assertGreaterEqual(dias, 0.0, msg=(caso, tipo.code))
+
+    # ── .282: importe de las novedades con 2 decimales (la parte de vista, diferida a V-dias) ─
+    def test_la_lista_de_novedades_muestra_el_importe_con_dos_decimales(self):
+        """El nativo muestra 300.000,0000: la precisión «Payroll Rate» (4) y un widget que solo recorta ceros tras un punto decimal. La vista usa
+        el widget ``float`` con ``digits`` [16, 2] (solo formato)."""
+        pagina = self._pagina_de_novedades()
+        campos = pagina.xpath(".//field[@name='input_line_ids']/*[self::list or self::tree]/field[@name='amount']")
+        self.assertEqual(len(campos), 1)
+        self.assertEqual(campos[0].get('widget'), 'float')
+        self.assertEqual(json.loads(campos[0].get('digits')), [16, 2])
+
+    def test_la_subvista_de_formulario_de_la_novedad_tambien_muestra_dos_decimales(self):
+        pagina = self._pagina_de_novedades()
+        campos = pagina.xpath(".//field[@name='input_line_ids']/form//field[@name='amount']")
+        self.assertEqual(len(campos), 1)
+        self.assertEqual(json.loads(campos[0].get('digits')), [16, 2])

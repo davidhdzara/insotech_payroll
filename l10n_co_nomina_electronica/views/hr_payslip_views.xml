@@ -211,11 +211,50 @@
     </record>
 
     <!-- ============================================================ -->
-    <!-- v19 (bloque 0): AQUI VIVIA view_payslip_form_ne_dias (.281/.282, doc 68 §11 y §13). Se saca del -->
-    <!-- bloque 0 porque en v19 NO existe la pagina `worked_days_input` (hr_payroll/views/hr_payslip_views.xml: -->
-    <!-- paginas separadas `worked_days` :176 y «Salary Inputs» :193, sin name): sus 6 xpath no cargarian. -->
-    <!-- Vuelve REESCRITO en el bloque 2 (dias trabajados). El texto v18 queda en el historial de git (86d6190). -->
+    <!-- Pestañas «Días trabajados» y «Novedades de nómina» (pieza V-dias; .281, .282 y .284 de v18, doc 68 §11-§13)                    -->
+    <!-- v18 tenía UNA página `worked_days_input` con un separador entre los días y las entradas. v19 trae DOS páginas                      -->
+    <!-- (hr_payroll/views/hr_payslip_views.xml:176 `worked_days` con name, y :193 «Salary Inputs» SIN name): la de los días se ancla        -->
+    <!-- por su @name y la de las novedades por el campo que contiene (`ancestor::page`), nunca por @string (traducible). El texto v18      -->
+    <!-- queda en el historial de git (86d6190, e607400).                                                                                   -->
     <!-- ============================================================ -->
+    <record id="view_payslip_form_ne_dias" model="ir.ui.view">
+        <field name="name">hr.payslip.form.ne.dias</field>
+        <field name="model">hr.payslip</field>
+        <field name="inherit_id" ref="hr_payroll.view_hr_payslip_form"/>
+        <field name="arch" type="xml">
+            <!-- .284 (E2a): aviso (no bloquea) de las fechas sin entrada de trabajo -->
+            <xpath expr="//page[@name='worked_days']/field[@name='worked_days_line_ids']" position="before">
+                <div class="alert alert-warning mb-2" role="alert" invisible="not l10n_co_ne_aviso_dias">
+                    <strong>Revise las entradas de trabajo</strong>
+                    <br/>
+                    <field name="l10n_co_ne_aviso_dias" readonly="1" nolabel="1"/>
+                </div>
+            </xpath>
+            <!-- .281: la lista de días muestra los días; las horas y el importe quedan ocultos por defecto (se pueden mostrar desde el selector de columnas) -->
+            <xpath expr="//page[@name='worked_days']//field[@name='worked_days_line_ids']/list/field[@name='number_of_hours']" position="attributes">
+                <attribute name="optional">hide</attribute>
+            </xpath>
+            <xpath expr="//page[@name='worked_days']//field[@name='worked_days_line_ids']/list/field[@name='amount']" position="attributes">
+                <attribute name="optional">hide</attribute>
+            </xpath>
+            <!-- .281: la pestaña de las entradas se llama «Novedades de nómina» (v18: el separador; v19: la página «Salary Inputs», sin name) -->
+            <xpath expr="//field[@name='input_line_ids']/ancestor::page" position="attributes">
+                <attribute name="string">Novedades de nómina</attribute>
+            </xpath>
+            <!-- .282: el importe de las novedades se ve con DOS decimales (300.000,00). Causa en v18 (leída por TL en el servidor):
+                 hr.payslip.input.amount usa la precisión «Payroll Rate» (4 decimales) y el widget de la lista, float_without_trailing_zeros,
+                 solo recorta ceros tras un PUNTO decimal: con coma decimal (es_CO) los ceros quedan. v19: mismo campo (hr_payslip_input.py:20-22) y
+                 mismo widget en la lista (hr_payslip_views.xml:205). `widget="float"` lo sustituye y `digits` solo formatea la vista; el valor
+                 guardado no cambia. NO VERIFICADO en v19: que FloatField lea `digits` del atributo de la vista (en v18 sí: extractProps). -->
+            <xpath expr="//field[@name='input_line_ids']/list/field[@name='amount']" position="attributes">
+                <attribute name="widget">float</attribute>
+                <attribute name="digits">[16, 2]</attribute>
+            </xpath>
+            <xpath expr="//field[@name='input_line_ids']/form//field[@name='amount']" position="attributes">
+                <attribute name="digits">[16, 2]</attribute>
+            </xpath>
+        </field>
+    </record>
 
     <!-- ============================================================ -->
     <!-- Payslip Tree View                                             -->
