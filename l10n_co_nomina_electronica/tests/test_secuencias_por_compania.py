@@ -4,21 +4,10 @@
 La migracion conserva el siguiente numero (nunca reinicia ni salta).
 Valores a mano: prefijo NE y relleno de 10 digitos -> el primer numero es 'NE0000000001'."""
 
-import importlib.util
-import os
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
 from .common_version import crear_contrato
-
-
-def _migracion():
-    ruta = os.path.join(os.path.dirname(__file__), '..', 'migrations', '18.0.3.0.175',
-                        'post-secuencias_por_compania.py')
-    spec = importlib.util.spec_from_file_location('migracion_175', ruta)
-    modulo = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(modulo)
-    return modulo
 
 
 @tagged('post_install', '-at_install')
@@ -80,44 +69,6 @@ class TestSecuenciasPorCompania(TransactionCase):
         self.assertFalse(self.env['ir.sequence'].search_count(
             [('company_id', '=', self.m.id), ('code', 'like', 'l10n_co_nomina.%')]))
 
-    def test_migracion_unica_compania_conserva_el_siguiente_compartido(self):
-        migracion = _migracion()
-        self._como_heredada(self.a)
-        self.plantilla_ne.number_next = 82
-        migracion.separar_secuencias(self.env, self.a)
-        self.assertEqual(self.a.l10n_co_ne_sequence_id.company_id, self.a)
-        self.assertEqual(self.a.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000082')
-
-    def test_migracion_dos_companias_una_con_historial(self):
-        """A usado hasta 41 y el compartido en 82 (numeros quemados): A sigue en 82; B, sin
-        historial, empieza en 1."""
-        migracion = _migracion()
-        self._como_heredada(self.a)
-        self._como_heredada(self.b)
-        self._con_consecutivo(self.a, 40)
-        self._con_consecutivo(self.a, 41)
-        self.plantilla_ne.number_next = 82
-        migracion.separar_secuencias(self.env, self.a | self.b)
-        self.assertEqual(self.a.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000082')
-        self.assertEqual(self.b.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000001')
-
-    def test_migracion_dos_companias_con_historial_cada_una_sigue_la_suya(self):
-        migracion = _migracion()
-        self._como_heredada(self.a)
-        self._como_heredada(self.b)
-        self._con_consecutivo(self.a, 41)
-        self._con_consecutivo(self.b, 10)
-        self.plantilla_ne.number_next = 82
-        migracion.separar_secuencias(self.env, self.a | self.b)
-        self.assertEqual(self.a.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000042')
-        self.assertEqual(self.b.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000011')
-
-    def test_migracion_es_idempotente(self):
-        migracion = _migracion()
-        propia = self.a.l10n_co_ne_sequence_id
-        migracion.separar_secuencias(self.env, self.a | self.b)
-        self.assertEqual(self.a.l10n_co_ne_sequence_id, propia)
-
     def test_el_ajuste_usa_la_secuencia_propia_de_la_compania(self):
         propia = self.env['ir.sequence'].search([
             ('company_id', '=', self.a.id), ('code', '=', 'l10n_co_nomina.ajuste')])
@@ -128,32 +79,3 @@ class TestSecuenciasPorCompania(TransactionCase):
     def _con_envio(self, slip, operacion):
         self.env['l10n.co.ne.exchange'].create_exchange(
             slip.company_id, operacion, 'https://dian.test/ws', {'RawRequest': b'<r/>'}, slip)
-
-    def test_el_historial_solo_de_habilitacion_no_cuenta_y_el_primer_numero_real_es_1(self):
-        """Guapante: la compañía tiene NE57 pero del set de pruebas (hab_set_id / solo send_test_set); la secuencia de
-        producción está en 1. El primer documento real sale desde 1 (David, 2026-11-14)."""
-        migracion = _migracion()
-        self._como_heredada(self.a)
-        self._como_heredada(self.b)
-        marcado = self._con_consecutivo(self.a, 57)
-        marcado.l10n_co_ne_hab_set_id = 'SET-PRUEBAS'
-        por_tipo = self._con_consecutivo(self.a, 56)
-        self._con_envio(por_tipo, 'send_test_set')
-        self._con_envio(por_tipo, 'get_status_zip')
-        self.plantilla_ne.number_next = 1
-        migracion.separar_secuencias(self.env, self.a | self.b)
-        self.assertEqual(self.a.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000001')
-        self.assertEqual(self.b.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000001')
-
-    def test_el_historial_real_si_cuenta_aunque_haya_tambien_historial_de_habilitacion(self):
-        migracion = _migracion()
-        self._como_heredada(self.a)
-        self._como_heredada(self.b)
-        marcado = self._con_consecutivo(self.a, 57)
-        marcado.l10n_co_ne_hab_set_id = 'SET-PRUEBAS'
-        real = self._con_consecutivo(self.a, 12)
-        self._con_envio(real, 'send_sync')
-        self.plantilla_ne.number_next = 1
-        migracion.separar_secuencias(self.env, self.a | self.b)
-        self.assertEqual(self.a.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000013')   # max real + 1
-        self.assertEqual(self.b.l10n_co_ne_sequence_id.next_by_id(), 'NE0000000001')

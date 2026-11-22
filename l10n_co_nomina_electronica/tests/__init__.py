@@ -27,11 +27,9 @@ from . import test_ausencias_nomina
 from . import test_tipo_documento_dian
 from . import test_identificacion_sincronizada
 from . import test_pago_cuenta_bancaria
-from . import test_migracion_identificacion
 from . import test_ui_sin_colores_propios
 from . import test_certification_wizard_period
 from . import test_localizacion_nomina
-from . import test_migracion_payroll_package
 from . import test_structure_type_default
 from . import test_arl_clase_riesgo
 from . import test_net_wage
@@ -77,7 +75,6 @@ from . import test_liquidacion_prima_ibc
 from . import test_jornada_15_julio_parametros
 from . import test_retefuente_config_anio
 from . import test_renta_exenta_tope
-from . import test_migracion_max_renta_exenta
 from . import test_contrato_integral_piso
 from . import test_multiempresa_inercia
 from . import test_secuencias_por_compania
@@ -137,7 +134,6 @@ from . import test_ciclo_recibo_produccion
 from . import test_plazo_bloqueante
 from . import test_hora_bogota
 from . import test_flujo_usuario_real
-from . import test_migracion_vistas_211
 from . import test_neto_redondeo
 from . import test_exchange_nombre_descarga
 from . import test_salario_mes

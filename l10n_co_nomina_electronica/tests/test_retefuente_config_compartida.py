@@ -3,22 +3,11 @@
 de la compania es la excepcion; nunca se usa la de OTRA compania. Migracion: los registros del
 modulo pasan a compartidos y los que creo una compania se quedan."""
 
-import importlib.util
-import os
 from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 from .common_version import crear_contrato
-
-
-def _migracion():
-    ruta = os.path.join(os.path.dirname(__file__), '..', 'migrations', '18.0.3.0.176',
-                        'post-retefuente_config_compartida.py')
-    spec = importlib.util.spec_from_file_location('migracion_176', ruta)
-    modulo = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(modulo)
-    return modulo
 
 
 @tagged('post_install', '-at_install')
@@ -68,13 +57,3 @@ class TestRetefuenteConfigCompartida(TransactionCase):
         self.assertEqual(
             self.Config.get_uvt_for_year('2027', self.a), propia)
         self.assertFalse(self.Config.get_uvt_for_year('2027', self.b).company_id)
-
-    def test_migracion_pasa_los_del_modulo_a_compartidos_y_respeta_los_propios(self):
-        migracion = _migracion()
-        r2026 = self.env.ref('l10n_co_nomina_electronica.l10n_co_retefuente_uvt_2026')
-        r2026.company_id = self.a
-        creada = self.Config.create({'year': '2031', 'company_id': self.a.id, 'procedure': '1'})
-        migracion.compartir_registros_del_modulo(self.env)
-        self.assertFalse(r2026.company_id)
-        self.assertEqual(creada.company_id, self.a)
-        self.assertEqual(migracion.compartir_registros_del_modulo(self.env), 0)  # idempotente

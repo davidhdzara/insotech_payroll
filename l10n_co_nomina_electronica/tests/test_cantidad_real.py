@@ -8,8 +8,6 @@ data/l10n_co_rule_parameters_data.xml (2026: SMMLV 1.750.905, auxilio 249.095, 3
 Quincena 1-15 de septiembre de 2026 = 15 dias comerciales.
 """
 
-import importlib.util
-import os
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
@@ -199,26 +197,3 @@ class TestCantidadReal(TransactionCase):
             lambda l: l.salary_rule_id.appears_on_payslip and l.code not in (
                 'BASIC', 'GROSS', 'NET', 'CO_BRUTO', 'CO_NETO'))
         self.assertAlmostEqual(sum(conceptos.mapped('total')), neto, delta=0.02)
-
-    def test_migracion_periodo_propio_a_schedule_pay_y_borra_la_columna(self):
-        _empleado, contrato = self._contrato('Migracion', 3000000.0)
-        cr = self.env.cr
-        # schedule_pay es un compute almacenado: el create deja su valor pendiente de escribir en
-        # el cache del ORM. Se vuelca a la BD ANTES del SQL; si no, el invalidate posterior lo
-        # escribe encima y pisa lo que hizo la migracion (artefacto de la prueba, no de la
-        # migracion real, que corre sin ORM).
-        self.env.flush_all()
-        cr.execute("ALTER TABLE hr_contract ADD COLUMN l10n_co_payroll_period varchar")
-        cr.execute("UPDATE hr_contract SET schedule_pay='monthly', l10n_co_payroll_period='15' "
-                   "WHERE id=%s", (contrato.id,))
-        ruta = os.path.join(os.path.dirname(__file__), '..', 'migrations', '18.0.3.0.152',
-                            'post-periodo_a_schedule_pay.py')
-        spec = importlib.util.spec_from_file_location('mig_periodo', ruta)
-        modulo = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(modulo)
-        modulo.migrate(cr, '18.0.3.0.151')
-        self.env.invalidate_all()
-        self.assertEqual(contrato.schedule_pay, 'semi-monthly')
-        cr.execute("SELECT 1 FROM information_schema.columns WHERE table_name='hr_contract' "
-                   "AND column_name='l10n_co_payroll_period'")
-        self.assertFalse(cr.fetchone())

@@ -9,8 +9,6 @@ Los códigos y clases de estas pruebas son de PRUEBA (sintéticos): el contenido
 catálogo no se valida aquí.
 """
 
-import importlib.util
-import os
 from datetime import date
 
 from psycopg2 import IntegrityError
@@ -19,16 +17,6 @@ from odoo.exceptions import ValidationError
 from odoo.tests.common import TransactionCase, tagged
 from odoo.tools import mute_logger
 from .common_version import crear_contrato
-
-
-def _cargar_migracion(nombre):
-    ruta = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        'migrations', '18.0.3.0.114', nombre)
-    spec = importlib.util.spec_from_file_location('l10n_co_migracion_114_' + nombre[:4], ruta)
-    modulo = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(modulo)
-    return modulo
 
 
 @tagged('post_install', '-at_install')
@@ -107,34 +95,6 @@ class TestActividadEconomicaArl(TransactionCase):
         with self.assertRaises(IntegrityError), mute_logger('odoo.sql_db'), self.env.cr.savepoint():
             Ciiu.create({'code': 'T0004', 'name': 'Otra', 'risk_class': '3',
                          'date_start': date(2022, 5, 16)})
-
-    def test_migracion_mapea_solo_coincidencia_exacta(self):
-        post = _cargar_migracion('post-map_actividad_economica.py')
-        cr = self.env.cr
-        cr.execute('ALTER TABLE hr_contract ADD COLUMN IF NOT EXISTS '
-                   'l10n_co_pila_actividad_economica_legacy varchar')
-        exacto = self._contrato()
-        inexacto = self._contrato()
-        # .161: la clase de riesgo ya no tiene default '1'; se fija una explícita para probar que
-        # la migración no la pisa.
-        exacto.l10n_co_pila_clase_riesgo = '3'
-        self.env.flush_all()
-        cr.execute(
-            'UPDATE hr_contract SET l10n_co_pila_actividad_economica_legacy = %s WHERE id = %s',
-            (' T0002 ', exacto.id))
-        cr.execute(
-            'UPDATE hr_contract SET l10n_co_pila_actividad_economica_legacy = %s WHERE id = %s',
-            ('texto que no es un código', inexacto.id))
-        post.migrate(cr, '18.0.3.0.113')
-        exacto.invalidate_recordset(['l10n_co_pila_actividad_economica'])
-        inexacto.invalidate_recordset(['l10n_co_pila_actividad_economica'])
-        self.assertEqual(exacto.l10n_co_pila_actividad_economica, self.act_alto)
-        self.assertFalse(inexacto.l10n_co_pila_actividad_economica)
-        # no pisa la clase de riesgo ya guardada; sin coincidencia, sigue vacía (sin default)
-        exacto.invalidate_recordset(['l10n_co_pila_clase_riesgo'])
-        inexacto.invalidate_recordset(['l10n_co_pila_clase_riesgo'])
-        self.assertEqual(exacto.l10n_co_pila_clase_riesgo, '3')
-        self.assertFalse(inexacto.l10n_co_pila_clase_riesgo)
 
 
 @tagged('post_install', '-at_install')

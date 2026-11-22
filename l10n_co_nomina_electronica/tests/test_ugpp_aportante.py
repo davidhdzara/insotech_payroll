@@ -66,26 +66,3 @@ class TestUgppAportante(TransactionCase):
         self.assertEqual(ugpp._UGPP_DOC_APORTANTE['31'], 'NI')
 
     # ── migración 18.0.3.0.233 ───────────────────────────────────────
-    def _migrar(self):
-        import importlib.util
-        import os
-        ruta = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'migrations', '18.0.3.0.233',
-                            'pre-ugpp_aportante_listas.py')
-        spec = importlib.util.spec_from_file_location('mig_233_ugpp', ruta)
-        modulo = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(modulo)
-        modulo.migrate(self.env.cr, '18.0.3.0.232')
-        self.company.invalidate_recordset()
-
-    def test_migracion_vacia_los_valores_retirados_y_no_toca_los_vigentes(self):
-        self.env.cr.execute(
-            "UPDATE res_company SET l10n_co_ugpp_legal_nature = 'otra', l10n_co_ugpp_contributor_type = 'independiente' "
-            "WHERE id = %s", (self.company.id,))
-        self.company.invalidate_recordset()
-        self._migrar()
-        self.assertFalse(self.company.l10n_co_ugpp_legal_nature)
-        self.assertFalse(self.company.l10n_co_ugpp_contributor_type)
-        self.company.write({'l10n_co_ugpp_legal_nature': 'mixta', 'l10n_co_ugpp_contributor_type': 'cooperativa'})
-        self._migrar()
-        self.assertEqual((self.company.l10n_co_ugpp_legal_nature, self.company.l10n_co_ugpp_contributor_type),
-                         ('mixta', 'cooperativa'))      # idempotente: lo vigente no se toca

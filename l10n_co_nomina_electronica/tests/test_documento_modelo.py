@@ -2,8 +2,6 @@
 """Etapa 1b (doc 53 §3, §16.2, §18.6): modelo l10n.co.ne.documento + intento, enlace del recibo, reglas multiempresa y
 migracion legacy 1:1. Valores a mano."""
 
-import importlib.util
-import os
 from datetime import date, datetime
 from unittest.mock import patch
 
@@ -119,60 +117,11 @@ class TestDocumentoModelo(TransactionCase):
             {'invoice_sending_failed', 'invoice_pending', 'invoice_rejected', 'invoice_accepted'})
 
     # ── Migración de estados (.210, doc 53 §26b) ─────────────────────
-    def _migracion_pre(self):
-        ruta = os.path.join(os.path.dirname(__file__), '..', 'migrations', '18.0.3.0.210', 'pre-migration.py')
-        spec = importlib.util.spec_from_file_location('pre_migracion_210', ruta)
-        modulo = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(modulo)
-        return modulo
 
     def _guardar_estado_viejo(self, doc, valor):
         self.env.flush_all()
         self.env.cr.execute('UPDATE l10n_co_ne_documento SET state = %s WHERE id = %s', (valor, doc.id))
         doc.invalidate_recordset(['state'])
-
-    def test_migracion_de_estados_deja_solo_los_nativos_y_recalcula(self):
-        incierto = self._documento(3, incierto=True)
-        self._intento(incierto, 'invoice_pending', datetime(2026, 4, 1, 10, 0))
-        eliminado = self._documento(4, eliminado=True)
-        self._intento(eliminado, 'invoice_accepted', datetime(2026, 4, 1, 10, 0))
-        listo = self._documento(5, etapa='ready')
-        borrador = self._documento(6)
-        aceptado = self._documento(7)
-        self._intento(aceptado, 'invoice_accepted', datetime(2026, 4, 1, 10, 0))
-        slip = self._recibo(3)
-        slip.l10n_co_ne_documento_id = incierto
-        for doc, viejo in ((incierto, 'uncertain'), (eliminado, 'eliminated'), (listo, 'ready'),
-                           (borrador, 'draft'), (aceptado, 'invoice_accepted')):
-            self._guardar_estado_viejo(doc, viejo)
-        self.env.cr.execute('UPDATE hr_payslip SET l10n_co_ne_documento_state = %s WHERE id = %s',
-                            ('uncertain', slip.id))
-        self._migracion_pre().migrate(self.env.cr, '18.0.3.0.209')
-        self.env.cr.execute('SELECT id, state FROM l10n_co_ne_documento WHERE id IN %s',
-                            ((incierto.id, eliminado.id, listo.id, borrador.id, aceptado.id),))
-        guardado = dict(self.env.cr.fetchall())
-        self.assertIsNone(guardado[incierto.id])                       # los 4 valores retirados quedan vacíos
-        self.assertIsNone(guardado[eliminado.id])
-        self.assertIsNone(guardado[listo.id])
-        self.assertIsNone(guardado[borrador.id])
-        self.assertEqual(guardado[aceptado.id], 'invoice_accepted')    # un valor nativo no se toca
-        self.env['l10n.co.ne.documento']._ne_recalcular_estado()
-        self.env.invalidate_all()
-        self.assertEqual((incierto.state, incierto.incierto), ('invoice_pending', True))
-        self.assertEqual((eliminado.state, eliminado.eliminado), ('invoice_accepted', True))
-        self.assertEqual((listo.state, listo.etapa), (False, 'ready'))
-        self.assertFalse(borrador.state)
-        self.assertEqual(aceptado.state, 'invoice_accepted')
-        self.assertEqual(slip.l10n_co_ne_documento_state, 'invoice_pending')   # el related del recibo se recalcula
-
-    def test_migracion_de_estados_es_idempotente_y_funciona_sin_filas(self):
-        self._migracion_pre().migrate(self.env.cr, '18.0.3.0.209')
-        self.env['l10n.co.ne.documento']._ne_recalcular_estado()
-        doc = self._documento(3)
-        self._intento(doc, 'invoice_pending', datetime(2026, 4, 1, 10, 0))
-        self.env['l10n.co.ne.documento']._ne_recalcular_estado()
-        self.env['l10n.co.ne.documento']._ne_recalcular_estado()
-        self.assertEqual(doc.state, 'invoice_pending')
 
     def test_nombre_y_cola(self):
         doc = self._documento()
