@@ -103,6 +103,60 @@ class TestCalculoDelSalario(TransactionCase):
         pie = [c.get('name') for c in pagina.xpath(".//group[@name='calculo_totales']/field")]
         self.assertEqual(pie, ['l10n_co_costo_empresa'])
 
+    def _columnas_de(self, pagina_name, lista='l10n_co_calculo_ids'):
+        arch = etree.fromstring(self.env['hr.payslip'].get_view(view_type='form')['arch'].encode('utf-8'))
+        campo = arch.xpath("//page[@name='%s']//field[@name='%s']" % (pagina_name, lista))[0]
+        return {c.get('name'): c for c in campo.xpath('.//list/field')}, [c.get('name') for c in campo.xpath('.//list/field')]
+
+    def test_01b_columna_cuenta_visible_en_calculo_y_oculta_en_conceptos_y_sin_ruido_en_las_filas_de_uno_y_cien_por_ciento(self):
+        """Ajuste de David (22-nov): columna «Cuenta» (optional="show" en «Cálculo del salario», "hide" en «Conceptos de pago», sin el diario), «Concepto | Cuenta | Importe |
+        Total» y sin Cantidad, Unidad ni % en las filas de cantidad 1 y 100 %."""
+        calculo, orden = self._columnas_de('calculo_del_salario')
+        self.assertEqual(calculo['cuenta'].get('optional'), 'show')
+        self.assertLess(orden.index('name'), orden.index('cuenta'))
+        self.assertLess(orden.index('cuenta'), orden.index('amount'))
+        for nombre in ('quantity', 'unidad'):
+            self.assertEqual(calculo[nombre].get('invisible'), 'quantity == 1 and rate == 100', nombre)
+        self.assertEqual(calculo['rate'].get('invisible'), 'rate == 100')
+        conceptos, orden_c = self._columnas_de('conceptos_de_pago', 'l10n_co_concepto_ids')
+        self.assertEqual(conceptos['cuenta'].get('optional'), 'hide')
+        self.assertLess(orden_c.index('name'), orden_c.index('cuenta'))
+        self.assertLess(orden_c.index('cuenta'), orden_c.index('amount'))
+        for nombre in ('quantity', 'unidad'):
+            self.assertEqual(conceptos[nombre].get('invisible'), 'quantity == 1 and rate == 100 and not edita_cantidad', 'Una fila editable sí muestra la cantidad: %s' % nombre)
+        self.assertIn('rate == 100', conceptos['rate'].get('invisible'))
+        self.assertNotIn('journal_id', calculo)
+        self.assertNotIn('journal_id', conceptos)
+
+    def test_17_la_cuenta_es_la_de_debito_si_el_valor_es_positivo_y_la_de_credito_si_es_negativo_de_la_compania_del_recibo(self):
+        recibo = self._recibo()
+        Cuenta = self.env['account.account'].with_company(self.company)
+        gasto = Cuenta.create({'code': '510506', 'name': 'Sueldos de prueba', 'account_type': 'expense'})
+        por_pagar = Cuenta.create({'code': '250501', 'name': 'Salarios por pagar de prueba', 'account_type': 'liability_current', 'reconcile': True})
+        sueldo = self.env['hr.salary.rule'].search([('code', '=', 'CO_BASICO'), ('struct_id', '=', recibo.struct_id.id)], limit=1)
+        salud = self.env['hr.salary.rule'].search([('code', '=', 'CO_SALUD_EMP'), ('struct_id', '=', recibo.struct_id.id)], limit=1)
+        sueldo.with_company(self.company).write({'account_debit': gasto.id, 'account_credit': por_pagar.id})
+        salud.with_company(self.company).write({'account_debit': False, 'account_credit': por_pagar.id})
+        self.assertEqual(sueldo._ne_cuenta_contable(100.0, self.company), gasto.display_name, 'Positivo: la de débito')
+        self.assertEqual(sueldo._ne_cuenta_contable(-100.0, self.company), por_pagar.display_name, 'Negativo: la de crédito')
+        self.assertEqual(salud._ne_cuenta_contable(100.0, self.company), por_pagar.display_name, 'Positivo sin débito: la otra')
+        self.assertEqual(salud._ne_cuenta_contable(-100.0, self.company), por_pagar.display_name)
+        sin_cuentas = self.env['hr.salary.rule'].search([('code', '=', 'CO_AUX_TRANS'), ('struct_id', '=', recibo.struct_id.id)], limit=1)
+        self.assertFalse(sin_cuentas.with_company(self.company).account_debit or sin_cuentas.with_company(self.company).account_credit, 'Premisa')
+        self.assertFalse(sin_cuentas._ne_cuenta_contable(100.0, self.company), 'Sin cuenta: vacío, no se inventa')
+        self.assertFalse(sueldo._ne_cuenta_contable(100.0, self.company_b), 'Las cuentas son de cada compañía: la otra no tiene')
+        # en las filas de las dos pestañas, al calcular
+        self.Calculo._regenerar_de_recibos(recibo)
+        self.env['l10n.co.payslip.concepto']._regenerar_de_recibos(recibo)
+        fila_sueldo = recibo.l10n_co_concepto_ids.filtered(lambda f: f.salary_rule_id == sueldo)
+        self.assertEqual(fila_sueldo.cuenta, gasto.display_name)
+        fila_salud = recibo.l10n_co_concepto_ids.filtered(lambda f: f.salary_rule_id == salud)
+        self.assertEqual(fila_salud.cuenta, por_pagar.display_name)
+        en_calculo = self._filas(recibo).filtered(lambda f: f.salary_rule_id == salud)
+        self.assertEqual(en_calculo.cuenta, por_pagar.display_name, 'También en «Cálculo del salario» (aportes del empleado)')
+        sin_regla = recibo.l10n_co_concepto_ids.filtered(lambda f: f.origen == 'dias' or f.display_type)
+        self.assertFalse(any(sin_regla.mapped('cuenta')), 'Las filas de días y los títulos no llevan cuenta')
+
     def test_02_la_vista_heredada_no_selecciona_por_string(self):
         arch = etree.fromstring(self.env.ref('l10n_co_nomina_electronica.view_payslip_form_ne_calculo').arch_db.encode('utf-8'))
         for xpath in arch.xpath('//xpath'):
@@ -120,21 +174,87 @@ class TestCalculoDelSalario(TransactionCase):
         self.assertTrue(prima.l10n_co_calculo_ids, 'Al activar el interruptor de la estructura, el siguiente cálculo genera las filas')
 
     # ── las filas ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
-    def test_04_solo_bases_aportes_de_la_empresa_y_provisiones_sin_las_nativas_ni_los_totales(self):
+    def test_04_solo_bases_aportes_del_empleado_aportes_de_la_empresa_y_provisiones_sin_las_nativas_ni_los_totales(self):
         recibo = self._recibo()
         filas = self._filas(recibo)
         titulos = [f.name for f in filas if f.display_type == 'line_section']
         self.assertEqual(titulos[0], 'Bases', 'Las bases van primero')
         for fuera in ('Básico', 'Devengos', 'Deducciones'):
             self.assertNotIn(fuera, titulos, '.298: %s ya no está aquí: es de «Conceptos de pago»' % fuera)
-        costo = titulos[1:]
+        self.assertEqual(titulos[1], 'Aportes del empleado', 'Ajuste de David (22-nov): los aportes del empleado, informativos, entre las bases y los de la empresa')
+        costo = titulos[2:]
         self.assertTrue(costo, 'Los aportes de la empresa y las provisiones salen cada uno en su sección (el nombre de su categoría)')
         codigos = set(filas.filtered('line_id').mapped('line_id.code'))
-        for ausente in ('BASIC', 'GROSS', 'NET', 'CO_BRUTO', 'CO_NETO', 'CO_BASICO', 'CO_AUX_TRANS', 'CO_SALUD_EMP', 'CO_PENSION_EMP'):
+        for ausente in ('BASIC', 'GROSS', 'NET', 'CO_BRUTO', 'CO_NETO', 'CO_BASICO', 'CO_AUX_TRANS'):
             self.assertNotIn(ausente, codigos, '%s no se muestra (es de «Conceptos de pago» o su categoría no tiene sección)' % ausente)
         self.assertIn('CO_IBC_SP', codigos, 'Las bases (acumuladores) sí se muestran')
         for linea in filas.filtered('line_id').mapped('line_id'):
+            if linea.category_id.l10n_co_ne_aportes_empleado:
+                continue
             self.assertIn(linea.category_id.l10n_co_ne_seccion_concepto, ('bases', 'costo_empresa'), linea.code)
+
+    def test_04b_los_aportes_del_empleado_salen_informativos_en_su_seccion_y_no_suman_al_costo_empresa(self):
+        """Ajuste de David (22-nov): salud, pensión y FSP del EMPLEADO en «Cálculo del salario», sección propia entre Bases y Aportes de la empresa. Siguen también como
+        deducción en «Conceptos de pago» y no suman al «Costo empresa»."""
+        categoria = self.env.ref('l10n_co_nomina_electronica.hr_salary_rule_category_seguridad_social_emp')
+        self.assertTrue(categoria.l10n_co_ne_aportes_empleado, 'La siembra marca la categoría de seguridad social del empleado')
+        otras = self.env['hr.salary.rule.category'].search([('l10n_co_ne_aportes_empleado', '=', True), ('id', '!=', categoria.id)])
+        self.assertFalse(otras, 'Solo esa categoría')
+        recibo = self._recibo()
+        filas = self._filas(recibo)
+        seccion_de, titulo = {}, None
+        for fila in filas:
+            if fila.display_type == 'line_section':
+                titulo = fila.name
+            elif fila.line_id:
+                seccion_de[fila.line_id.code] = titulo
+        lineas = recibo.line_ids.filtered(lambda l: l.total and l.category_id == categoria)
+        self.assertTrue({'CO_SALUD_EMP', 'CO_PENSION_EMP'} <= set(lineas.mapped('code')), 'Premisa: salud y pensión del empleado con valor')
+        for linea in lineas:
+            self.assertEqual(seccion_de[linea.code], 'Aportes del empleado', linea.code)
+            fila = filas.filtered(lambda f: f.line_id == linea)
+            self.assertEqual(fila.total, linea.total, linea.code)
+        # siguen en «Conceptos de pago» (deducciones) y NO suman al costo de la empresa
+        en_conceptos = recibo.l10n_co_concepto_ids.filtered(lambda f: f.line_id in lineas)
+        self.assertEqual(len(en_conceptos), len(lineas))
+        costo = sum(l.total for l in recibo.line_ids if l.category_id.l10n_co_ne_seccion_concepto == 'costo_empresa')
+        self.assertAlmostEqual(recibo.l10n_co_costo_empresa, costo, delta=0.01)
+
+    def test_04d_las_bases_de_la_retencion_salen_solo_si_el_recibo_tiene_retencion(self):
+        """Ajuste de David (22-nov): sin retención en la fuente ver «Retención Fuente - Base Bruto / Base salarial» confunde. Con una línea de retención con valor vuelven a salir."""
+        marcadas = self.env['hr.salary.rule'].search([('l10n_co_ne_calculo_si_retencion', '=', True)])
+        self.assertEqual(set(marcadas.mapped('code')), {'CO_RETEFUENTE_BASE_GROSS', 'CO_RETEFUENTE_BASE_IBC'}, 'La siembra marca solo las dos bases')
+        recibo = self._recibo()
+        bases = recibo.line_ids.filtered(lambda l: l.code in ('CO_RETEFUENTE_BASE_GROSS', 'CO_RETEFUENTE_BASE_IBC') and l.total)
+        self.assertTrue(bases, 'Premisa: el recibo calcula las bases de la retención')
+        self.assertFalse(recibo.line_ids.filtered(lambda l: l.code == 'CO_RETEFUENTE' and l.total), 'Premisa: con 3.000.000 no hay retención')
+        codigos = set(self._filas(recibo).filtered('line_id').mapped('line_id.code'))
+        self.assertFalse(codigos & {'CO_RETEFUENTE_BASE_GROSS', 'CO_RETEFUENTE_BASE_IBC'}, 'Sin retención no salen las bases de la retención')
+        self.assertIn('CO_IBC_SP', codigos, 'Las demás bases salen igual')
+        regla = self.env['hr.salary.rule'].search([('code', '=', 'CO_RETEFUENTE'), ('struct_id', '=', recibo.struct_id.id)], limit=1)
+        self.assertEqual(regla.l10n_co_tercero_origen, 'company_dian', 'Premisa: la retención es de la DIAN')
+        self.env['hr.payslip.line'].create({
+            'slip_id': recibo.id, 'salary_rule_id': regla.id, 'code': 'CO_RETEFUENTE', 'name': regla.name, 'category_id': regla.category_id.id,
+            'version_id': recibo.version_id.id, 'employee_id': recibo.employee_id.id, 'quantity': 1.0, 'rate': 100.0, 'amount': -50000.0, 'total': -50000.0})
+        self.Calculo._regenerar_de_recibos(recibo)
+        codigos = set(self._filas(recibo).filtered('line_id').mapped('line_id.code'))
+        self.assertTrue({'CO_RETEFUENTE_BASE_GROSS', 'CO_RETEFUENTE_BASE_IBC'} <= codigos, 'Con retención vuelven a salir')
+
+    def test_04c_el_fsp_sale_en_la_seccion_de_aportes_del_empleado_solo_si_aplica(self):
+        """Con un sueldo bajo no hay fondo de solidaridad pensional: la sección lleva solo salud y pensión. Con una línea de FSP con valor, sale ahí."""
+        recibo = self._recibo()
+        self.assertFalse(recibo.line_ids.filtered(lambda l: l.code == 'CO_FSP' and l.total), 'Premisa: con 3.000.000 no aplica el FSP')
+        self.assertNotIn('CO_FSP', self._filas(recibo).filtered('line_id').mapped('line_id.code'))
+        fsp = self.env['hr.salary.rule'].search([('code', '=', 'CO_FSP'), ('struct_id', '=', recibo.struct_id.id)], limit=1)
+        linea = self.env['hr.payslip.line'].create({
+            'slip_id': recibo.id, 'salary_rule_id': fsp.id, 'code': 'CO_FSP', 'name': fsp.name, 'category_id': fsp.category_id.id,
+            'version_id': recibo.version_id.id, 'employee_id': recibo.employee_id.id, 'quantity': 1.0, 'rate': 100.0, 'amount': -30000.0, 'total': -30000.0})
+        self.Calculo._regenerar_de_recibos(recibo)
+        fila = self._filas(recibo).filtered(lambda f: f.line_id == linea)
+        self.assertEqual(len(fila), 1)
+        orden = self._filas(recibo)
+        titulo = [f.name for f in orden[:list(orden.ids).index(fila.id)] if f.display_type == 'line_section'][-1]
+        self.assertEqual(titulo, 'Aportes del empleado')
 
     def test_05_las_bases_los_aportes_de_la_empresa_y_las_provisiones_van_en_su_seccion(self):
         recibo = self._recibo()
@@ -388,8 +508,9 @@ class TestCalculoDelSalario(TransactionCase):
         self.assertAlmostEqual(colilla['total_devengado'], recibo.l10n_co_total_devengado, delta=0.01)
         self.assertAlmostEqual(colilla['total_deducciones'], recibo.l10n_co_total_deducciones, delta=0.01)
         self.assertAlmostEqual(colilla['neto'], recibo.net_wage, delta=0.01)
-        calculo = set(self._filas(recibo).filtered('line_id').mapped('line_id'))
-        self.assertFalse(calculo & set(f['linea'] for f in filas), 'Ninguna línea está en la colilla y en «Cálculo del salario» a la vez')
+        # Ajuste de David (22-nov): salud, pensión y FSP del empleado se muestran TAMBIÉN, a nivel informativo, en «Cálculo del salario»; el resto sigue sin repetirse.
+        calculo = {l for l in self._filas(recibo).filtered('line_id').mapped('line_id') if not l.category_id.l10n_co_ne_aportes_empleado}
+        self.assertFalse(calculo & set(f['linea'] for f in filas), 'Ninguna línea (salvo los aportes del empleado, informativos) está en la colilla y en «Cálculo del salario» a la vez')
 
     # ── .299 (c): la fila del exceso del 40 % ─────────────────────────────────────────────────────────────────────────────────
     def _fila_exceso(self, recibo):

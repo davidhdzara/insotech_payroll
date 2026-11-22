@@ -257,6 +257,12 @@ class HrSalaryRule(models.Model):
              'salariales. NO se marcan los pagos que la ley hace todos los meses (auxilio de transporte, auxilio de conectividad del teletrabajo, apoyo de sostenimiento). '
              'Solo el administrador del sistema puede marcarla o desmarcarla. Esta marca se siembra desde el XML del módulo: cada actualización del módulo '
              'devuelve a su valor sembrado la de las reglas de la estructura general; las reglas propias del cliente no se tocan.')
+    # Ajuste de David (22-nov, decisión del TL): las bases de la retención en la fuente solo se muestran en «Cálculo del salario» si el recibo tiene retención.
+    l10n_co_ne_calculo_si_retencion = fields.Boolean(
+        string='En «Cálculo del salario» solo con retención', default=False,
+        help='Si está marcada, la línea de esta regla se muestra en «Cálculo del salario» solo cuando el recibo tiene retención en la fuente distinta de 0 (una línea con valor '
+             'de una regla cuyo tercero es la DIAN). Es de presentación: no cambia el cálculo. De fábrica, las dos bases de la retención en la fuente: sin retención verlas '
+             'confunde.')
     l10n_co_ne_unidad = fields.Selection(
         selection=[('dias', 'Días'), ('horas', 'Horas')],
         string='Unidad de la cantidad',
@@ -389,6 +395,16 @@ class HrSalaryRule(models.Model):
                 ('code', '=', code), ('l10n_co_liq_tratamiento', '=', False),
             ]).write({'l10n_co_liq_tratamiento': trat})
         return True
+
+    def _ne_cuenta_contable(self, total, compania):
+        """Columna «Cuenta» de «Conceptos de pago» y «Cálculo del salario» (ajuste de David, 22-nov): la cuenta contable de la regla en la COMPAÑÍA del recibo, la que aplica
+        al signo del valor (como en los apuntes: un valor positivo va por la cuenta de débito y uno negativo por la de crédito); si falta la que toca se muestra la otra. Sin cuenta, vacío:
+        no se inventa. Las cuentas de la regla son por compañía (``company_dependent``) y las lee con ``sudo``: es solo un texto de presentación, sin el diario."""
+        self.ensure_one()
+        regla = self.sudo().with_company(compania)
+        debito, credito = regla.account_debit, regla.account_credit
+        cuenta = (debito or credito) if total >= 0 else (credito or debito)
+        return cuenta.display_name if cuenta else False
 
     def _l10n_co_cuenta_pasivo(self):
         """Cuenta por pagar de la regla: account_credit si existe (aportes
