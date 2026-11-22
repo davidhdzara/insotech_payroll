@@ -1,66 +1,58 @@
 # -*- coding: utf-8 -*-
-"""Los 4 crons del módulo se instalan INACTIVOS y en ``noupdate`` (v19; decisión de TL, 2026-11-22). NO ejecutadas en Odoo.
+"""Los 4 crons del módulo nacen INACTIVOS en una instalación nueva (decisión del TL, 22-nov; igual que v19) y sus datos son ``noupdate="1"``: una actualización (``-u``) no cambia el
+estado de una base que ya los tiene (producción, con los envíos pausados a mano, queda igual).
 
-Una instalación nueva no envía nada a la DIAN, y menos la habilitación, hasta que el administrador del sistema active el cron (``sin valores por defecto silenciosos``).
-Con ``noupdate="1"`` un ``-u`` posterior no apaga un cron que un cliente ya activó. Llevar a v18 al final de la ruta, con ``noupdate`` obligatorio (en Guapante
-producción están pausados a mano).
+Se afirma sobre el XML de los datos (lo que instala una base nueva) y sobre la marca ``noupdate`` de cada registro en la base (lo que protege a las bases existentes). El estado ``active`` real
+de una base existente es dato de esa base y NO se afirma aquí."""
 
-Las pruebas NO dependen del estado de la base donde corren (lección de la regresión de .283: en la copia de producción los crons estaban archivados): la definición se
-comprueba leyendo los XML del módulo y, en la base, solo se exige que un cron que NADIE ha modificado desde su creación (``write_date`` = ``create_date``) esté inactivo."""
-
-import os
 from lxml import etree
 
 from odoo.tests.common import TransactionCase, tagged
+from odoo.tools import file_open
 
-CRONES = {
-    'ir_cron_ne_habilitacion': 'ir_cron_habilitacion.xml',
-    'ir_cron_ne_documento_send': 'ir_cron_documento_send.xml',
-    'ir_cron_ne_documento_recheck': 'ir_cron_documento_send.xml',
-    'ir_cron_ne_dian_status_recheck': 'ir_cron_dian_status_recheck.xml',
+_CRONES = {
+    'ir_cron_ne_habilitacion': 'data/ir_cron_habilitacion.xml',
+    'ir_cron_ne_dian_status_recheck': 'data/ir_cron_dian_status_recheck.xml',
+    'ir_cron_ne_documento_send': 'data/ir_cron_documento_send.xml',
+    'ir_cron_ne_documento_recheck': 'data/ir_cron_documento_send.xml',
 }
-DIRECTORIO_DATOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, 'data')
 
 
 @tagged('post_install', '-at_install')
-class TestCronsInactivos(TransactionCase):
+class TestCronesInactivos(TransactionCase):
 
-    def _registros_xml(self):
-        """{id: (elemento ``record``, valor de ``noupdate`` del ``data`` que lo contiene)} de los XML de crons del módulo."""
-        registros = {}
-        for archivo in sorted(set(CRONES.values())):
-            arbol = etree.parse(os.path.join(DIRECTORIO_DATOS, archivo))
-            for registro in arbol.xpath("//record[@model='ir.cron']"):
-                contenedor = registro.getparent()
-                registros[registro.get('id')] = (registro, contenedor.get('noupdate') if contenedor.tag == 'data' else None)
-        return registros
+    def _arbol(self, ruta):
+        with file_open('l10n_co_nomina_electronica/%s' % ruta, 'rb') as archivo:
+            return etree.parse(archivo)
 
-    def test_01_los_cuatro_crons_existen(self):
-        for nombre in CRONES:
-            cron = self.env.ref('l10n_co_nomina_electronica.%s' % nombre, raise_if_not_found=False)
-            self.assertTrue(cron, nombre)
-            self.assertEqual(cron._name, 'ir.cron', nombre)
+    def test_01_los_cuatro_crons_estan_en_el_xml_con_active_false(self):
+        for xmlid, ruta in _CRONES.items():
+            registro = self._arbol(ruta).xpath("//record[@id='%s'][@model='ir.cron']" % xmlid)
+            self.assertEqual(len(registro), 1, xmlid)
+            activo = registro[0].xpath("./field[@name='active']")
+            self.assertEqual(len(activo), 1, '%s: debe declarar active explícito' % xmlid)
+            self.assertEqual(activo[0].get('eval'), 'False', '%s nace inactivo' % xmlid)
 
-    def test_02_los_xml_instalan_los_crons_inactivos_y_en_noupdate(self):
-        registros = self._registros_xml()
-        self.assertEqual(set(registros), set(CRONES), 'Los XML definen exactamente los 4 crons del módulo')
-        for nombre, (registro, noupdate) in registros.items():
-            self.assertEqual(noupdate, '1', '%s debe ir dentro de <data noupdate="1">' % nombre)
-            campos = registro.xpath("field[@name='active']")
-            self.assertEqual(len(campos), 1, '%s debe declarar active' % nombre)
-            self.assertEqual(campos[0].get('eval'), 'False', '%s debe instalarse inactivo' % nombre)
+    def test_02_los_datos_de_los_crons_son_noupdate_para_que_el_u_no_cambie_el_estado_de_una_base_existente(self):
+        for xmlid, ruta in _CRONES.items():
+            registro = self._arbol(ruta).xpath("//record[@id='%s']" % xmlid)[0]
+            envolturas = [nodo for nodo in registro.iterancestors() if nodo.get('noupdate') == '1']
+            self.assertTrue(envolturas, '%s está en un bloque noupdate="1" del XML' % xmlid)
+            dato = self.env['ir.model.data'].search([('module', '=', 'l10n_co_nomina_electronica'), ('name', '=', xmlid)])
+            self.assertEqual(len(dato), 1, xmlid)
+            self.assertTrue(dato.noupdate, '%s: la base lo marca noupdate (una actualización no lo toca)' % xmlid)
 
-    def test_03_los_registros_quedaron_en_noupdate_en_la_base(self):
-        datos = self.env['ir.model.data'].sudo().search([
-            ('module', '=', 'l10n_co_nomina_electronica'), ('model', '=', 'ir.cron'), ('name', 'in', list(CRONES))])
-        self.assertEqual(len(datos), len(CRONES))
-        self.assertTrue(all(dato.noupdate for dato in datos), 'Con noupdate, un -u no apaga un cron que el cliente activó')
+    def test_03_todos_los_crons_del_modulo_estan_cubiertos(self):
+        """Si alguien agrega un quinto cron al módulo, esta prueba obliga a decidir su estado inicial."""
+        crons = self.env['ir.model.data'].search([('module', '=', 'l10n_co_nomina_electronica'), ('model', '=', 'ir.cron')])
+        self.assertEqual(set(crons.mapped('name')), set(_CRONES), 'Los crons del módulo son exactamente los 4 de la decisión')
 
     def test_04_un_cron_sin_modificar_desde_la_instalacion_esta_inactivo(self):
-        """Instalación nueva (o base pausada por la fase ``pausar_crons`` del script de la N1): ningún cron del módulo arranca activo. Un cron que un administrador
-        modificó después (``write_date`` posterior a ``create_date``) no se evalúa: es decisión del cliente."""
-        for nombre in CRONES:
-            cron = self.env.ref('l10n_co_nomina_electronica.%s' % nombre).sudo()
+        """v19 (prueba del port, 202a030): instalación nueva (o base pausada por la fase ``pausar_crons`` del script de la N1): ningún cron del módulo arranca activo. Un cron
+        que un administrador modificó después (``write_date`` posterior a ``create_date``) no se evalúa: es decisión del cliente (por eso no contradice la nota de arriba: el
+        estado ``active`` de una base existente no se afirma; solo el de un cron que nadie ha tocado)."""
+        for xmlid in _CRONES:
+            cron = self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).sudo()
             if cron.write_date and cron.create_date and cron.write_date > cron.create_date:
                 continue
-            self.assertFalse(cron.active, '%s debe estar inactivo mientras nadie lo haya modificado' % nombre)
+            self.assertFalse(cron.active, '%s debe estar inactivo mientras nadie lo haya modificado' % xmlid)
