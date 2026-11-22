@@ -12,17 +12,15 @@
         <field name="model_id" ref="model_l10n_co_ne_documento_intento"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
-    <!-- PRINCIPIO (TL/consultor v19, 2026-11-14): la visibilidad de estos modelos es la del recibo nativo de CADA version
-         de Odoo, no una copia fija. En v18 el recibo del oficial se limita por usuario/departamento/gerente; en v19
-         `hr_payroll_rule_officer` es [(1,'=',1)]. Al portar a v19, las reglas del Oficial de este archivo se reescriben
-         a su dominio. -->
-    <!-- Frente 6, P6-3 (doc 59 4.4): la visibilidad de estos modelos no puede exceder la del recibo. Mismo dominio que la
-         regla nativa hr_payroll_rule_officer del recibo para el oficial; el administrador ve todo, como en el recibo.
-         Las reglas de grupo se combinan con O entre si y con Y con la regla global por compania. -->
+    <!-- v19 (pieza P6-3, orden de TL 2026-11-22): la visibilidad de estos modelos es la del recibo NATIVO de v19. La regla nativa del oficial es
+         `hr_payroll_rule_officer` = [(1,'=',1)] (enterprise/hr_payroll/security/hr_payroll_security.xml:37-42, «Payroll officier should have access to all
+         payslips») y la del administrador `hr_payslip_rule_manager` = [(1,'=',1)] (:44-49). Aquí el oficial y el administrador ven todo dentro de las
+         compañías permitidas: solo se conserva la regla global multicompañía (company_id in company_ids), que se combina con Y con las reglas de grupo.
+         En v18 el oficial se limitaba por usuario, departamento y jefe del departamento; esa restricción NO existe en v19. -->
     <record id="rule_l10n_co_ne_documento_oficial" model="ir.rule">
-        <field name="name">Documento mensual DIAN: el oficial de nómina solo ve lo de los empleados que ve en el recibo</field>
+        <field name="name">Documento mensual DIAN: el oficial de nómina ve todo, como en el recibo (hr_payroll_rule_officer)</field>
         <field name="model_id" ref="model_l10n_co_ne_documento"/>
-        <field name="domain_force">['|', '|', ('employee_id.user_id', '=', user.id), ('employee_id.department_id', '=', False), ('employee_id.department_id.manager_id.user_id', '=', user.id)]</field>
+        <field name="domain_force">[(1, '=', 1)]</field>
         <field name="groups" eval="[(4, ref('hr_payroll.group_hr_payroll_user'))]"/>
     </record>
     <record id="rule_l10n_co_ne_documento_administrador" model="ir.rule">
@@ -32,9 +30,9 @@
         <field name="groups" eval="[(4, ref('hr_payroll.group_hr_payroll_manager'))]"/>
     </record>
     <record id="rule_l10n_co_ne_documento_intento_oficial" model="ir.rule">
-        <field name="name">Intentos de envío DIAN: el oficial de nómina solo ve lo de los empleados que ve en el recibo</field>
+        <field name="name">Intentos de envío DIAN: el oficial de nómina ve todo, como en el recibo (hr_payroll_rule_officer)</field>
         <field name="model_id" ref="model_l10n_co_ne_documento_intento"/>
-        <field name="domain_force">['|', '|', ('documento_id.employee_id.user_id', '=', user.id), ('documento_id.employee_id.department_id', '=', False), ('documento_id.employee_id.department_id.manager_id.user_id', '=', user.id)]</field>
+        <field name="domain_force">[(1, '=', 1)]</field>
         <field name="groups" eval="[(4, ref('hr_payroll.group_hr_payroll_user'))]"/>
     </record>
     <record id="rule_l10n_co_ne_documento_intento_administrador" model="ir.rule">
