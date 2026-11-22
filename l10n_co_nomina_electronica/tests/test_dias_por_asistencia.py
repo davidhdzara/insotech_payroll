@@ -637,6 +637,26 @@ class TestDiasPorAsistencia(TransactionCase):
         self.assertIn('11/09/2026', recibo.l10n_co_ne_aviso_dias)
         self.assertEqual(self._linea(recibo, 'CO_BASICO').quantity, 15.0, 'El pago no cambia: lo manda el horario')
 
+    def test_el_aviso_nombra_el_control_que_existe(self):
+        """H-QA-039 (QA, 21-nov): el aviso de v18 decía «pulse Actualizar desde entradas de trabajo» y ese control no existe. Lo real es la acción de servidor nativa
+        «Recompute Whole Sheet» (es: «Recalcular la hoja entera»), que llama a ``action_refresh_from_work_entries``. v19: el texto es el de TL (etiquetas en español,
+        L-WE3/L-WE4 del consultor: «Nómina > Entradas de trabajo > Entradas de trabajo» y el menú del engranaje «Acciones»); la acción nativa es
+        ``hr_payroll.action_hr_payroll_recompute_whole_sheet`` (``hr_payroll/views/hr_payslip_views.xml:409-419``, el código llama al método en :417; lectura de la imagen,
+        PROVISIONAL). La prueba fija el texto y comprueba que esa acción nativa exista y haga lo que el aviso pide. NO EJECUTADA en Odoo."""
+        recibo = self._recibo(date(2026, 9, 1), date(2026, 9, 15))
+        self._entradas_del_dia(recibo, date(2026, 9, 10)).unlink()
+        self._como_ahora(recibo)
+        recibo.invalidate_recordset(['l10n_co_ne_aviso_dias'])
+        aviso = recibo.l10n_co_ne_aviso_dias
+        self.assertIn('10/09/2026', aviso)
+        self.assertIn('«Recalcular la hoja entera»', aviso)
+        self.assertIn('Acciones', aviso)
+        self.assertIn('Entradas de trabajo', aviso)
+        self.assertNotIn('Actualizar desde entradas', aviso, 'Ese control no existe')
+        accion = self.env.ref('hr_payroll.action_hr_payroll_recompute_whole_sheet')
+        self.assertEqual((accion.binding_model_id.model, accion.state), ('hr.payslip', 'code'))
+        self.assertIn('action_refresh_from_work_entries', accion.code)
+
     def test_ajuste_mes_comercial_en_la_quincena_del_16_al_31(self):
         """Agosto tiene 31 días: la quincena 16 al 31 tiene 16 fechas y se pagan 15 (el día 31 no se paga): línea «Ajuste mes comercial» de -1."""
         recibo = self._recibo(date(2026, 8, 16), date(2026, 8, 31))
