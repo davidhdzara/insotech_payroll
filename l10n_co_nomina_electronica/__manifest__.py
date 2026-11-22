@@ -52,6 +52,7 @@ Funcionalidades principales:
         'security/l10n_co_ne_exchange_security.xml',
         'security/l10n_co_company_security.xml',
         'security/l10n_co_ne_documento_security.xml',
+        'security/l10n_co_payslip_ajuste_security.xml',
         # Data
         'data/ir_sequence_data.xml',
         'data/l10n_co_rule_parameters_data.xml',

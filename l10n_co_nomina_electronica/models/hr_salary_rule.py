@@ -233,7 +233,7 @@ class HrSalaryRule(models.Model):
         string='Permite ajuste de la empresa',
         compute='_compute_l10n_co_ne_ajustable', store=True, readonly=False,
         help='Si está marcada, quien administra la nómina puede cambiar la cantidad, el porcentaje o el importe de esta regla en un recibo '
-             'en borrador o en espera. El sistema conserva el valor sugerido y quién lo cambió; el ajuste es responsabilidad de la empresa. '
+             'en borrador. El sistema conserva el valor sugerido y quién lo cambió; el ajuste es responsabilidad de la empresa. '
              'Por defecto está marcada en las reglas de las estructuras que usan «Conceptos de pago» cuya categoría se muestra en '
              '«Devengados» o «Deducciones» (no en costo de la empresa, bases, totales ni neto: son derivados). Se puede cambiar regla por '
              'regla; el cambio se conserva mientras no cambie la categoría o la estructura de la regla.')
@@ -242,6 +242,26 @@ class HrSalaryRule(models.Model):
         string='Unidad de la cantidad',
         help='Unidad con la que se muestra la cantidad de esta regla en «Conceptos de pago». Vacío: la regla es un valor y no tiene unidad '
              '(«valor» no es una unidad).')
+
+    def _compute_rule(self, localdict):
+        """E11 pieza 2b (.288, doc 71c §3): si el recibo tiene un ajuste de la empresa para esta regla, devuelve la tupla ajustada en vez de la
+        sugerida y guarda la sugerida en ``ne_sugeridos`` del contexto (la registra ``HrPayslip._ne_registrar_ajustes``). El bucle nativo
+        (``hr_payroll/models/hr_payslip.py:944-1018``) usa lo que devuelve esta función para el total de la línea, ``localdict`` y las sumas por
+        categoría, así que todo lo posterior (neto, bases, retención, IBC) sigue la cascada. Sin ajuste, o con un ``localdict`` mínimo (pruebas),
+        devuelve exactamente lo de ``super()``."""
+        resultado = super()._compute_rule(localdict)
+        recibo = localdict.get('payslip') if isinstance(localdict, dict) else None
+        if not recibo or not self.l10n_co_ne_ajustable or recibo.state != 'draft' or not recibo.id:
+            return resultado
+        if self.code in (localdict.get('same_type_input_lines') or {}):
+            return resultado                      # varias novedades del mismo código: se editan las novedades, no la regla
+        ajuste = recibo.l10n_co_ajuste_ids.filtered(lambda a: a.salary_rule_id == self)
+        if not ajuste:
+            return resultado
+        sugeridos = self.env.context.get('ne_sugeridos')
+        if sugeridos is not None:
+            sugeridos[(recibo.id, self.id)] = tuple(resultado)
+        return ajuste.amount, ajuste.quantity, ajuste.rate
 
     @api.depends('category_id.l10n_co_ne_seccion_concepto', 'struct_id.l10n_co_ne_conceptos_de_pago')
     def _compute_l10n_co_ne_ajustable(self):
