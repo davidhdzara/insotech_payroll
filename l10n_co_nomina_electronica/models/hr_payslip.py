@@ -205,12 +205,15 @@ class HrPayslip(models.Model):
             # ``hr_payroll/views/hr_payslip_views.xml:409-419``, ``binding_model_id`` = hr.payslip, ``binding_view_types`` = list,form, sequence 50), que llama
             # ``action_refresh_from_work_entries`` (``hr_payroll/models/hr_payslip.py:846``). Menú de las entradas: «Payroll» > «Work Entries» > «Work Entries»
             # (``hr_work_entry_enterprise/views/hr_payroll_menu.xml:6-33``, acción ``hr_work_entry.hr_work_entry_action``). Son las etiquetas en inglés del
-            # origen. Redacción de TL (2026-11-22): «Acción > Recompute Whole Sheet» (acción de servidor ligada al recibo en lista y formulario) y la ruta «Nómina >
-            # Entradas de trabajo > Entradas de trabajo». PENDIENTE: confirmar en el .po es_CO de v19 la etiqueta traducida de la acción; si difiere, se usa la traducida.
+            # origen. Etiquetas en español (L-WE4 del consultor, 2026-11-22, PROVISIONAL: imagen docker; NO existe es_CO.po, solo es.po): «Recompute Whole Sheet» → «Recalcular la
+            # hoja entera» (``hr_payroll/i18n/es.po:4569-4570``), «Payroll» → «Nómina» (:4060-4061), «Work Entries» → «Entradas de trabajo» (``hr_payroll/i18n/es.po:6084-6085``,
+            # ``hr_work_entry_enterprise/i18n/es.po:106-107``). «Acciones» (engranaje del recibo) NO está verificada: ``web/i18n`` no está en la imagen. RECONFIRMAR EN SERVIDOR.
+            # Las traducciones cambian con el idioma del usuario: el texto es el de es; el código ancla por ``@name``/id, no por etiqueta.
             fechas = ', '.join(dia.strftime('%d/%m/%Y') for dia in sorted(clasificacion['sin_entrada']))
             recibo.l10n_co_ne_aviso_dias = _(
                 'No hay entrada de trabajo de %(empleado)s en: %(fechas)s. Esos días se pagan como laborados con el horario del contrato. '
-                'Revise las entradas de trabajo de esas fechas (Nómina > Entradas de trabajo > Entradas de trabajo) y use «Acción > Recompute Whole Sheet».',
+                'Revise las entradas de trabajo de esas fechas (Nómina > Entradas de trabajo > Entradas de trabajo) y use el menú del engranaje (Acciones) > '
+                '«Recalcular la hoja entera».',
                 empleado=recibo.employee_id.name, fechas=fechas)
 
     @api.depends('company_id.l10n_co_ne_environment', 'company_id.l10n_co_ne_certification_process')

@@ -416,7 +416,7 @@ class TestDiasPorAsistencia(TransactionCase):
     # ── recibos ya calculados y estructuras que no se tocan ───────────
     def test_un_recibo_ya_calculado_no_cambia_solo_y_el_boton_lo_actualiza(self):
         """Un recibo calculado con el comportamiento anterior conserva sus líneas al «Calcular hoja» (el nativo no regenera los días);
-        la acción «Recompute Whole Sheet» (``action_refresh_from_work_entries``, solo en borrador; v19: ``hr_payroll/models/hr_payslip.py:846-856``) las rearma
+        la acción «Recalcular la hoja entera» (v19 en inglés «Recompute Whole Sheet»; ``action_refresh_from_work_entries``, solo en borrador; v19: ``hr_payroll/models/hr_payslip.py:846-856``) las rearma
         con los días pagados."""
         recibo = self._recibo()
         self._como_antes(recibo)
