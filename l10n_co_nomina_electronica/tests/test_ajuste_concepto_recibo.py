@@ -347,3 +347,48 @@ class TestAjusteConceptoRecibo(TransactionCase):
         self.assertEqual(ajuste.estado, 'aplicado')
         self.assertAlmostEqual(ajuste.sugerido_total, sugerido, delta=0.01)
         self.assertNotIn('no se aplicó en este cálculo', self._notas(recibo))
+
+    # ── 16-17. varias novedades del mismo código: el gancho no multiplica el ajuste (revisión de TL, 2026-11-22) ────────────────────
+    def _novedad_bonif(self, recibo, monto):
+        return self.env['hr.payslip.input'].create({
+            'payslip_id': recibo.id, 'input_type_id': self.tipo_bonif_nosal.id, 'code': 'CO_BONIF_NOSAL', 'amount': monto})
+
+    def test_16_con_dos_novedades_del_mismo_codigo_el_ajuste_no_se_aplica_ni_se_multiplica(self):
+        """El motor llama a ``_compute_rule`` UNA VEZ POR NOVEDAD cuando la regla tiene varias del mismo código (``same_type_input_lines``): v19
+        ``hr_payroll/models/hr_payslip.py:1184-1187`` (v18 ``:957-958``) y suma los totales. El gancho de .288 devuelve lo NATIVO cuando el código está en
+        ``same_type_input_lines`` (``models/hr_salary_rule.py:256-257``): si devolviera el importe ajustado en cada llamada, el ajuste se multiplicaría por el
+        número de novedades. Con UNA novedad el ajuste se aplica una vez; al agregar la segunda, cada novedad vale lo suyo (sin ajuste), el ajuste queda «No
+        aplicable» con su nota y, al borrar la segunda, vuelve a aplicarse una sola vez."""
+        recibo = self._recibo()
+        self._novedad_bonif(recibo, 100000.0)                              # la hoja se recalcula sola (.283)
+        ajuste = self._ajustar(recibo, 'CO_BONIF_NOSAL', amount=500000.0)
+        recibo.compute_sheet()
+        self.assertEqual(self._total(recibo, 'CO_BONIF_NOSAL'), 500000.0, 'Una novedad: el ajuste se aplica UNA vez')
+        self.assertEqual(ajuste.estado, 'aplicado')
+
+        segunda = self._novedad_bonif(recibo, 30000.0)
+        recibo.compute_sheet()
+        lineas = self._linea(recibo, 'CO_BONIF_NOSAL')
+        self.assertEqual(len(lineas), 2, 'El motor genera una línea por novedad del mismo código')
+        self.assertEqual(sorted(lineas.mapped('total')), [30000.0, 100000.0], 'Cada novedad vale lo suyo: el ajuste no entra en ninguna llamada')
+        self.assertEqual(sum(lineas.mapped('total')), 130000.0, 'Ni el ajuste una vez (500.000) ni multiplicado (1.000.000)')
+        self.assertEqual(ajuste.estado, 'no_aplicable')
+        self.assertIn('no se aplicó en este cálculo', self._notas(recibo))
+
+        segunda.unlink()                                                   # la hoja se recalcula sola (.283)
+        recibo.compute_sheet()
+        self.assertEqual(self._total(recibo, 'CO_BONIF_NOSAL'), 500000.0, 'Otra vez una novedad: el ajuste vuelve a aplicarse UNA vez')
+        self.assertEqual(ajuste.estado, 'aplicado')
+
+    def test_17_el_gancho_devuelve_lo_nativo_si_el_codigo_esta_en_same_type_input_lines(self):
+        """Prueba directa del gancho, sin ``compute_sheet``: con el mismo ``localdict`` el resultado cambia solo por la presencia del código en
+        ``same_type_input_lines`` (``hr_payroll/models/hr_payslip.py:1063-1067,1086``)."""
+        recibo = self._recibo()
+        novedad = self._novedad_bonif(recibo, 100000.0)
+        self._ajustar(recibo, 'CO_BONIF_NOSAL', amount=500000.0)
+        regla = self._regla('CO_BONIF_NOSAL')
+        localdict = recibo._get_localdict()
+        localdict.update({'result': None, 'result_qty': 1.0, 'result_rate': 100, 'result_name': False})
+        self.assertEqual(regla._compute_rule(localdict)[0], 500000.0, 'Una novedad: el gancho devuelve el importe ajustado')
+        localdict['same_type_input_lines'] = {'CO_BONIF_NOSAL': novedad}
+        self.assertEqual(regla._compute_rule(localdict)[0], 100000.0, 'Código con varias novedades: el gancho devuelve lo nativo')
