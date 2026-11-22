@@ -36,6 +36,7 @@ Funcionalidades principales:
         'l10n_co',
         'l10n_latam_base',
         'hr_holidays',
+        'hr_work_entry_holidays',
         'certificate',
     ],
     'external_dependencies': {
