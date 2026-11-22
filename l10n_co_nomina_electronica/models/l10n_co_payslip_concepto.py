@@ -212,6 +212,11 @@ class L10nCoPayslipConcepto(models.Model):
                 for dia in recibo.worked_days_line_ids.sorted(lambda w: (w.sequence, w.id)):
                     if not (dia.number_of_days or dia.number_of_hours):
                         continue
+                    if dia.code == 'OUT':
+                        # v19 agrega la línea «fuera de contrato» cuando la versión empieza o termina a mitad del periodo (``hr_payroll/models/hr_payslip.py:951-958``); no se
+                        # paga (el ``hr_payslip_worked_days.py:43`` nativo le pone importe 0: R16) y no es un día trabajado que mostrar bajo el sueldo. ``code`` es el related
+                        # del tipo de entrada de trabajo (``hr_work_entry_type_out_of_contract``). v18 no genera esta línea.
+                        continue
                     valores.append({
                         'slip_id': recibo.id, 'sequence': siguiente(), 'name': dia.name or dia.work_entry_type_id.name, 'origen': 'dias',
                         'worked_day_id': dia.id, 'quantity': dia.number_of_days, 'unidad': 'dias', 'rate': 0.0})

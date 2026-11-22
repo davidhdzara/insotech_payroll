@@ -49,7 +49,7 @@ class TestConceptosDePago(TransactionCase):
         cls.n = 0
 
     # ── fixtures ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-    def _recibo(self, estructura=None, desde=date(2026, 9, 1), hasta=date(2026, 9, 15), compania=None):
+    def _recibo(self, estructura=None, desde=date(2026, 9, 1), hasta=date(2026, 9, 15), compania=None, inicio=date(2024, 3, 1)):
         type(self).n += 1
         compania = compania or self.company
         empleado = self.env['hr.employee'].create({
@@ -58,7 +58,7 @@ class TestConceptosDePago(TransactionCase):
         contrato = crear_contrato(self.env, {
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
             'name': 'Contrato Conceptos %s' % self.n, 'employee_id': empleado.id, 'company_id': compania.id,
-            'structure_type_id': self.structure_type.id, 'wage': 3000000.0, 'date_start': date(2024, 3, 1), 'state': 'open'})
+            'structure_type_id': self.structure_type.id, 'wage': 3000000.0, 'date_start': inicio, 'state': 'open'})
         recibo = self.env['hr.payslip'].create({
             'name': 'Recibo Conceptos %s' % self.n, 'employee_id': empleado.id, 'version_id': contrato.id, 'company_id': compania.id,
             'struct_id': (estructura or self.general).id, 'date_from': desde, 'date_to': hasta})
@@ -182,6 +182,17 @@ class TestConceptosDePago(TransactionCase):
         pagina = arch.xpath("//page[@name='conceptos_de_pago']")[0]
         pie = [c.get('name') for c in pagina.xpath(".//group[@name='conceptos_totales']/field")]
         self.assertEqual(pie, ['l10n_co_total_devengado', 'l10n_co_total_deducciones', 'net_wage'])
+
+    def test_las_filas_de_dias_no_incluyen_la_linea_fuera_de_contrato_de_v19(self):
+        """Observación del DEV v19 y lectura del consultor (§10.8): si la versión del contrato empieza a mitad del periodo, v19 agrega a ``worked_days_line_ids`` una
+        línea «fuera de contrato» (``code == 'OUT'``, no se paga). ``_valores_del_recibo`` no debe mostrarla como fila de días bajo el sueldo. NO EJECUTADA en Odoo."""
+        recibo = self._recibo(desde=date(2026, 9, 1), hasta=date(2026, 9, 15), inicio=date(2026, 9, 8))
+        fuera = recibo.worked_days_line_ids.filtered(lambda d: d.code == 'OUT' and (d.number_of_days or d.number_of_hours))
+        self.assertTrue(fuera, 'Premisa: v19 agrega la línea fuera de contrato cuando el contrato empieza a mitad del periodo')
+        filas_de_dias = recibo.l10n_co_concepto_ids.filtered(lambda f: f.origen == 'dias')
+        self.assertTrue(filas_de_dias, 'Los días trabajados siguen saliendo bajo el sueldo')
+        self.assertFalse(filas_de_dias.filtered(lambda f: f.worked_day_id.code == 'OUT'), 'La línea fuera de contrato no es una fila de días')
+        self.assertFalse(filas_de_dias.filtered(lambda f: f.worked_day_id in fuera))
 
     # ── estructuras con y sin el interruptor ──────────────────────────────────────────────────────────────────────────────────
     def test_03_solo_las_estructuras_con_el_interruptor_tienen_filas(self):
