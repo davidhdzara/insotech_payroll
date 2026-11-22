@@ -157,3 +157,4 @@ from . import test_crons_inactivos
 from . import test_ausencia_por_fecha
 from . import test_habitualidad_no_salarial
 from . import test_pacto_desalarizacion
+from . import test_consecutivos_proteccion
