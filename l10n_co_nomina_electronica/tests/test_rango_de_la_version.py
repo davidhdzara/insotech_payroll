@@ -131,8 +131,9 @@ class TestRangoDeLaVersion(TransactionCase):
         self.assertEqual(a._ne_ausencia_calendario('CO_INC_COMUN')[0], 6)
         self.assertEqual(b._ne_ausencia_calendario('CO_INC_COMUN')[0], 10)
         self.assertEqual(a._ne_ausencia_calendario('CO_INC_COMUN')[0] + b._ne_ausencia_calendario('CO_INC_COMUN')[0], 16, 'Los días de la ausencia, ni uno más ni uno menos')
-        self.assertEqual(a._ne_incapacidad_cadenas(), [(0, 6)])
-        self.assertEqual(b._ne_incapacidad_cadenas(), [(6, 10)], 'Los tramos continúan en B: 6 días previos y 10 propios')
+        # (previos, días en el periodo, inicio de la INICIAL de la cadena: H-F1-08): la cadena es la misma ausencia, que empezó el 10-sep, en los dos recibos.
+        self.assertEqual(a._ne_incapacidad_cadenas(), [(0, 6, date(2026, 9, 10))])
+        self.assertEqual(b._ne_incapacidad_cadenas(), [(6, 10, date(2026, 9, 10))], 'Los tramos continúan en B: 6 días previos y 10 propios')
         self.assertEqual(a._ne_dias_pagables() + b._ne_dias_pagables() + 16, 30, 'Básico + incapacidad = el periodo; sin doble pago')
 
     # ── 3) aumento a mitad de una vacación (días hábiles) ────────────────────────────────────────────────────────────────────
