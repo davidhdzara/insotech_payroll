@@ -369,7 +369,7 @@ class HrEmployee(models.Model):
     # ──────────────────────────────────────────────────────────────────
     # Información de pago bancario (UX-02, 2026-10-11, decisión de David +
     # Tech Lead): Banco/TipoCuenta/NumeroCuenta ya NO son campos propios --
-    # duplicaban la cuenta bancaria nativa del empleado (bank_account_id,
+    # duplicaban la cuenta bancaria nativa del empleado (primary_bank_account_id,
     # res.partner.bank, visible en "Información privada" > grupo "Contacto
     # privado"). Banco y NumeroCuenta salen de ahí
     # (HrPayslip._ne_pago()); TipoCuenta se omite del XML (es opcional en

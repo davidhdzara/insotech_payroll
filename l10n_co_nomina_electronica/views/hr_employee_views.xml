@@ -53,7 +53,7 @@
 
                 <!-- UX-02 (2026-10-11, precisión de David): Banco/TipoCuenta/
                      NumeroCuenta ya no viven aquí, salen de la Cuenta Bancaria
-                     nativa del empleado (bank_account_id, "Información privada" >
+                     nativa del empleado (primary_bank_account_id, "Información privada" >
                      "Contacto privado"). Este grupo queda solo con el medio de
                      pago, que no tiene equivalente nativo; su ayuda (tooltip)
                      indica dónde se elige la cuenta. -->

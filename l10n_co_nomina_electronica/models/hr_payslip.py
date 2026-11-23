@@ -1788,7 +1788,7 @@ class HrPayslip(models.Model):
         self.ensure_one()
         employee = self.employee_id
         metodo = employee._ne_medio_pago()
-        if metodo == '1' and not employee.bank_account_id:
+        if metodo == '1' and not employee.primary_bank_account_id:
             raise UserError(_(
                 'El empleado %(employee)s no tiene una Cuenta Bancaria configurada '
                 '(Información privada > Contacto privado) y el método de pago es '
@@ -1803,9 +1803,11 @@ class HrPayslip(models.Model):
 
         Antes Banco/TipoCuenta/NumeroCuenta salían de 3 campos propios
         (l10n_co_ne_bank_name/bank_account_type/bank_account), duplicando la cuenta
-        bancaria nativa del empleado (employee.bank_account_id, res.partner.bank, ya
+        bancaria nativa del empleado (employee.primary_bank_account_id, res.partner.bank, ya
         visible en "Información privada" > grupo "Contacto privado"). Ahora Banco =
-        bank_account_id.bank_id.name, NumeroCuenta = bank_account_id.acc_number.
+        primary_bank_account_id.bank_id.name, NumeroCuenta = primary_bank_account_id.acc_number.
+        (v19: ``bank_account_id`` se retiró; ``primary_bank_account_id`` se calcula desde ``bank_account_ids``, la de menor secuencia en
+        ``salary_distribution``: ``hr/models/hr_employee.py:1944-1952``.)
 
         TipoCuenta (Ahorro/Corriente) se OMITE a propósito: no existe ningún campo
         nativo de community ni de l10n_co que represente ese concepto -- acc_type
@@ -1825,13 +1827,13 @@ class HrPayslip(models.Model):
         esta sección -- sin equivalente nativo verificado (no hay nada en
         account.payment.method que mapee a los 3 códigos DIAN 1/2/10 de nómina).
 
-        Si el método es transferencia (código '1') y no hay bank_account_id:
+        Si el método es transferencia (código '1') y no hay primary_bank_account_id:
         UserError explícito, nunca un Banco/NumeroCuenta vacíos enviados a la DIAN.
         """
         self.ensure_one()
         employee = self.employee_id
         metodo = employee._ne_medio_pago()
-        cuenta = employee.bank_account_id
+        cuenta = employee.primary_bank_account_id
         self._ne_validar_cuenta_transferencia()
         return {
             'Forma': '1',  # 1=Contado
