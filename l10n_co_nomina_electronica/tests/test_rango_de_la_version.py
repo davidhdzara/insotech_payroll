@@ -90,7 +90,7 @@ class TestRangoDeLaVersion(TransactionCase):
             version.generate_work_entries(desde, hasta)
         ausencia = self.env['hr.leave'].create({
             'employee_id': empleado.id, 'holiday_status_id': tipo.id, 'request_date_from': desde, 'request_date_to': hasta})
-        ausencia.action_validate()
+        ausencia.action_approve(check_state=False)
         self.assertEqual(ausencia.state, 'validate')
         return ausencia
 

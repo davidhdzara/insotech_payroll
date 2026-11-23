@@ -12,7 +12,7 @@ las 7 reglas de novedad (data/hr_payroll_structure_data.xml) vía HrPayslip._ne_
 
 Precondición operativa verificada contra el código fuente real de Odoo 18.0 community
 (addons/hr_work_entry_holidays/models/hr_leave.py, addons/hr_work_entry_contract/models/
-hr_contract.py), no asumida: hr.leave.action_validate() -> _validate_leave_request() ->
+hr_contract.py), no asumida: hr.leave.action_approve(check_state=False) -> _action_validate() -> _validate_leave_request() ->
 _cancel_work_entry_conflict() SOLO crea los hr.work.entry de la ausencia dentro de la
 ventana [contract.date_generated_from, contract.date_generated_to]. En producción, el cron
 nativo diario de Odoo (ir_cron_generate_missing_work_entries, parte de
@@ -199,7 +199,7 @@ class TestAusenciasNomina(TransactionCase):
             'request_date_from': date_from,
             'request_date_to': date_to,
         })
-        leave.action_validate()
+        leave.action_approve(check_state=False)
         self.assertEqual(leave.state, 'validate')
         return leave
 

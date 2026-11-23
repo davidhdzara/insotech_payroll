@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 from odoo.addons.l10n_co_nomina_electronica.services import dian_utils
 
+from .common_version import crear_empleado_con_contrato
+
 
 # Acciones planificadas de la cola de envío y de las reconsultas. En producción se PAUSAN a propósito (David, 17-nov-2026: ids 76, 77 y 78
 # ``active = False``) y la regresión corre sobre una COPIA de esa base: las pruebas del documento mensual no pueden depender de ese estado.
@@ -40,20 +42,17 @@ class DocumentoFixture:
         """Documento de ``mes`` de 2026 con un recibo por cada (dia de fin, dia de pago)."""
         propietario = self if isinstance(self, type) else type(self)    # acepta la clase (setUpClass) o la instancia
         propietario.n += 1
-        empleado = self.env['hr.employee'].create({
-            'name': 'Empleado Doc %s' % self.n, 'company_id': self.company.id, 'identification_id': '1020304050',
-            'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
-        contrato = self.env['hr.contract'].create({
-            'name': 'Contrato Doc %s' % self.n, 'employee_id': empleado.id, 'company_id': self.company.id,
-            'structure_type_id': self.structure_type.id, 'l10n_co_ne_contract_type': '2',
-            'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
-            'wage': 3000000.0, 'date_start': ingreso, 'date_end': retiro, 'state': 'open'})
+        # v19: ``hr.contract`` no existe; el contrato es una versión (``common_version``). ``crear_empleado_con_contrato`` trae los tipos de trabajador, de contrato y de
+        # cotizante y el medio de pago «Efectivo» (``VALORES_COLOMBIA``), y devuelve ``(empleado, version)``.
+        empleado, contrato = crear_empleado_con_contrato(
+            self.env, self.company, 3000000.0, ingreso, self.structure_type, nombre='Empleado Doc %s' % self.n, fin=retiro,
+            identification_id='1020304050')
         doc = self.env['l10n.co.ne.documento'].create({
-            'company_id': self.company.id, 'employee_id': empleado.id, 'contract_id': contrato.id,
+            'company_id': self.company.id, 'employee_id': empleado.id, 'version_id': contrato.id,
             'period': date(2026, mes, 1)})
         for fin, pago in pagos:
             slip = self.env['hr.payslip'].create({
-                'name': 'Recibo Doc', 'employee_id': empleado.id, 'contract_id': contrato.id,
+                'name': 'Recibo Doc', 'employee_id': empleado.id, 'version_id': contrato.id,
                 'company_id': self.company.id, 'struct_id': self.struct.id,
                 'date_from': date(2026, mes, 1 if fin <= 15 else 16), 'date_to': date(2026, mes, fin)})
             slip.write({'state': 'paid', 'paid_date': date(2026, mes, pago), 'l10n_co_ne_documento_id': doc.id})

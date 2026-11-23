@@ -23,7 +23,7 @@ class TestHabilitacionPermisos(TransactionCase):
         return self.env['res.users'].with_context(no_reset_password=True).create({
             'name': login, 'login': login,
             'company_id': companies[0].id, 'company_ids': [(6, 0, companies.ids)],
-            'groups_id': [(6, 0, [self.env.ref(g).id for g in grupos])],
+            'group_ids': [(6, 0, [self.env.ref(g).id for g in grupos])],
         })
 
     def _start(self, user, company=None):

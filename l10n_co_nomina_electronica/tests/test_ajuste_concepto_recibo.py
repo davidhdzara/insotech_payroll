@@ -97,7 +97,7 @@ class TestAjusteConceptoRecibo(TransactionCase):
         return ' '.join(str(cuerpo) for cuerpo in recibo.message_ids.mapped('body'))
 
     def _usuario(self, login, grupos, companias):
-        # ``groups_id`` en Odoo 18, ``group_ids`` en 19 (NO VERIFICADO el nombre en 19): se elige por ``_fields``, como ``common_version.crear_usuario_nomina``.
+        # ``groups_id`` en Odoo 18, ``group_ids`` en 19 (VERIFICADO en 19: ir_model_fields de 42494857): se elige por ``_fields``, como ``common_version.crear_usuario_nomina``.
         campo_grupos = 'group_ids' if 'group_ids' in self.env['res.users']._fields else 'groups_id'
         return self.env['res.users'].with_context(no_reset_password=True).create({
             'name': login, 'login': login, 'email': '%s@example.com' % login, 'company_id': companias[0].id,

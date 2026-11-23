@@ -25,7 +25,7 @@ class TestAjustesCompaniaMexicana(TransactionCase):
                   cls.env.ref('hr_payroll.group_hr_payroll_manager').id]
         cls.user_mx = cls.env['res.users'].create({
             'name': 'ajustes_mx', 'login': 'ajustes_mx', 'company_id': cls.mx.id,
-            'company_ids': [(6, 0, cls.mx.ids)], 'groups_id': [(6, 0, grupos)]})
+            'company_ids': [(6, 0, cls.mx.ids)], 'group_ids': [(6, 0, grupos)]})
 
     def _valores(self, user, company):
         ajustes = self.env['res.config.settings'].with_user(user).with_context(
@@ -41,7 +41,7 @@ class TestAjustesCompaniaMexicana(TransactionCase):
         user = self.env['res.users'].create({
             'name': 'ajustes_co', 'login': 'ajustes_co', 'company_id': self.co.id,
             'company_ids': [(6, 0, (self.co | self.mx).ids)],
-            'groups_id': [(6, 0, self.user_mx.groups_id.ids)]})
+            'group_ids': [(6, 0, self.user_mx.group_ids.ids)]})
         res = self._valores(user, self.co)
         for campo in CAMPOS_DIARIO:
             self.assertIn(campo, res)

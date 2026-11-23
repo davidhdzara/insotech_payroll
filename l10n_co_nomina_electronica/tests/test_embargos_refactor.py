@@ -37,7 +37,7 @@ class TestEmbargosRefactor(TransactionCase):
             'employee_ids': [(6, 0, [self.employee.id])],
             'company_id': self.company.id, 'other_input_type_id': tipo.id,
             'monthly_amount': monto or 1.0, 'l10n_co_embargo_porcentaje': porcentaje,
-            'date_start': '2026-01-01', 'no_end_date': True,
+            'date_start': '2026-01-01', 'duration_type': 'unlimited',
             'l10n_co_partner_id': self.juzgado.id})
 
     def _legacy(self, neto, smmlv, manual=0.0):

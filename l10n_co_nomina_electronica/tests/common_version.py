@@ -54,7 +54,7 @@ def crear_contrato(env, vals, completar_tipos=True):
     """Equivalente v19 de ``env['hr.contract'].create(vals)`` de las pruebas de v18: devuelve la ``hr.version`` del contrato. NO ejecutado en Odoo.
 
     ``vals`` trae las claves de v18 y se traducen así (``hr.contract`` no existe en v19; ver el encabezado de este archivo):
-    * ``employee_id`` (id o registro): el empleado. ``company_id`` se descarta: la compañía de la versión sale del empleado.
+    * ``employee_id`` (id o registro): el empleado. ``company_id`` se descarta y la compañía de la versión es la del empleado (en el ``create`` se fija explícita).
     * ``date_start`` -> ``date_version`` y, si el contrato es vigente o vencido, ``contract_date_start``. ``date_end`` -> ``contract_date_end``.
     * ``state``: ``hr.version`` no tiene estado (T4 de ``odoo19_migracion/02_inventario_campos_hr_contract.md``). ``'open'`` y ``'close'`` son contrato
       (llevan ``contract_date_start``); ``'draft'`` y ``'cancel'`` NO: la versión queda sin fechas de contrato, que es lo más cercano a «En proceso».
@@ -86,6 +86,9 @@ def crear_contrato(env, vals, completar_tipos=True):
         versiones.write(vals)
         return versiones
     vals['employee_id'] = empleado.id
+    # ``hr.version.company_id`` es ``compute`` + ``default=env.company`` (``hr/models/hr_version.py:52-53``): al CREAR, el default gana y el compute no corre; sin esto la
+    # versión nueva quedaba en la compañía actual y no en la del empleado (la «renovación» del pacto no encontraba la clase de riesgo ARL de la compañía del empleado).
+    vals.setdefault('company_id', empleado.company_id.id)
     return env['hr.version'].create(vals)
 
 
@@ -94,7 +97,7 @@ def crear_usuario_nomina(env, compania, login):
     de ``compania``. Las pruebas corren como superusuario y esconden los AccessError de campos con grupos (``wage``, ``contract_date_*``:
     ``hr_payroll/models/hr_version.py:23-29``); el humo del motor se repite con ``recibo.with_user(este_usuario)``.
 
-    El campo de grupos de ``res.users`` se llama ``groups_id`` en Odoo 18 y ``group_ids`` en Odoo 19: NO VERIFICADO el nombre en 19 (solo
+    El campo de grupos de ``res.users`` se llama ``groups_id`` en Odoo 18 y ``group_ids`` en Odoo 19: VERIFICADO el nombre en 19 (``ir_model_fields`` del servidor 42494857: ``res.users.group_ids``; solo
     se vio ``group_ids`` en acciones, ``odoo/addons/base/models/ir_actions.py:329``); se elige por ``_fields`` en vez de suponerlo."""
     campo_grupos = 'group_ids' if 'group_ids' in env['res.users']._fields else 'groups_id'
     return env['res.users'].with_context(no_reset_password=True).create({

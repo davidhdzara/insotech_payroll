@@ -87,7 +87,7 @@ class TestConceptosDePago(TransactionCase):
         return patch.object(type(recibo), 'compute_sheet', espia), llamadas
 
     def _usuario(self, login, grupos, companias):
-        # ``groups_id`` en Odoo 18, ``group_ids`` en 19 (NO VERIFICADO el nombre en 19): se elige por ``_fields``, como ``common_version.crear_usuario_nomina``.
+        # ``groups_id`` en Odoo 18, ``group_ids`` en 19 (VERIFICADO en 19: ir_model_fields de 42494857): se elige por ``_fields``, como ``common_version.crear_usuario_nomina``.
         campo_grupos = 'group_ids' if 'group_ids' in self.env['res.users']._fields else 'groups_id'
         return self.env['res.users'].with_context(no_reset_password=True).create({
             'name': login, 'login': login, 'email': '%s@example.com' % login, 'company_id': companias[0].id,
@@ -127,7 +127,8 @@ class TestConceptosDePago(TransactionCase):
         # El texto de la sección y de la nota usa el widget de texto por defecto (``section_and_note_text`` es del widget de ``account``).
         self.assertIsNone(campo.xpath(".//list/field[@name='name']")[0].get('widget'))
         # Lo que el widget de ``account`` ocultaba en secciones y notas, la lista estándar lo oculta por fila.
-        for columna in ('input_type_id', 'quantity', 'unidad', 'rate', 'amount', 'total'):
+        # ``input_type_id`` ya no está aquí: desde el selector del concepto (569bdbb) es una columna invisible (``column_invisible``), no una celda por fila.
+        for columna in ('quantity', 'unidad', 'rate', 'amount', 'total'):
             invisible = campo.xpath(".//list/field[@name='%s']" % columna)[0].get('invisible') or ''
             self.assertIn('display_type', invisible, '%s: oculta en las filas de sección y de nota' % columna)
         # Parte de vista de .300b: sin el widget ``handle`` la lista estándar no deja arrastrar las filas (las secciones incluidas).

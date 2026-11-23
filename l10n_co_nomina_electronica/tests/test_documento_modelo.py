@@ -204,7 +204,7 @@ class TestDocumentoModelo(TransactionCase):
         usuario = self.env['res.users'].with_context(no_reset_password=True).create({
             'name': 'Usuario Solo A', 'login': 'solo_a_documento', 'company_id': self.company.id,
             'company_ids': [(6, 0, self.company.ids)],
-            'groups_id': [(6, 0, [grupo.id, self.env.ref('base.group_user').id])]})
+            'group_ids': [(6, 0, [grupo.id, self.env.ref('base.group_user').id])]})
         visibles = self.env['l10n.co.ne.documento'].with_user(usuario).search(
             [('id', 'in', (doc_a | doc_b).ids)])
         self.assertEqual(visibles, doc_a)

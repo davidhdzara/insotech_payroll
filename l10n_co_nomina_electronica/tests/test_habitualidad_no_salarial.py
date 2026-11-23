@@ -206,7 +206,7 @@ class TestHabitualidadNoSalarial(TransactionCase):
         self.assertFalse(self._aviso(noviembre), 'El mismo pago, sin vigilar, no avisa')
 
     def _usuario(self, login, grupos):
-        # El campo de grupos de ``res.users`` es ``groups_id`` en v18 y ``group_ids`` en v19 (NO VERIFICADO el nombre en 19; se elige por ``_fields``, como ``common_version``).
+        # El campo de grupos de ``res.users`` es ``groups_id`` en v18 y ``group_ids`` en v19 (VERIFICADO en 19: ir_model_fields de 42494857; se elige por ``_fields``, como ``common_version``).
         campo_grupos = 'group_ids' if 'group_ids' in self.env['res.users']._fields else 'groups_id'
         return self.env['res.users'].with_context(no_reset_password=True).create({
             'name': login, 'login': login, 'email': '%s@example.com' % login, 'company_id': self.company.id,

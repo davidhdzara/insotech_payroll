@@ -37,7 +37,7 @@ class TestMultiempresaAislamiento(TransactionCase):
         def usuario(login, companias):
             return cls.env['res.users'].create({
                 'name': login, 'login': login, 'company_id': companias[0].id,
-                'company_ids': [(6, 0, companias.ids)], 'groups_id': [(6, 0, grupos)]})
+                'company_ids': [(6, 0, companias.ids)], 'group_ids': [(6, 0, grupos)]})
 
         cls.user_a = usuario('aislamiento_a', cls.a)
         cls.user_b = usuario('aislamiento_b', cls.b)

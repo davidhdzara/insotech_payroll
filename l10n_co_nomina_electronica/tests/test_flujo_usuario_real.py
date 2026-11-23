@@ -47,7 +47,7 @@ class TestFlujoUsuarioReal(DocumentoFixture, TransactionCase):
             'name': 'Usuario %s' % login, 'login': login, 'email': '%s@example.com' % login,
             'company_id': cls.company.id,
             'company_ids': [(6, 0, cls.company.ids)],
-            'groups_id': [(6, 0, [cls.env.ref('base.group_user').id, cls.env.ref(grupo).id])]})
+            'group_ids': [(6, 0, [cls.env.ref('base.group_user').id, cls.env.ref(grupo).id])]})
         return usuario
 
     def setUp(self):

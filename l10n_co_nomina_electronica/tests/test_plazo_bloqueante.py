@@ -79,7 +79,7 @@ class TestPlazoBloqueante(DocumentoFixture, TransactionCase):
             grupos.append(self.env.ref('hr_payroll.group_hr_payroll_manager').id)
         return self.env['res.users'].with_context(no_reset_password=True).create({
             'name': 'Usuario %s' % ('admin' if admin else 'sin admin'), 'login': 'plazo_%s' % int(admin), 'email': 'plazo_%s@example.com' % int(admin),
-            'company_id': self.company.id, 'company_ids': [(6, 0, self.company.ids)], 'groups_id': [(6, 0, grupos)]})
+            'company_id': self.company.id, 'company_ids': [(6, 0, self.company.ids)], 'group_ids': [(6, 0, grupos)]})
 
     # ── configuración ────────────────────────────────────────────────
     def test_el_bloqueo_esta_apagado_por_defecto_y_se_edita_en_ajustes(self):

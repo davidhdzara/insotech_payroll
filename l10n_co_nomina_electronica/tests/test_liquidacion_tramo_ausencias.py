@@ -51,7 +51,7 @@ class TestLiquidacionTramoAusencias(TransactionCase):
         leave = self.env['hr.leave'].create({
             'employee_id': employee.id, 'holiday_status_id': (leave_type or self.leave_type_vac).id,
             'request_date_from': vac_desde, 'request_date_to': vac_hasta})
-        leave.action_validate()
+        leave.action_approve(check_state=False)
         self.assertEqual(leave.state, 'validate')
         # Como lo crea el asistente: date_from = inicio de contrato.
         slip = self.env['hr.payslip'].create({
@@ -120,7 +120,7 @@ class TestLiquidacionTramoAusencias(TransactionCase):
             leave = self.env['hr.leave'].create({
                 'employee_id': employee.id, 'holiday_status_id': tipo.id,
                 'request_date_from': desde, 'request_date_to': hasta})
-            leave.action_validate()
+            leave.action_approve(check_state=False)
         slip = self.env['hr.payslip'].create({
             'name': 'Liquidación %s' % name, 'employee_id': employee.id,
             'version_id': contract.id, 'company_id': self.company.id,
@@ -204,7 +204,7 @@ class TestLiquidacionTramoAusencias(TransactionCase):
         leave = self.env['hr.leave'].create({
             'employee_id': employee.id, 'holiday_status_id': self.leave_type_vac.id,
             'request_date_from': date(2026, 8, 3), 'request_date_to': date(2026, 8, 7)})
-        leave.action_validate()
+        leave.action_approve(check_state=False)
         slip = self.env['hr.payslip'].create({
             'name': 'Liquidación IbcPrevio', 'employee_id': employee.id,
             'version_id': contract.id, 'company_id': self.company.id,

@@ -26,7 +26,7 @@ class TestOficialAlcance(DocumentoFixture, TransactionCase):
         cls._fixture_documento('Compañía Alcance Oficial')
         grupo_base = cls.env.ref('base.group_user').id
 
-        # ``groups_id`` en Odoo 18, ``group_ids`` en 19 (NO VERIFICADO el nombre en 19): se elige por ``_fields``, como ``common_version.crear_usuario_nomina``.
+        # ``groups_id`` en Odoo 18, ``group_ids`` en 19 (VERIFICADO en 19: ir_model_fields de 42494857): se elige por ``_fields``, como ``common_version.crear_usuario_nomina``.
         campo_grupos = 'group_ids' if 'group_ids' in cls.env['res.users']._fields else 'groups_id'
         cls.company_b = cls.env['res.company'].create({'name': 'Compañía B Alcance Oficial', 'country_id': cls.env.ref('base.co').id})
 

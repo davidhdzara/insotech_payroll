@@ -95,7 +95,7 @@ class TestDiasPorAsistencia(TransactionCase):
         ausencia = self.env['hr.leave'].create({
             'employee_id': recibo.employee_id.id, 'holiday_status_id': tipo_ausencia.id,
             'request_date_from': desde, 'request_date_to': hasta})
-        ausencia.action_validate()
+        ausencia.action_approve(check_state=False)
         self.assertEqual(ausencia.state, 'validate')
 
     def _recibo_con_ausencia(self, tipo_ausencia, desde, hasta, **kwargs):

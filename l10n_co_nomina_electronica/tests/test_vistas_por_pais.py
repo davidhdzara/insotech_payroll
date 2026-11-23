@@ -66,7 +66,7 @@ class TestVistasPorPais(TransactionCase):
 
     # ── Grupos de los menús propios = acceso del modelo (corrección de permisos de menús) ──
     def _grupos_del_menu(self, xmlid):
-        return set(self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).groups_id.get_external_id().values())
+        return set(self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).group_ids.get_external_id().values())
 
     def test_el_pais_de_la_compania_de_la_asignacion_no_depende_de_un_campo_no_buscable(self):
         """QA sobre .298: el aviso al cargar «Field 'res.company.country_id' in dependency of hr.salary.attachment.l10n_co_company_country_code should be searchable».
@@ -93,7 +93,7 @@ class TestVistasPorPais(TransactionCase):
     def test_un_usuario_de_nomina_sin_gerente_no_ve_generar_pila_completo(self):
         usuario = self.env['res.users'].create({
             'name': 'Usuario nómina sin gerente', 'login': 'usuario_nomina_sin_gerente',
-            'groups_id': [(6, 0, [self.env.ref('base.group_user').id,
+            'group_ids': [(6, 0, [self.env.ref('base.group_user').id,
                                   self.env.ref('hr_payroll.group_hr_payroll_user').id])]})
         self.assertFalse(usuario.has_group('hr_payroll.group_hr_payroll_manager'))
         menu = self.env.ref('l10n_co_nomina_electronica.menu_l10n_co_hr_pila_wizard_v2')

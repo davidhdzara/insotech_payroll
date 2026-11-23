@@ -53,7 +53,7 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
         })
         self.employee.write({
             'l10n_co_ne_payment_method': '1',  # 1 = Transferencia Bancaria
-            'bank_account_id': bank_account.id,
+            'bank_account_ids': [(6, 0, [bank_account.id])],
         })
         self.structure_type = self.env['hr.payroll.structure.type'].create({
             'name': 'Prueba Estructura',
@@ -102,7 +102,7 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
             'number_of_days': 4.0,
         })
         # Validar la ausencia
-        inc_leave.action_validate()
+        inc_leave.action_approve(check_state=False)
         self.assertEqual(inc_leave.state, 'validate')
 
         # Crear vacaciones del 15 al 25 de junio de 2026 (11 días)
@@ -115,7 +115,7 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
             'date_to': datetime(2026, 6, 25, 17, 0, 0),
             'number_of_days': 11.0,
         })
-        vac_leave.action_validate()
+        vac_leave.action_approve(check_state=False)
         self.assertEqual(vac_leave.state, 'validate')
 
         # Crear payslip del 1 al 30 de junio de 2026

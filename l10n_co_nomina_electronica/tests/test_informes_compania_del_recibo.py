@@ -26,7 +26,7 @@ class TestInformesCompaniaDelRecibo(DocumentoFixture, TransactionCase):
         cls.usuario = cls.env['res.users'].with_context(no_reset_password=True).create({
             'name': 'Informe Multi', 'login': 'informe_multi', 'email': 'informe_multi@example.com',
             'company_id': cls.activa.id, 'company_ids': [(6, 0, (cls.activa | cls.company).ids)],
-            'groups_id': [(6, 0, [cls.env.ref('base.group_user').id,
+            'group_ids': [(6, 0, [cls.env.ref('base.group_user').id,
                                   cls.env.ref('hr_payroll.group_hr_payroll_manager').id])]})
 
     def _html(self, reporte, registro):

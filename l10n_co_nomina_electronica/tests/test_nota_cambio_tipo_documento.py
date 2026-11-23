@@ -24,7 +24,7 @@ class TestNotaCambioTipoDocumento(TransactionCase):
         cls.usuario = cls.env['res.users'].with_context(no_reset_password=True).create({
             'name': 'Responsable Nota Tipo', 'login': 'responsable_nota_tipo', 'email': 'responsable_nota_tipo@example.com',
             'company_id': cls.company.id, 'company_ids': [(6, 0, cls.company.ids)],
-            'groups_id': [(6, 0, [cls.env.ref('base.group_user').id,
+            'group_ids': [(6, 0, [cls.env.ref('base.group_user').id,
                                   cls.env.ref('hr_payroll.group_hr_payroll_manager').id])]})
         cls.cedula = cls.env.ref('l10n_co.national_citizen_id')
         cls.pasaporte = cls.env.ref('l10n_latam_base.it_pass')

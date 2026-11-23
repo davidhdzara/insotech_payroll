@@ -76,7 +76,7 @@ class TestPagoCuentaBancaria(TransactionCase):
         })
 
     def test_pago_con_cuenta_bancaria_lee_banco_y_numero(self):
-        """Banco y NumeroCuenta salen de bank_account_id, no de campos propios.
+        """Banco y NumeroCuenta salen de primary_bank_account_id (v19: calculado desde bank_account_ids), no de campos propios.
 
         .91 (hallazgo propio al corregir test_leave_integration.py por el
         mismo patrón, Tech Lead): no se puede crear el empleado con
@@ -90,7 +90,7 @@ class TestPagoCuentaBancaria(TransactionCase):
         cuenta = self._set_bank_account(payslip.employee_id, 'Bancolombia', '00000000001')
         payslip.employee_id.write({
             'l10n_co_ne_payment_method': '1',
-            'bank_account_id': cuenta.id,
+            'bank_account_ids': [(6, 0, [cuenta.id])],
         })
 
         pago = payslip._ne_pago()
@@ -107,7 +107,7 @@ class TestPagoCuentaBancaria(TransactionCase):
         cuenta = self._set_bank_account(payslip.employee_id, 'Davivienda', '99887766')
         payslip.employee_id.write({
             'l10n_co_ne_payment_method': '1',
-            'bank_account_id': cuenta.id,
+            'bank_account_ids': [(6, 0, [cuenta.id])],
         })
 
         pago = payslip._ne_pago()
@@ -120,7 +120,7 @@ class TestPagoCuentaBancaria(TransactionCase):
         self.assertIsNone(pago_el.get('TipoCuenta'))
 
     def test_pago_sin_cuenta_y_efectivo_no_falla(self):
-        """Sin bank_account_id pero con medio Efectivo: no debe fallar, Banco/
+        """Sin cuenta bancaria (primary_bank_account_id) pero con medio Efectivo: no debe fallar, Banco/
         NumeroCuenta simplemente vacíos."""
         payslip = self._make_payslip('SinCuentaEfectivo', payment_method='10')
         pago = payslip._ne_pago()
@@ -149,7 +149,7 @@ class TestPagoCuentaBancaria(TransactionCase):
         })
         # .161: sin valor por defecto silencioso; el medio efectivo sale de la empresa.
         self.assertFalse(employee.l10n_co_ne_payment_method)
-        self.assertFalse(employee.bank_account_id)
+        self.assertFalse(employee.primary_bank_account_id)
         # y cambiarlo después a Transferencia explícita tampoco falla
         employee.l10n_co_ne_payment_method = '10'
         employee.l10n_co_ne_payment_method = '1'
@@ -163,5 +163,5 @@ class TestPagoCuentaBancaria(TransactionCase):
         with self.assertRaises(UserError):
             payslip._ne_validar_cuenta_transferencia()
         cuenta = self._set_bank_account(payslip.employee_id, 'Banco Valida', '5544')
-        payslip.employee_id.bank_account_id = cuenta.id
+        payslip.employee_id.bank_account_ids = [(6, 0, [cuenta.id])]
         payslip._ne_validar_cuenta_transferencia()  # con cuenta: no falla

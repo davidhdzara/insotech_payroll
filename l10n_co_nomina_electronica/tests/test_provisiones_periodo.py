@@ -62,7 +62,9 @@ class TestProvisionesPeriodo(TransactionCase):
         """Empleado con contrato (versión de Odoo 19, ``common_version``) y su recibo de la estructura general. ``version_id`` se pasa explícito:
         el cálculo nativo toma la versión al INICIO del periodo (``hr_payslip.py:1270-1272``) y aquí hay una sola."""
         empleado, version = crear_empleado_con_contrato(
-            self.env, self.company, wage, inicio, self.tipo_semanal if semanal else self.structure_type, nombre=name, integral=integral)
+            self.env, self.company, wage, inicio, self.tipo_semanal if semanal else self.structure_type, nombre=name, integral=integral,
+            # ``hr.version.schedule_pay`` lleva ``default='monthly'`` (hr_payroll/models/hr_version.py:14-16): al crear, el compute desde el tipo de estructura no corre.
+            **({'schedule_pay': 'weekly'} if semanal else {}))
         return self.env['hr.payslip'].create({
             'name': name, 'employee_id': empleado.id, 'version_id': version.id,
             'company_id': self.company.id, 'struct_id': self.est_general.id,
@@ -331,7 +333,7 @@ class TestProvisionesPeriodo(TransactionCase):
                          'Las provisiones no son base de sí mismas')
 
     def _usuario(self, login, grupos):
-        # El campo de grupos de ``res.users`` es ``groups_id`` en v18 y ``group_ids`` en v19 (NO VERIFICADO el nombre en 19; se elige por ``_fields``, como ``common_version``).
+        # El campo de grupos de ``res.users`` es ``groups_id`` en v18 y ``group_ids`` en v19 (VERIFICADO en 19: ir_model_fields de 42494857; se elige por ``_fields``, como ``common_version``).
         campo_grupos = 'group_ids' if 'group_ids' in self.env['res.users']._fields else 'groups_id'
         return self.env['res.users'].with_context(no_reset_password=True).create({
             'name': login, 'login': login, 'email': '%s@example.com' % login, 'company_id': self.company.id,

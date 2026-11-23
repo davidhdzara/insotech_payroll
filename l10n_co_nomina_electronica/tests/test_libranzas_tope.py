@@ -35,7 +35,7 @@ class TestLibranzasTope(TransactionCase):
             'description': 'Libranza %s' % entidad.name,
             'employee_ids': [(6, 0, [self.employee.id])],
             'other_input_type_id': self.tipo.id, 'monthly_amount': cuota,
-            'date_start': inicio, 'no_end_date': True,
+            'date_start': inicio, 'duration_type': 'unlimited',
             'l10n_co_partner_id': entidad.id, 'l10n_co_saldo_pendiente': saldo})
 
     def _filas(self):
@@ -142,7 +142,7 @@ class TestLibranzasNominaReal(TransactionCase):
             'employee_ids': [(6, 0, [slip.employee_id.id])],
             'company_id': self.company.id, 'other_input_type_id': tipo.id,
             'monthly_amount': monto, 'date_start': '2026-01-01',
-            'no_end_date': True, 'l10n_co_partner_id': partner.id}
+            'duration_type': 'unlimited', 'l10n_co_partner_id': partner.id}
         vals.update(extra)
         return self.env['hr.salary.attachment'].create(vals)
 

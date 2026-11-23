@@ -258,7 +258,7 @@ class TestAusenciaPorFecha(TestDiasPorAsistencia):
             version.generate_work_entries(date(2026, 9, 1), date(2026, 9, 15))
         ausencia = self.env['hr.leave'].create({
             'employee_id': empleado.id, 'holiday_status_id': self.leave_vac.id, 'request_date_from': date(2026, 9, 8), 'request_date_to': date(2026, 9, 11)})
-        ausencia.action_validate()
+        ausencia.action_approve(check_state=False)
         recibo.action_refresh_from_work_entries()
         entradas = self.env['hr.work.entry'].search([('leave_id', '=', ausencia.id), ('state', 'in', ('draft', 'validated'))])
         fechas_de_la_version = {e.date for e in entradas if e.version_id == version_b and e.duration > 0}

@@ -37,7 +37,7 @@ class TestMultiempresaDescubrimiento(TransactionCase):
             return cls.env['res.users'].with_context(no_reset_password=True).create({
                 'name': 'Descubrimiento %s' % clave, 'login': 'descubrimiento_%s' % clave,
                 'email': 'descubrimiento_%s@example.com' % clave, 'company_id': compania.id,
-                'company_ids': [(6, 0, compania.ids)], 'groups_id': [(6, 0, grupos)]})
+                'company_ids': [(6, 0, compania.ids)], 'group_ids': [(6, 0, grupos)]})
 
         cls.user_a = usuario('a', cls.a)
         cls.user_b = usuario('b', cls.b)

@@ -259,7 +259,7 @@ class TestConsecutivosProteccion(DocumentoFixture, TransactionCase):
         propio = self.env['res.users'].with_context(no_reset_password=True).create({
             'name': 'gerente_consecutivos', 'login': 'gerente_consecutivos', 'email': 'gerente_consecutivos@example.com', 'company_id': self.company.id,
             'company_ids': [(6, 0, self.company.ids)],
-            'groups_id': [(6, 0, [self.env.ref('base.group_user').id, self.env.ref('hr_payroll.group_hr_payroll_manager').id])]})
+            'group_ids': [(6, 0, [self.env.ref('base.group_user').id, self.env.ref('hr_payroll.group_hr_payroll_manager').id])]})
         self.assertTrue(self.Consecutivo.with_user(propio).search([('id', '=', fila.id)]), 'El gerente de nómina de la compañía los lee')
         with self.assertRaises(AccessError):                              # sin permiso de escritura (1,0,0,0)
             fila.with_user(propio).write({'numero': 'X'})
@@ -267,7 +267,7 @@ class TestConsecutivosProteccion(DocumentoFixture, TransactionCase):
             'name': 'Otra compañía consecutivos', 'country_id': self.env.ref('base.co').id, 'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U'})
         usuario = self.env['res.users'].with_context(no_reset_password=True).create({
             'name': 'oficial_consecutivos', 'login': 'oficial_consecutivos', 'email': 'oficial_consecutivos@example.com', 'company_id': otra.id, 'company_ids': [(6, 0, otra.ids)],
-            'groups_id': [(6, 0, [self.env.ref('base.group_user').id, self.env.ref('hr_payroll.group_hr_payroll_manager').id])]})
+            'group_ids': [(6, 0, [self.env.ref('base.group_user').id, self.env.ref('hr_payroll.group_hr_payroll_manager').id])]})
         self.assertFalse(self.Consecutivo.with_user(usuario).search([('company_id', '=', self.company.id)]), 'Una compañía no ve los consecutivos de otra')
 
     # ── el manifiesto: relleno de los viejos e inmutabilidad ─────────────────────────────────────────────────────────────────

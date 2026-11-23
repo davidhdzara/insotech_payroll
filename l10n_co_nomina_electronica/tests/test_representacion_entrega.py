@@ -107,7 +107,7 @@ class TestRepresentacionEntrega(DocumentoFixture, TransactionCase):
         usuario = self.env['res.users'].with_context(no_reset_password=True).create({
             'name': 'Remitente Entrega', 'login': 'remitente_entrega', 'email': 'remitente_entrega@example.com',
             'company_id': self.company.id, 'company_ids': [(6, 0, self.company.ids)],
-            'groups_id': [(6, 0, [self.env.ref('base.group_user').id,
+            'group_ids': [(6, 0, [self.env.ref('base.group_user').id,
                                   self.env.ref('hr_payroll.group_hr_payroll_manager').id])]})
         self._intento('invoice_accepted', '2026-04-06 10:00:00')
         self.doc.with_user(usuario).with_context(allowed_company_ids=self.company.ids)._ne_enviar_representacion()

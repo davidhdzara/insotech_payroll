@@ -193,7 +193,7 @@ class TestUgppDias(TransactionCase):
         leave = self.env['hr.leave'].create({
             'employee_id': employee.id, 'holiday_status_id': self.env.ref('l10n_co_nomina_electronica.' + xmlid).id,
             'request_date_from': desde, 'request_date_to': hasta})
-        leave.action_validate()
+        leave.action_approve(check_state=False)
         self.assertEqual(leave.state, 'validate')
         return leave
 

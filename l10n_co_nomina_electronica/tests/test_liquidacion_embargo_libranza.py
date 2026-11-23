@@ -50,7 +50,7 @@ class TestLiquidacionEmbargoLibranza(TransactionCase):
             'employee_ids': [(6, 0, [self.employee.id])],
             'company_id': self.company.id,
             'other_input_type_id': self.env.ref('l10n_co_nomina_electronica.input_l10n_co_libranza').id,
-            'monthly_amount': 500000.0, 'date_start': '2026-01-01', 'no_end_date': True,
+            'monthly_amount': 500000.0, 'date_start': '2026-01-01', 'duration_type': 'unlimited',
             'l10n_co_partner_id': self.entidad.id, 'l10n_co_saldo_pendiente': saldo}
         if autoriza:
             vals.update(l10n_co_autoriza_liquidacion=True, attachment=b'ZG9j',
@@ -63,7 +63,7 @@ class TestLiquidacionEmbargoLibranza(TransactionCase):
             'employee_ids': [(6, 0, [self.employee.id])],
             'company_id': self.company.id,
             'other_input_type_id': self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).id,
-            'monthly_amount': 500000.0, 'date_start': '2026-01-01', 'no_end_date': True,
+            'monthly_amount': 500000.0, 'date_start': '2026-01-01', 'duration_type': 'unlimited',
             'l10n_co_partner_id': self.juzgado.id}
         vals.update(extra)
         return self.env['hr.salary.attachment'].create(vals)
@@ -108,7 +108,7 @@ class TestLiquidacionEmbargoLibranza(TransactionCase):
                 'employee_ids': [(6, 0, [self.employee.id])],
                 'company_id': self.company.id,
                 'other_input_type_id': self.env.ref('l10n_co_nomina_electronica.input_l10n_co_libranza').id,
-                'monthly_amount': 1.0, 'date_start': '2026-01-01', 'no_end_date': True,
+                'monthly_amount': 1.0, 'date_start': '2026-01-01', 'duration_type': 'unlimited',
                 'l10n_co_partner_id': self.entidad.id, 'l10n_co_autoriza_liquidacion': True})
 
     def test_embargo_civil_no_toca_prestaciones_aunque_este_marcado(self):

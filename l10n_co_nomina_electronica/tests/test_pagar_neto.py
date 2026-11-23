@@ -76,7 +76,7 @@ class TestPagarNeto(TransactionCase):
             'company_id': cls.company.id, 'l10n_co_ne_payment_method': '10'})
         banco_empleado = cls.env['res.partner.bank'].create({
             'acc_number': '123456789', 'partner_id': cls.empleado.work_contact_id.id, 'allow_out_payment': True})
-        cls.empleado.write({'bank_account_id': banco_empleado.id, 'l10n_co_ne_payment_method': '1'})
+        cls.empleado.write({'bank_account_ids': [(6, 0, [banco_empleado.id])], 'l10n_co_ne_payment_method': '1'})
         contrato = crear_contrato(cls.env, {
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00',
             'name': 'Contrato Pagar Neto', 'employee_id': cls.empleado.id, 'company_id': cls.company.id, 'wage': 3000000,

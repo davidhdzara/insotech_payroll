@@ -71,7 +71,7 @@ class TestConsultaEstadoPorCune(TransactionCase):
         return self.env['res.users'].create({
             'name': login, 'login': login, 'company_id': companias[0].id,
             'company_ids': [(6, 0, companias.ids)],
-            'groups_id': [(6, 0, [self.env.ref('base.group_user').id,
+            'group_ids': [(6, 0, [self.env.ref('base.group_user').id,
                                   self.env.ref('hr_payroll.group_hr_payroll_manager').id])]})
 
     def _otra_compania(self):

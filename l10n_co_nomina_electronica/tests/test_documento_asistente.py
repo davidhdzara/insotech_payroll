@@ -115,7 +115,7 @@ class TestDocumentoAsistente(DocumentoFixture, TransactionCase):
         usuario = self.env['res.users'].with_context(no_reset_password=True).create({
             'name': 'Usuario nómina', 'login': 'usuario_asistente', 'company_id': self.company.id,
             'company_ids': [(6, 0, self.company.ids)],
-            'groups_id': [(6, 0, [self.env.ref('base.group_user').id,
+            'group_ids': [(6, 0, [self.env.ref('base.group_user').id,
                                   self.env.ref('hr_payroll.group_hr_payroll_user').id])]})
         with self.assertRaises(UserError):
             self.env['l10n.co.ne.documento.send'].with_user(usuario)._ne_exigir_cron_activo()
@@ -195,7 +195,7 @@ class TestDocumentoAsistente(DocumentoFixture, TransactionCase):
         usuario = self.env['res.users'].with_context(no_reset_password=True).create({
             'name': 'Usuario sin admin', 'login': 'usuario_sin_admin', 'company_id': self.company.id,
             'company_ids': [(6, 0, self.company.ids)],
-            'groups_id': [(6, 0, [self.env.ref('base.group_user').id,
+            'group_ids': [(6, 0, [self.env.ref('base.group_user').id,
                                   self.env.ref('hr_payroll.group_hr_payroll_user').id])]})
         # El usuario del grupo de nómina SÍ puede abrir el asistente (lee documentos y recibos): el error sale del
         # ``has_group`` del propio botón, no de la creación. Si algún día se le retirara la lectura, el origen cambiaría.

@@ -46,7 +46,7 @@ class TestLiquidacionIncapacidades(TransactionCase):
             leave = self.env['hr.leave'].create({
                 'employee_id': employee.id, 'holiday_status_id': tipo.id,
                 'request_date_from': desde, 'request_date_to': hasta})
-            leave.action_validate()
+            leave.action_approve(check_state=False)
         slip = self.env['hr.payslip'].create({
             'name': 'Liquidación %s' % name, 'employee_id': employee.id,
             'version_id': contract.id, 'company_id': self.company.id,
