@@ -163,3 +163,51 @@ class TestAprendizAportes(pension.TestPensionNoExigida):
         recibo.compute_sheet()
         self.assertAlmostEqual(self._total(recibo, 'CO_APOYO_SOST'), 500000.0, delta=0.01)
         self.assertFalse(recibo.line_ids.filtered(lambda l: l.code == 'CO_APOYO_SOST_PRAC'))
+
+    # ── TipoTrabajador del XML y la fusion mensual ──
+    def _lugar_de_trabajo_completo(self):
+        """``_ne_trabajador()`` exige pais, departamento y municipio en la Direccion de Trabajo del empleado (H-018; por defecto la de la compañia): sin ellos da un UserError que no es lo que se prueba aqui
+        (N2 «db» del 23-nov, v18 7d32bc1). Mismo arreglo que ``test_tipo_documento_dian`` y ``test_ausencias_nomina``."""
+        pais = self.env.ref('base.co')
+        departamento = self.env['res.country.state'].search([('country_id', '=', pais.id)], limit=1) or self.env['res.country.state'].create({
+            'name': 'Departamento Prueba Aprendiz', 'code': 'PA', 'country_id': pais.id})
+        ciudad = self.env['res.city'].create({'name': 'Ciudad Prueba Aprendiz', 'state_id': departamento.id, 'country_id': pais.id})
+        self.company.partner_id.write({'country_id': pais.id, 'state_id': departamento.id, 'city_id': ciudad.id, 'street': 'Calle Prueba Aprendiz # 1-1'})
+
+    def test_el_tipo_de_trabajador_del_aprendiz_sale_del_contrato_y_el_de_los_demas_de_la_ficha(self):
+        self._lugar_de_trabajo_completo()
+        empleado_1, lectiva = self._empleado_y_recibo('TT Lectiva', tipo='19', tipo_contrato='4', eps=self.eps, ccf=self.ccf)
+        empleado_2, practica = self._empleado_y_recibo('TT Practica', tipo='01', tipo_contrato='4', eps=self.eps, afp=self.afp, ccf=self.ccf)
+        empleado_3, normal = self._empleado_y_recibo('TT Normal', tipo='01', tipo_contrato='2', eps=self.eps, afp=self.afp, ccf=self.ccf)
+        for empleado in (empleado_1, empleado_2, empleado_3):
+            empleado.l10n_co_ne_identification_type_id = self.env.ref('l10n_co.national_citizen_id').id      # _ne_tipo_documento() exige un tipo con equivalente DIAN
+        self.assertEqual(lectiva._ne_trabajador()['TipoTrabajador'], '12')                    # la ficha dice 01
+        self.assertEqual(practica._ne_trabajador()['TipoTrabajador'], '19')
+        self.assertEqual(normal._ne_trabajador()['TipoTrabajador'], '01')                     # la ficha, como siempre
+
+    def test_aviso_si_la_ficha_del_aprendiz_dice_otro_tipo_y_nada_si_coincide(self):
+        empleado, recibo = self._empleado_y_recibo('Aviso TT', tipo='19', tipo_contrato='4', eps=self.eps, ccf=self.ccf)
+        self.assertIn('Aviso TT', recibo.l10n_co_ne_aviso_tipo_trabajador)
+        self.assertIn('12 - Aprendiz del SENA en Etapa Lectiva', recibo.l10n_co_ne_aviso_tipo_trabajador)
+        self.assertIn('01 - Trabajador Dependiente', recibo.l10n_co_ne_aviso_tipo_trabajador)
+        empleado.l10n_co_ne_worker_type = '12'
+        self.assertFalse(recibo.l10n_co_ne_aviso_tipo_trabajador)
+        _e, normal = self._empleado_y_recibo('Normal TT', tipo='01', tipo_contrato='2', eps=self.eps, afp=self.afp, ccf=self.ccf)
+        self.assertFalse(normal.l10n_co_ne_aviso_tipo_trabajador)
+
+    def test_la_fusion_del_mes_con_cambio_de_etapa_da_un_error_que_nombra_al_empleado_y_los_dos_tipos(self):
+        """Un aprendiz que pasa de la lectiva (12) a la practica (19) dentro del mes: el documento mensual exige un solo TipoTrabajador. Prueba obligatoria del TL (cuidado 3 del consultor)."""
+        from odoo.addons.l10n_co_nomina_electronica.services import documento_merge as fusion
+        from .test_documento_merge import PERIODO, _recibo as recibo_base
+
+        def recibo(tipo):
+            datos = recibo_base()
+            datos['trabajador'] = dict(datos['trabajador'], TipoTrabajador=tipo, PrimerNombre='Ana', PrimerApellido='Aprendiz')
+            return datos
+        fechas = ['2026-03-15', '2026-03-31']
+        with self.assertRaises(fusion.ErrorFusion) as exc:
+            fusion.fusionar_documento([recibo('12'), recibo('19')], fechas, PERIODO)
+        texto = str(exc.exception)
+        for esperado in ('Ana Aprendiz', '1020304050', '12', '19', 'TipoTrabajador'):
+            self.assertIn(esperado, texto)
+        fusion.fusionar_documento([recibo('12'), recibo('12')], fechas, PERIODO)           # el mismo tipo si se fusiona
