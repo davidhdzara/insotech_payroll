@@ -81,6 +81,7 @@ from . import test_liquidacion_prima_ibc
 from . import test_jornada_15_julio_parametros
 from . import test_retefuente_config_anio
 from . import test_renta_exenta_tope
+from . import test_retefuente_limite_global
 from . import test_contrato_integral_piso
 from . import test_multiempresa_inercia
 from . import test_secuencias_por_compania
