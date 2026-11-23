@@ -5,13 +5,14 @@
 2025310001925691 y Circular MinTrabajo 083 del 18-jul-2025): hasta el 31-jul-2025 el 12 era la lectiva y el 19 la productiva; desde el 1-ago-2025 la lectiva es el tipo 19 y la practica o dual es el tipo 01 con el contrato
 «4 - Aprendizaje»; el 12 se restringe."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from odoo import fields
 from odoo.exceptions import UserError
 from odoo.tests.common import tagged
 
 from . import test_pension_no_exigida as pension
+from .common_version import crear_contrato
 from . import test_validacion_afiliacion as base
 
 
@@ -129,6 +130,61 @@ class TestAprendizAportes(pension.TestPensionNoExigida):
         recibo.write({'state': 'validated', 'done_date': fields.Datetime.now()})      # v19: 'done' no existe; el nativo fija done_date al validar
         consolidado = self.env['l10n.co.ibc.mensual']._refrescar(self.company, recibo.employee_id, date(2026, 3, 1))
         self.assertAlmostEqual(consolidado.ibc_paraf, smmlv, delta=0.01)
+
+    # ── el consolidado del mes con dos etapas (consultor v19 §11.13 punto 3; decision del TL del 22-nov, opcion a) ──
+    def _segundo_recibo(self, primero, tipo, factor_apoyo, desde, hasta):
+        """Otrosi de cambio de etapa dentro del mes: el contrato del primer recibo termina el dia anterior y empieza otro del MISMO empleado, de aprendizaje, con otro tipo de cotizante, y su recibo."""
+        primero.version_id.write({'contract_date_end': desde - timedelta(days=1)})      # v19: el contrato es el rango contract_date_start/_end de la version (v18: hr.contract.date_end)
+        contrato = crear_contrato(self.env, {
+            'name': 'Contrato 2 %s' % primero.employee_id.name, 'employee_id': primero.employee_id.id, 'company_id': self.company.id, 'structure_type_id': self.structure_type.id,
+            'l10n_co_ne_contract_type': '4', 'l10n_co_pila_tipo_cotizante': tipo, 'l10n_co_pila_subtipo_cotizante': '00', 'wage': 0.0, 'date_start': desde, 'state': 'open'})
+        contrato.generate_work_entries(desde, hasta)
+        smmlv = primero._rule_parameter('l10n_co_smmlv', primero._ne_fecha_parametros())
+        recibo = self.env['hr.payslip'].create({
+            'name': 'Recibo 2 %s' % primero.employee_id.name, 'employee_id': primero.employee_id.id, 'version_id': contrato.id, 'company_id': self.company.id, 'struct_id': self.nomina.id,
+            'date_from': desde, 'date_to': hasta,
+            'input_line_ids': [(0, 0, {'input_type_id': self.env.ref('l10n_co_nomina_electronica.input_co_apoyo_sost').id, 'amount': factor_apoyo * smmlv})]})
+        recibo.compute_sheet()
+        return recibo
+
+    def test_un_mes_con_lectiva_y_practica_aplica_el_piso_solo_a_los_dias_del_recibo_de_la_practica(self):
+        """Un recibo de lectiva (1 al 15 de marzo) y otro de practica (16 al 31), en los dos ordenes. Antes el piso de la practica salia de ``slips[-1]`` y de la SUMA de los dias del mes: con la practica
+        ultima daba 1 SMMLV (los 30 dias, aunque la lectiva no paga parafiscales) y con la lectiva ultima daba 0: el consolidado no cuadraba con la suma de las lineas CO_IBC_PARAF de los recibos.
+        Ahora es recibo por recibo: 15 dias de practica = medio SMMLV, igual a la suma de las lineas, con diferencia 0."""
+        for nombre, primero, segundo in (
+                ('Lectiva y Practica', ('19', 0.75), ('01', 1.0)),
+                ('Practica y Lectiva', ('01', 1.0), ('19', 0.75))):
+            with self.subTest(nombre):
+                uno, smmlv = self._aprendiz(nombre, primero[0], '4', primero[1], desde=date(2026, 3, 1), hasta=date(2026, 3, 15))
+                dos = self._segundo_recibo(uno, segundo[0], segundo[1], date(2026, 3, 16), date(2026, 3, 31))
+                (uno | dos).write({'state': 'validated', 'done_date': fields.Datetime.now()})      # v19: 'done' no existe
+                practica = dos if segundo[0] == '01' else uno
+                lectiva = uno if segundo[0] == '01' else dos
+                self.assertAlmostEqual(self._total(practica, 'CO_IBC_PARAF'), smmlv / 2, delta=0.01)
+                self.assertFalse(self._total(lectiva, 'CO_IBC_PARAF'), 'La lectiva no paga parafiscales: sin piso')
+                consolidado = self.env['l10n.co.ibc.mensual']._refrescar(self.company, uno.employee_id, date(2026, 3, 1))
+                self.assertAlmostEqual(consolidado.ibc_recibos_paraf, smmlv / 2, delta=0.01)
+                self.assertAlmostEqual(consolidado.ibc_paraf, smmlv / 2, delta=0.01)
+                self.assertAlmostEqual(consolidado.diferencia_paraf, 0.0, delta=0.01)
+                self.assertEqual(consolidado.dias_paraf, 30)
+
+    def test_el_consolidado_de_un_empleado_normal_con_dos_recibos_no_cambia(self):
+        """Sin aprendiz no hay piso en parafiscales: la base del mes es la suma de lo salarial de los recibos, como siempre."""
+        empleado, uno = self._empleado_y_recibo('Normal Dos Recibos', eps=self.eps, afp=self.afp, ccf=self.ccf, desde=date(2026, 3, 1), hasta=date(2026, 3, 15))
+        uno.version_id.write({'wage': 10000000.0})
+        uno.version_id.generate_work_entries(date(2026, 3, 1), date(2026, 3, 31))
+        self._config_retefuente(2026)
+        uno.compute_sheet()
+        dos = self.env['hr.payslip'].create({
+            'name': 'Recibo 2 Normal', 'employee_id': empleado.id, 'version_id': uno.version_id.id, 'company_id': self.company.id, 'struct_id': self.nomina.id,
+            'date_from': date(2026, 3, 16), 'date_to': date(2026, 3, 31)})
+        dos.compute_sheet()
+        (uno | dos).write({'state': 'validated', 'done_date': fields.Datetime.now()})      # v19: 'done' no existe
+        salarial = self._total(uno, 'CO_IBC_SALARIAL') + self._total(dos, 'CO_IBC_SALARIAL')
+        self.assertTrue(salarial)
+        consolidado = self.env['l10n.co.ibc.mensual']._refrescar(self.company, empleado, date(2026, 3, 1))
+        self.assertAlmostEqual(consolidado.ibc_paraf, salarial, delta=0.01)
+        self.assertAlmostEqual(consolidado.diferencia_paraf, 0.0, delta=0.01)
 
     # ── el apoyo de sostenimiento: dos reglas por etapa ──
     def test_lectiva_el_apoyo_es_no_salarial_y_la_regla_de_la_practica_no_sale(self):
