@@ -20,12 +20,19 @@ REGLAS_DE_PENSION = ('CO_PENSION_EMP', 'CO_PENSION_CIA', 'CO_FSP', 'CO_LIQ_PENSI
 @tagged('post_install', '-at_install')
 class TestPensionNoExigida(base.TestValidacionAfiliacion):
 
-    def _calculado(self, nombre, tipo='01', subtipo='00', **entidades):
-        empleado, recibo = self._empleado_y_recibo(nombre, tipo=tipo, subtipo=subtipo, desde=date(2026, 3, 1), hasta=date(2026, 3, 31), **entidades)
+    def _calculado(self, nombre, tipo='01', subtipo='00', desde=date(2026, 3, 1), hasta=date(2026, 3, 31), **entidades):
+        empleado, recibo = self._empleado_y_recibo(nombre, tipo=tipo, subtipo=subtipo, desde=desde, hasta=hasta, **entidades)
         recibo.version_id.write({'wage': 10000000.0})
-        recibo.version_id.generate_work_entries(date(2026, 3, 1), date(2026, 3, 31))
+        recibo.version_id.generate_work_entries(desde, hasta)
+        self._config_retefuente(desde.year)
         recibo.compute_sheet()
         return empleado, recibo
+
+    def _config_retefuente(self, anio):
+        """CO_RETEFUENTE exige la configuracion de retencion del año de la compañia: sin ella el calculo se detiene (.167). Ayuda de fixture de v18 2052171 (aqui sin cambiar el tipo 12 ni el valor de nada): en la base de
+        pruebas de v19 la compañia de la prueba no la trae."""
+        if not self.env['l10n.co.retefuente.uvt'].search([('year', '=', str(anio)), ('company_id', '=', self.company.id)]):
+            self.env['l10n.co.retefuente.uvt'].create({'year': str(anio), 'company_id': self.company.id, 'procedure': '1'})
 
     def _total(self, recibo, codigo):
         return sum(recibo.line_ids.filtered(lambda l: l.code == codigo).mapped('total'))
@@ -74,6 +81,7 @@ class TestPensionNoExigida(base.TestValidacionAfiliacion):
         empleado.l10n_co_ne_foreigner_no_pension = True
         recibo.version_id.write({'wage': 10000000.0})
         recibo.version_id.generate_work_entries(date(2026, 3, 1), date(2026, 3, 31))
+        self._config_retefuente(2026)
         recibo.compute_sheet()
         self._sin_lineas_de_pension(recibo)
 
