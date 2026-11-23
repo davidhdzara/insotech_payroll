@@ -13,7 +13,7 @@ from odoo.tests.common import tagged
 
 from . import test_validacion_afiliacion as base
 
-PARAMETRO = 'l10n_co_nomina_electronica.rule_parameter_afiliaciones_no_exigidas_2024'
+PARAMETRO = 'l10n_co_nomina_electronica.rule_parameter_afiliaciones_no_exigidas_2025_08'      # el valor vigente desde el 1-ago-2025
 REGLAS_DE_PENSION = ('CO_PENSION_EMP', 'CO_PENSION_CIA', 'CO_FSP', 'CO_LIQ_PENSION', 'CO_PRIMA_PENSION', 'CO_BON_PENSION')
 
 
@@ -43,13 +43,22 @@ class TestPensionNoExigida(base.TestValidacionAfiliacion):
 
     # ── la excepcion llega a las reglas ──
     def test_el_pensionado_y_el_aprendiz_lectivo_no_calculan_pension_ni_fsp_pero_si_salud(self):
-        for nombre, tipo, subtipo in (('Pensionado Dep', '01', '01'), ('Pensionado Ind', '03', '02'), ('Aprendiz Lectiva', '12', '00')):
+        for nombre, tipo, subtipo in (('Pensionado Dep', '01', '01'), ('Pensionado Ind', '03', '02'), ('Aprendiz Lectiva', '19', '00')):                                            # la lectiva desde ago-2025 es el tipo 19
             _empleado, recibo = self._calculado(nombre, tipo=tipo, subtipo=subtipo, eps=self.eps, ccf=self.ccf)
             self._sin_lineas_de_pension(recibo, nombre)
             self.assertAlmostEqual(self._total(recibo, 'CO_SALUD_EMP'), -400000.0, delta=0.01, msg=nombre)       # la EPS se sigue exigiendo y la salud sigue igual
             self.assertAlmostEqual(self._total(recibo, 'CO_IBC_SP'), 10000000.0, delta=0.01, msg=nombre)         # el IBC no cambia
             self.assertFalse(recibo.l10n_co_ne_aviso_afiliacion, nombre)
             recibo._ne_validar_afiliaciones()                                                                    # confirma sin AFP
+
+    def test_un_19_en_julio_de_2025_cotiza_pension_y_un_19_en_agosto_de_2025_no(self):
+        """Condicion del TL: el 19 era la etapa productiva (con pension) hasta el 31-jul-2025 y es la lectiva (sin pension ni FSP) desde el 1-ago-2025; el IBC de salud no cambia."""
+        _e1, julio = self._calculado('Diecinueve Julio', tipo='19', eps=self.eps, afp=self.afp, ccf=self.ccf, desde=date(2025, 7, 1), hasta=date(2025, 7, 31))
+        _e2, agosto = self._calculado('Diecinueve Agosto', tipo='19', eps=self.eps, afp=self.afp, ccf=self.ccf, desde=date(2025, 8, 1), hasta=date(2025, 8, 31))
+        self.assertAlmostEqual(self._total(julio, 'CO_PENSION_EMP'), -400000.0, delta=0.01)
+        self.assertAlmostEqual(self._total(julio, 'CO_PENSION_CIA'), 1200000.0, delta=0.01)
+        self._sin_lineas_de_pension(agosto)
+        self.assertAlmostEqual(self._total(julio, 'CO_IBC_SP'), self._total(agosto, 'CO_IBC_SP'), delta=0.01)
 
     def test_el_pensionado_sin_eps_sigue_sin_poder_confirmar(self):
         _empleado, recibo = self._calculado('Pensionado Sin EPS', tipo='01', subtipo='01', ccf=self.ccf)
@@ -67,9 +76,9 @@ class TestPensionNoExigida(base.TestValidacionAfiliacion):
         self.assertAlmostEqual(self._total(recibo, 'CO_SALUD_EMP'), -400000.0, delta=0.01)
 
     def test_quitar_la_fila_del_parametro_vuelve_a_calcular_la_pension(self):
-        """Sin la fila (12, *, afp) el aprendiz es un dependiente normal: la pension del empleado y de la empresa y el FSP se calculan y el aviso pide la AFP."""
+        """Sin la fila (19, *, afp) el aprendiz es un dependiente normal: la pension del empleado y de la empresa y el FSP se calculan y el aviso pide la AFP."""
         self.env.ref(PARAMETRO).parameter_value = "[('*', '01', 'afp'), ('*', '02', 'afp')]"
-        _empleado, recibo = self._calculado('Aprendiz Sin Fila', tipo='12', subtipo='00', eps=self.eps, ccf=self.ccf)
+        _empleado, recibo = self._calculado('Aprendiz Sin Fila', tipo='19', subtipo='00', eps=self.eps, ccf=self.ccf)
         self.assertAlmostEqual(self._total(recibo, 'CO_PENSION_EMP'), -400000.0, delta=0.01)
         self.assertAlmostEqual(self._total(recibo, 'CO_PENSION_CIA'), 1200000.0, delta=0.01)
         self.assertTrue(self._total(recibo, 'CO_FSP'))
