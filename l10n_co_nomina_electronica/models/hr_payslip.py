@@ -1586,7 +1586,7 @@ class HrPayslip(models.Model):
         if not codigo:
             raise UserError(_(
                 'El empleado %(employee)s no tiene un Tipo de Documento con '
-                'equivalente DIAN configurado (Información privada > Tipo de '
+                'equivalente DIAN configurado (Personal > Ciudadanía > Tipo de '
                 'Documento). Complete ese dato antes de generar la nómina '
                 'electrónica.',
                 employee=employee.name,

@@ -383,7 +383,7 @@ class HrEmployee(models.Model):
         help='Solo si este empleado se paga distinto al medio general de la empresa '
              '(Nómina > Configuración > Ajustes). Vacío: se usa el general. Se refleja en el '
              'atributo Metodo del nodo <Pago> del XML. La cuenta bancaria se elige en '
-             '"Información privada" (Cuenta Bancaria).',
+             '"Personal" > "Contacto privado" (Cuentas bancarias).',
     )
 
     # ──────────────────────────────────────────────────────────────────
