@@ -44,6 +44,7 @@ ningún dato.
 
 from datetime import date, datetime
 
+from odoo import fields
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 from .common_version import crear_contrato
@@ -1062,19 +1063,17 @@ class TestAusenciasNomina(TransactionCase):
         self.assertEqual(round(abs(salud), 2), 72000.0)
         self.assertEqual(round(abs(pension), 2), 72000.0)
 
-    def test_ibc_ss_usa_ultimo_ibc_de_nomina_anterior_no_salario_actual(self):
-        """Punto (a) del diseño: con historial, "último IBC anterior" se lee de
-        CO_SS_BASE_IBC de la última nómina 'validated' del mismo contrato/estructura, NO
-        del salario actual -- lectura literal de la regla de David, confirmada por
-        Tech Lead incluso con cambio salarial reciente entre el mes anterior y el de
-        la novedad."""
+    def test_ibc_ss_usa_el_ibc_del_mes_anterior_no_salario_actual(self):
+        """Punto (a) del diseño: con historial, la base es el IBC del mes anterior (H-F1-11: la suma de CO_SS_BASE_IBC de los recibos 'done' de ese
+        mes, escalada a 30 días; hasta .305 era la del último recibo), NO el salario actual -- lectura literal de la regla de David, confirmada por Tech Lead incluso con cambio
+        salarial reciente entre el mes anterior y el de la novedad."""
         employee, contract = self._make_contract(
             'IbcHistorial', wage=2500000.0, date_start=date(2024, 1, 1))
 
         payslip_anterior = self._make_payslip(
             employee, contract, date(2026, 8, 1), date(2026, 8, 31))
         payslip_anterior.compute_sheet()
-        payslip_anterior.write({'state': 'validated'})
+        payslip_anterior.write({'state': 'validated', 'done_date': fields.Datetime.now()})   # v19: 'done' no existe; el nativo fija done_date al validar (hr_payslip.py:638)
         linea_ibc_anterior = payslip_anterior.line_ids.filtered(
             lambda l: l.code == 'CO_SS_BASE_IBC')
         self.assertTrue(linea_ibc_anterior)
@@ -1089,7 +1088,7 @@ class TestAusenciasNomina(TransactionCase):
         payslip = self._make_payslip(employee, contract, date(2026, 9, 1), date(2026, 9, 30))
         payslip.compute_sheet()
 
-        ultimo_ibc = payslip._ne_ultimo_ibc_anterior(contract)
+        ultimo_ibc = payslip._ne_ibc_mes_anterior(contract)
         self.assertEqual(ultimo_ibc, 2500000.0)
         self.assertNotEqual(ultimo_ibc, contract.wage)
 

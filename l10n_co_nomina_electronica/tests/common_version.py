@@ -17,6 +17,8 @@ Reglas de estos fixtures (lecturas L3 y L5 de ``fichas_entrega_v19/00_lecturas_v
   la restricción corre al crear la versión.
 """
 
+from datetime import timedelta
+
 # Campos de empleado y de contrato que las pruebas del módulo daban siempre igual (valores de ``test_provisiones_periodo`` y ``test_dias_por_asistencia``).
 VALORES_COLOMBIA = {
     'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10',
@@ -43,6 +45,19 @@ def crear_empleado_con_contrato(env, compania, wage, inicio, estructura_tipo, no
     if integral:
         version.write({'l10n_co_ne_integral_salary': True})
     return empleado, version
+
+
+def crear_aumento(env, empleado, version_a, desde, sueldo):
+    """Versión B de un AUMENTO de sueldo desde ``desde`` dentro del MISMO contrato de ``version_a`` (``contract_date_start`` igual; el sueldo nuevo rige desde ``desde``). Devuelve la versión B.
+    Mismo montaje que ``test_rango_de_la_version._empleado``: los tipos de contrato y cotizante de ``VALORES_COLOMBIA`` y el tipo de estructura de la versión A. Verifica la premisa:
+    antes de ``desde`` rige A y desde ``desde`` rige B (``employee._get_version``)."""
+    valores = {campo: valor for campo, valor in VALORES_COLOMBIA.items() if campo in env['hr.version']._fields}
+    version_b = env['hr.version'].create(dict(
+        valores, employee_id=empleado.id, date_version=desde, contract_date_start=version_a.contract_date_start, wage=sueldo,
+        structure_type_id=version_a.structure_type_id.id))
+    assert empleado._get_version(desde - timedelta(days=1)) == version_a, 'Premisa: antes del aumento rige la versión A'
+    assert empleado._get_version(desde) == version_b, 'Premisa: desde el aumento rige la versión B'
+    return version_b
 
 
 # Tipos que la restricción D-A del módulo exige en cuanto una versión tiene ``contract_date_start`` (tipo de contrato y tipo/subtipo de cotizante).
