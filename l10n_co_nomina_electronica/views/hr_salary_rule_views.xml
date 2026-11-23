@@ -59,7 +59,7 @@
     <!-- Reemplaza el modelo propio l10n.co.payroll.account.config     -->
     <!-- (eliminado, doc 23) por una lista editable dedicada de        -->
     <!-- hr.salary.rule: los campos account_debit/account_credit/      -->
-    <!-- analytic_account_id son nativos de hr_payroll_account         -->
+    <!-- analytic_distribution son nativos de hr_payroll_account       -->
     <!-- (company_dependent=True, sin necesidad de tabla propia).      -->
     <!--                                                                -->
     <!-- Vista standalone (NO hereda hr_payroll.hr_salary_rule_list ni -->
@@ -82,7 +82,7 @@
                 <field name="category_id"/>
                 <field name="account_debit"/>
                 <field name="account_credit"/>
-                <field name="analytic_account_id" optional="show" groups="analytic.group_analytic_accounting"/>
+                <field name="analytic_distribution" widget="analytic_distribution" optional="show" groups="analytic.group_analytic_accounting"/>
             </list>
         </field>
     </record>

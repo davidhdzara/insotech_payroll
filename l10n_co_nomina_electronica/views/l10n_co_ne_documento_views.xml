@@ -178,7 +178,7 @@
         <field name="inherit_id" ref="hr_payroll.view_hr_payslip_tree"/>
         <field name="priority">100</field>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='state']" position="after">
+            <xpath expr="//field[@name='state_display']" position="after">
                 <field name="l10n_co_ne_documento_state" string="Estado DIAN" optional="show" widget="account_document_state"/>
             </xpath>
         </field>
