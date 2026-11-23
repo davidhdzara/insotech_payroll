@@ -1791,7 +1791,7 @@ class HrPayslip(models.Model):
         if metodo == '1' and not employee.primary_bank_account_id:
             raise UserError(_(
                 'El empleado %(employee)s no tiene una Cuenta Bancaria configurada '
-                '(Información privada > Contacto privado) y el método de pago es '
+                '(Personal > Contacto privado > Cuentas bancarias) y el método de pago es '
                 'Transferencia Bancaria. Configure la cuenta o cambie el método de '
                 'pago antes de generar la nómina electrónica.',
                 employee=employee.name,
