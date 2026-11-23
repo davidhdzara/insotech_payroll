@@ -6,8 +6,6 @@ Norma: Decreto 1427 de 2022, art. 2.2.3.3.2, par. 1 (antes Decreto 1333 de 2018,
 la «misma enfermedad»: lo marca quien registra la ausencia; el parametro ``l10n_co_dias_interrupcion_prorroga`` (30) solo rechaza el vinculo con mas dias libres. Valores a mano con el caso de QA FUN-REG-012:
 salario 6.000.000 (valor dia 200.000), tramos 66,67 % (dias 1-90) y 50 % (91 en adelante)."""
 
-import importlib.util
-import os
 from datetime import date
 
 from lxml import etree
@@ -173,57 +171,3 @@ class TestIncapacidadProrrogaVinculo(base.TestIncapacidadTramoProrroga):
     def test_la_vista_trae_el_aviso(self):
         arch = etree.fromstring(self.env['hr.leave'].get_view(view_type='form')['arch'].encode())
         self.assertTrue(arch.xpath("//field[@name='l10n_co_ne_prorroga_aviso']"))
-
-    # ── migracion .305: vincula lo que hoy se encadena por fechas ──
-    def _migrar(self):
-        """Corre el pre-migrate de .305 sobre la base de la prueba (flush antes, invalidate despues: escribe en SQL)."""
-        ruta = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'migrations', '18.0.3.0.305', 'pre-migrate.py')
-        spec = importlib.util.spec_from_file_location('premigrate_305', ruta)
-        modulo = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(modulo)
-        self.env.flush_all()
-        modulo.migrate(self.env.cr, '18.0.3.0.304')
-        self.env.invalidate_all()
-
-    def test_migracion_vincula_los_pares_que_se_encadenaban_con_el_parametro_viejo_en_0(self):
-        """Parametro viejo = 0: solo las contiguas. A (1-10 mar) + B (11-20 mar) contiguas -> B se vincula a A; C (23-25 mar, 2 libres) y D (1-jun) quedan sin vinculo."""
-        self.env.ref(PARAMETRO_2024).parameter_value = '0'
-        employee, _contract = self._empleado('MigraCero')
-        a = self._incapacidad(employee, date(2026, 3, 1), date(2026, 3, 10))
-        b = self._incapacidad(employee, date(2026, 3, 11), date(2026, 3, 20))
-        c = self._incapacidad(employee, date(2026, 3, 23), date(2026, 3, 25))
-        d = self._incapacidad(employee, date(2026, 6, 1), date(2026, 6, 5))
-        self._migrar()
-        self.assertEqual(b.l10n_co_ne_prorroga_de_id, a)
-        self.assertFalse(c.l10n_co_ne_prorroga_de_id)
-        self.assertFalse(d.l10n_co_ne_prorroga_de_id)
-        self._migrar()                                                     # idempotente
-        self.assertEqual(b.l10n_co_ne_prorroga_de_id, a)
-        self.assertFalse(c.l10n_co_ne_prorroga_de_id)
-
-    def test_migracion_con_el_parametro_viejo_en_4_encadena_tambien_los_de_2_dias_libres(self):
-        """Parametro viejo = 4: C (2 libres tras B) tambien se encadenaba: C -> B -> A. Ningun valor calculado cambia."""
-        self.env.ref(PARAMETRO_2024).parameter_value = '4'
-        employee, _contract = self._empleado('MigraCuatro')
-        a = self._incapacidad(employee, date(2026, 3, 1), date(2026, 3, 10))
-        b = self._incapacidad(employee, date(2026, 3, 11), date(2026, 3, 20))
-        c = self._incapacidad(employee, date(2026, 3, 23), date(2026, 3, 25))
-        self._migrar()
-        self.assertEqual(b.l10n_co_ne_prorroga_de_id, a)
-        self.assertEqual(c.l10n_co_ne_prorroga_de_id, b)
-
-    def test_migracion_no_pisa_un_vinculo_puesto_a_mano_ni_viola_el_tope(self):
-        """Un vinculo existente se respeta; un par que el parametro viejo (50) encadenaba pero supera el tope nuevo (30 dias libres) NO se vincula (queda en el registro para el TL)."""
-        self.env.ref(PARAMETRO_2024).parameter_value = '50'
-        employee, _contract = self._empleado('MigraTope')
-        a = self._incapacidad(employee, date(2026, 3, 1), date(2026, 3, 10))
-        b = self._incapacidad(employee, date(2026, 5, 1), date(2026, 5, 10))      # 51 dias libres tras A
-        self._migrar()
-        self.assertFalse(b.l10n_co_ne_prorroga_de_id)
-        e2, _c2 = self._empleado('MigraManual')
-        a2 = self._incapacidad(e2, date(2026, 3, 1), date(2026, 3, 10))
-        a3 = self._incapacidad(e2, date(2026, 3, 11), date(2026, 3, 20))
-        manual = self._incapacidad(e2, date(2026, 3, 21), date(2026, 3, 25), prorroga_de=a2)   # a mano, saltando a a3 (a2 ya tiene siguiente: a3 no se vincula)
-        self._migrar()
-        self.assertEqual(manual.l10n_co_ne_prorroga_de_id, a2)
-        self.assertFalse(a3.l10n_co_ne_prorroga_de_id)

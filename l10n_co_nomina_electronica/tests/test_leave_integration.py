@@ -80,6 +80,13 @@ class TestHrPayslipLeaveIntegration(TransactionCase):
             'l10n_co_nomina_electronica.hr_leave_type_co_inc_comun')
         self.leave_type_vac = self.env.ref(
             'l10n_co_nomina_electronica.hr_leave_type_co_vac')
+        # v19 (N1 de G2): la prueba cuenta 8 dias habiles porque el lunes 15-jun-2026 es el festivo «Sagrado Corazon» del calendario de la compañia (ver el comentario de la regla ad hoc mas abajo). La base de v18
+        # de la que sale la prueba ya traia el festivo en el calendario; la base de pruebas de v19 no (dio 9). Se crea aqui como festivo GLOBAL (``resource.calendar.leaves`` sin recurso) con una ventana que cubre ese
+        # dia completo en cualquier zona horaria de UTC-5 a UTC: no cambia ningun valor esperado ni el modulo.
+        calendario = self.employee.resource_calendar_id or self.company.resource_calendar_id
+        self.env['resource.calendar.leaves'].create({
+            'name': 'Sagrado Corazón (festivo de la prueba)', 'calendar_id': calendario.id, 'company_id': self.company.id,
+            'date_from': datetime(2026, 6, 15, 0, 0, 0), 'date_to': datetime(2026, 6, 16, 4, 59, 59)})
         self.rule_category = self.env['hr.salary.rule.category'].search([('code', '=', 'ALW')], limit=1)
         if not self.rule_category:
             self.rule_category = self.env['hr.salary.rule.category'].create({

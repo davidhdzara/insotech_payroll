@@ -11,6 +11,7 @@ nativa de ausencias (ya cubierta en test_ausencias_nomina).
 from datetime import date
 from unittest import mock
 
+from odoo import fields
 from odoo.tests.common import TransactionCase, tagged
 from .common_version import crear_contrato
 
@@ -67,7 +68,9 @@ class TestLiquidacionVacaciones(TransactionCase):
                 'code': 'CO_VAC_COMP', 'name': 'Vacaciones compensadas',
                 'version_id': contract.id, 'employee_id': employee.id,
                 'quantity': 1.0, 'rate': 100.0, 'amount': monto_comp, 'total': monto_comp})
-        slip.state = state
+        # v19: un recibo confirmado a mano necesita ``done_date``: sin ella el recalculo nativo de ``has_wrong_data`` (``version.last_modified_date > done_date``, hr_payroll/models/hr_payslip.py:404) da
+        # TypeError al siguiente compute_sheet (N1 de G2: 2 errores de esta clase). La confirmacion real la fija.
+        slip.write(dict({'state': state}, **({'done_date': fields.Datetime.now()} if state in ('validated', 'paid') else {})))
         return slip
 
     def _calcular(self, slip, dias_ausencia=0):
