@@ -4,6 +4,8 @@
 from datetime import date
 from unittest.mock import patch
 
+from odoo import fields
+
 from odoo.addons.l10n_co_nomina_electronica.services import dian_utils
 
 from .common_version import crear_empleado_con_contrato
@@ -55,7 +57,9 @@ class DocumentoFixture:
                 'name': 'Recibo Doc', 'employee_id': empleado.id, 'version_id': contrato.id,
                 'company_id': self.company.id, 'struct_id': self.struct.id,
                 'date_from': date(2026, mes, 1 if fin <= 15 else 16), 'date_to': date(2026, mes, fin)})
-            slip.write({'state': 'paid', 'paid_date': date(2026, mes, pago), 'l10n_co_ne_documento_id': doc.id})
+            # v19: ``done_date`` lo fija el flujo nativo al validar (hr_payroll/models/hr_payslip.py:638); ``_compute_is_wrong_version`` (:399-404) compara
+            # ``version_id.last_modified_date > done_date`` y con done_date=False truena (TypeError datetime > bool) al recalcular un recibo puesto en 'paid' a mano.
+            slip.write({'state': 'paid', 'done_date': fields.Datetime.now(), 'paid_date': date(2026, mes, pago), 'l10n_co_ne_documento_id': doc.id})
         return doc
 
     def _patch(self, objetivo, atributo, valor):
