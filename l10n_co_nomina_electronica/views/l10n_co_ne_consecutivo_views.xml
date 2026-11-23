@@ -31,7 +31,7 @@
                 <filter name="aceptados" string="Aceptados" domain="[('estado', '=', 'aceptado')]"/>
                 <filter name="produccion" string="Producción" domain="[('ambiente', '=', 'produccion')]"/>
                 <filter name="habilitacion" string="Habilitación" domain="[('ambiente', '=', 'habilitacion')]"/>
-                <group expand="0" string="Agrupar por">
+                <group>
                     <filter name="agrupar_ambiente" string="Ambiente" context="{'group_by': 'ambiente'}"/>
                     <filter name="agrupar_prefijo" string="Prefijo" context="{'group_by': 'prefijo'}"/>
                     <filter name="agrupar_estado" string="Estado DIAN" context="{'group_by': 'estado'}"/>

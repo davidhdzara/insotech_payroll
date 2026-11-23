@@ -146,7 +146,7 @@
                 <filter string="En cola" name="en_cola" domain="[('sending_data', '!=', False)]"/>
                 <filter string="Notas de ajuste" name="ajustes" domain="[('is_adjustment', '=', True)]"/>
                 <filter string="Migrados del ciclo por recibo" name="legacy" domain="[('legacy', '=', True)]"/>
-                <group expand="0" string="Agrupar por">
+                <group>
                     <filter string="Estado DIAN" name="estado_dian" context="{'group_by': 'state'}"/>
                     <filter string="Mes" name="group_period" context="{'group_by': 'period'}"/>
                     <filter string="Empleado" name="group_employee" context="{'group_by': 'employee_id'}"/>

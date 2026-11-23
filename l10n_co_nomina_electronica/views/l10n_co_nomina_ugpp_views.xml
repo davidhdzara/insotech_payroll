@@ -111,7 +111,7 @@
                 <filter name="filter_current_year"
                         string="Año Actual"
                         domain="[('year', '=', (context_today()).year)]"/>
-                <group expand="0" string="Agrupar por">
+                <group>
                     <filter name="group_year"
                             string="Año"
                             context="{'group_by': 'year'}"/>

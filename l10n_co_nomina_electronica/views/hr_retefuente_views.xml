@@ -158,7 +158,7 @@
                 <separator/>
                 <filter string="Activo" name="active" domain="[('active', '=', True)]"/>
                 <filter string="Archivado" name="inactive" domain="[('active', '=', False)]"/>
-                <group expand="0" string="Agrupar por">
+                <group>
                     <filter string="Año" name="group_by_year" context="{'group_by': 'year'}"/>
                     <filter string="Procedimiento" name="group_by_procedure" context="{'group_by': 'procedure'}"/>
                     <filter string="Compañía" name="group_by_company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>

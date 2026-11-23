@@ -45,7 +45,7 @@
                 <field name="code" string="Código o descripción"
                        filter_domain="['|', ('code', 'ilike', self), ('name', 'ilike', self)]"/>
                 <field name="risk_class"/>
-                <group expand="0" string="Agrupar por">
+                <group>
                     <filter string="Clase de Riesgo" name="group_risk_class"
                             context="{'group_by': 'risk_class'}"/>
                 </group>
