@@ -3,9 +3,17 @@
 (doc 51, .179). Se comprueba el arch de las vistas heredadas: cada elemento colombiano lleva una
 condicion `invisible` por pais (el mismo patron de l10n_mx_hr_payroll: country_code != 'MX')."""
 
+import unittest
 from lxml import etree
 
 from odoo.tests.common import TransactionCase, tagged
+
+
+MOTIVO_BLOQUE_2 = (
+    'H-V19-14: vistas de hr.version pendientes de portar. Registro de impacto v19: fila «Bloque 2 vistas del contrato» (registro_impacto_v19.md:261, bajo '
+    '«Bloque 1 — R2, X-1, Y-2») y §14. Las vistas del contrato (hr_contract_views.xml, hr_contract_deductions_views.xml y hr_contract_retefuente_views.xml) NO '
+    'estan en el manifest (TL 2026-11-18, __manifest__.py:111-116): hr.contract y su formulario no existen y la pantalla de la version la decide David; sin '
+    'esa vista no hay que probar. HUECO ABIERTO de F1 en v19, no un cierre: se reactiva y se reconvierte a hr.version cuando se porte la vista.')
 
 
 @tagged('post_install', '-at_install')
@@ -19,6 +27,7 @@ class TestVistasPorPais(TransactionCase):
         self.assertTrue(nodos, 'No esta en la vista: %s' % xpath)
         return nodos[0].get('invisible') or ''
 
+    @unittest.skip(MOTIVO_BLOQUE_2)
     def test_contrato_oculta_lo_colombiano_fuera_de_colombia(self):
         arch = self._arch('hr.contract')
         self.assertIn("country_code != 'CO'", self._invisible(
@@ -47,6 +56,7 @@ class TestVistasPorPais(TransactionCase):
             self.assertIn("country_code != 'CO'", self._invisible(
                 arch, "//button[@name='%s']" % boton), boton)
 
+    @unittest.skip(MOTIVO_BLOQUE_2)
     def test_pestanas_de_retencion_y_deducciones_del_contrato_se_ocultan(self):
         arch = self._arch('hr.contract')
         for pagina in ('retefuente_procedimiento', 'deducciones_fijas'):
