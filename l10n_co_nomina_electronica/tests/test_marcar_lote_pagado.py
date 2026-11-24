@@ -10,6 +10,8 @@ from odoo import fields
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
+from .common_version import confirmar_a_mano
+
 from .common_documento import DocumentoFixture
 
 
@@ -25,7 +27,7 @@ class TestMarcarLotePagado(DocumentoFixture, TransactionCase):
         """Lote con los recibos del fixture en estado Hecho (``validated``) y sin fecha de pago. v19: el estado del lote es CALCULADO desde
         los recibos (``01_ready/02_close/03_paid/04_cancel``, ``hr_payslip_run.py:31-39``, ``:192-193`` según el plan): no se fija al crearlo."""
         recibos = self._documento(date(2024, 3, 1)).payslip_ids
-        recibos.write({'state': 'validated', 'paid_date': False})
+        confirmar_a_mano(recibos, paid_date=False)
         lote = self.env['hr.payslip.run'].create({'name': 'Lote E-5 %s' % self.n})
         recibos.write({'payslip_run_id': lote.id})
         return lote

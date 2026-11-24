@@ -6,7 +6,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -55,7 +55,7 @@ class TestUgppAgrupador(TransactionCase):
                 'slip_id': recibo.id, 'salary_rule_id': regla.id, 'code': regla.code, 'name': regla.name,
                 'category_id': regla.category_id.id, 'employee_id': self.empleado.id,
                 'version_id': self.contrato.id, 'total': total, 'amount': total, 'quantity': 1, 'rate': 100})
-        recibo.write({'state': 'validated', 'paid_date': pagado})
+        confirmar_a_mano(recibo, paid_date=pagado)
         return recibo
 
     def _valores(self, reporte):

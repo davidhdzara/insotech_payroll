@@ -7,7 +7,7 @@ from datetime import date
 from unittest import mock
 
 from odoo.tests.common import TransactionCase, tagged
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 _PAYSLIP = 'odoo.addons.l10n_co_nomina_electronica.models.hr_payslip.HrPayslip'
 _SLN = 400000.0
@@ -53,7 +53,7 @@ class TestSlnAportes(TransactionCase):
 
     def test_consolidado_guarda_ibc_y_dias_sln(self):
         slip = self._recibo('Cons', 3000000.0)
-        slip.state = 'validated'
+        confirmar_a_mano(slip)
         with mock.patch(_PAYSLIP + '._ne_dias_sln', return_value=10):
             slip._ne_refrescar_ibc_mensual()
         cons = self.Consolidado.search([('employee_id', '=', slip.employee_id.id)])

@@ -12,7 +12,7 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from .common_importes import valores_monetarios
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 REPORTE = 'l10n_co_nomina_electronica.action_report_comprobante_pago'
 PROHIBIDOS = ('DIAN', 'Resolucion', 'Resolución', 'CUNE', 'Estado NE', '/report/barcode', 'QR', 'Firma del empleado')
@@ -58,7 +58,7 @@ class TestComprobantePago(TransactionCase):
                 'slip_id': recibo.id, 'salary_rule_id': regla.id, 'code': codigo, 'name': regla.name,
                 'version_id': contrato.id, 'employee_id': emp.id, 'quantity': 1.0, 'rate': 100.0,
                 'amount': total, 'total': total})
-        recibo.write({'state': 'validated', 'paid_date': pagado})
+        confirmar_a_mano(recibo, paid_date=pagado)
         return recibo
 
     def _quincena(self, pagado=date(2026, 6, 15), compania=None):

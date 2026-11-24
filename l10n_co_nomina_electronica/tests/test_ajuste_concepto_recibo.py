@@ -20,7 +20,7 @@ from odoo.tests.common import TransactionCase, tagged
 from odoo.tools import mute_logger
 from odoo.tools.misc import format_amount
 
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 from .common_diario import fijar_diario_de_salarios
 
 _G_MANAGER = 'hr_payroll.group_hr_payroll_manager'
@@ -241,7 +241,7 @@ class TestAjusteConceptoRecibo(TransactionCase):
             with patch.object(type(recibo), '_ne_estado_documento_ajuste', return_value=estado):
                 self.Ajuste.create(valores).unlink()                          # estos estados no bloquean por sí mismos
         ajuste = self.Ajuste.create(valores)
-        recibo.write({'state': 'validated'})
+        confirmar_a_mano(recibo)
         with self.assertRaises(UserError):
             ajuste.write({'amount': 1.0})
         with self.assertRaises(UserError):
@@ -383,7 +383,7 @@ class TestAjusteConceptoRecibo(TransactionCase):
         sugerido = ajuste_borrador.sugerido_total
         self.assertGreater(sugerido, 0.0, 'Premisa: el auxilio sugerido es positivo')
         self.assertEqual(self._total(borrador, 'CO_BASICO'), 0.0)
-        hecho.write({'state': 'validated'})        # v19: ``done`` pasó a ``validated``
+        confirmar_a_mano(hecho)        # v19: ``done`` pasó a ``validated``
         self._regla('CO_BASICO').l10n_co_ne_ajustable = False                  # la regla deja de ser ajustable
         self.assertFalse(ajuste_borrador.exists(), 'Borrador: el ajuste se retira')
         self.assertTrue(ajuste_hecho.exists(), 'Recibo hecho: no se toca')

@@ -73,7 +73,7 @@ class TestCertificationWizardPeriod(TransactionCase):
             'struct_id': self.struct.id,
             'date_from': date_from,
             'date_to': date_to,
-            'state': 'validated',
+            'state': 'validated', 'done_date': fields.Datetime.now(),
         })
 
     def test_periodo_futuro_se_ignora_gana_el_ya_iniciado(self):

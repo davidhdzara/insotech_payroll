@@ -10,7 +10,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -90,7 +90,7 @@ class TestPilaPlanilla(TransactionCase):
             'company_id': self.company.id, 'struct_id': structure.id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30)})
         slip.compute_sheet()
-        slip.state = 'validated'
+        confirmar_a_mano(slip)
         slip._ne_refrescar_ibc_mensual()
         wizard = self._wizard('E')
         planilla = wizard._registrar_planilla(slip)

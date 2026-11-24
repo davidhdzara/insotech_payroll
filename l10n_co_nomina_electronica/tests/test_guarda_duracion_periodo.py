@@ -11,7 +11,7 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from .common_documento import DocumentoFixture
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -116,6 +116,6 @@ class TestGuardaDuracionPeriodo(DocumentoFixture, TransactionCase):
     # ── recibos ya confirmados ───────────────────────────────────────
     def test_un_recibo_confirmado_antiguo_no_se_revalida_al_consultarlo(self):
         recibo = self._recibo(date(2026, 1, 4), date(2026, 4, 15))
-        recibo.state = 'validated'
+        confirmar_a_mano(recibo)
         recibo.read(['name', 'state'])            # consultar no valida nada
         self.assertEqual(recibo.state, 'validated')

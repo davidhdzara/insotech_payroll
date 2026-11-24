@@ -20,7 +20,7 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import nomina_xml_builder
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 class _FakeCertificate:
@@ -201,7 +201,7 @@ class TestNotaAjusteEliminar(TransactionCase):
         no debe rechazarlo por eso (puede rechazarlo por otras causas, p. ej. nómina sin
         confirmar, pero no con el mensaje de "CUNE sin definir")."""
         nota = self._nota_eliminar(self._original_aceptado())
-        nota.state = 'validated'
+        confirmar_a_mano(nota)
         try:
             nota._validate_ne_prerequisites()
         except UserError as e:

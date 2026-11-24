@@ -19,6 +19,8 @@ Reglas de estos fixtures (lecturas L3 y L5 de ``fichas_entrega_v19/00_lecturas_v
 
 from datetime import timedelta
 
+from odoo import fields
+
 # Campos de empleado y de contrato que las pruebas del módulo daban siempre igual (valores de ``test_provisiones_periodo`` y ``test_dias_por_asistencia``).
 VALORES_COLOMBIA = {
     'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10',
@@ -45,6 +47,13 @@ def crear_empleado_con_contrato(env, compania, wage, inicio, estructura_tipo, no
     if integral:
         version.write({'l10n_co_ne_integral_salary': True})
     return empleado, version
+
+
+def confirmar_a_mano(recibos, estado='validated', **extra):
+    """Pone ``recibos`` en estado ``validated`` (o ``paid``) como si se hubieran confirmado, con ``done_date``. Odoo 19 no tiene el estado ``done`` y el recalculo nativo de ``has_wrong_data``
+    (``version.last_modified_date > done_date``, ``hr_payroll/models/hr_payslip.py:404``) da TypeError si el recibo esta confirmado SIN ``done_date`` y algo dispara el recalculo (N1 de G2:
+    TestLiquidacionVacaciones). La confirmacion real (``action_payslip_done``) la fija. ``extra``: otros campos del mismo ``write`` (``paid_date``, ``move_id``...)."""
+    recibos.write(dict(extra, state=estado, done_date=fields.Datetime.now()))
 
 
 def crear_aumento(env, empleado, version_a, desde, sueldo):

@@ -21,7 +21,7 @@ from lxml import etree
 from odoo.exceptions import UserError
 from odoo.tests import Form
 from odoo.tests.common import TransactionCase, tagged
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 from .common_diario import fijar_diario_de_salarios
 
 _GRUPO_GERENTE = 'hr_payroll.group_hr_payroll_manager'
@@ -390,7 +390,7 @@ class TestCalculoDelSalario(TransactionCase):
         self.Calculo.sudo().with_context(ne_regenerar_calculo=True).search([('slip_id', '=', recibo.id)]).unlink()
         recibo.invalidate_recordset(['l10n_co_calculo_ids'])
         self.assertFalse(recibo.l10n_co_calculo_ids)
-        recibo.write({'state': 'validated'})        # v19: ``done`` pasó a ``validated``
+        confirmar_a_mano(recibo)        # v19: ``done`` pasó a ``validated``
         neto = recibo._ne_pdf_neto()
         self.env['hr.payslip']._ne_generar_conceptos_pendientes()
         self.assertEqual([(f.display_type, f.name, f.total) for f in self._filas(recibo)], antes, 'Las filas vuelven a ser las mismas')
@@ -400,8 +400,8 @@ class TestCalculoDelSalario(TransactionCase):
         """H-QA-040 (QA sobre .298, pedido del TL): un recibo en borrador con filas de una versión anterior las recibe nuevas en el -u; los validados y pagados son
         históricos y se quedan como están (aunque tengan filas viejas), porque la función solo genera lo que les falta. v19: sin «en espera» (no existe)."""
         borrador, validado, pagado = self._recibo(), self._recibo(), self._recibo()
-        validado.write({'state': 'validated'})
-        pagado.write({'state': 'paid'})
+        confirmar_a_mano(validado)
+        confirmar_a_mano(pagado, 'paid')
         recibos = borrador | validado | pagado
         actuales = {r.id: [(f.display_type, f.name, f.total) for f in self._filas(r)] for r in recibos}
         for recibo in recibos:

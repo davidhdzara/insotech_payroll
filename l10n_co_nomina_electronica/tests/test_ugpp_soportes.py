@@ -10,7 +10,7 @@ from unittest.mock import patch
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.models import l10n_co_nomina_ugpp as ugpp
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 PDF = b'%PDF-1.4 prueba'
 
@@ -37,7 +37,7 @@ class TestUgppSoportes(TransactionCase):
             'name': 'Recibo Soportes', 'employee_id': cls.empleado.id, 'version_id': cls.contrato.id,
             'company_id': cls.company.id, 'struct_id': cls.estructura.id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30)})
-        cls.recibo.state = 'validated'
+        confirmar_a_mano(cls.recibo)
         cls.reporte = cls.env['l10n_co_nomina.ugpp'].create({
             'year': 2026, 'month': '9', 'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30),
             'company_id': cls.company.id})

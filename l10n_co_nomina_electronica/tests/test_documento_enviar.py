@@ -17,6 +17,8 @@ from odoo import fields
 from odoo.exceptions import AccessError, UserError
 from odoo.tests.common import TransactionCase, tagged
 
+from .common_version import confirmar_a_mano
+
 from odoo.addons.l10n_co_nomina_electronica.services import (
     dian_utils, nomina_xml_builder, soap_client, xml_signer)
 
@@ -496,7 +498,7 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
             'name': 'Recibo tardío', 'employee_id': self.doc.employee_id.id, 'version_id': self.doc.version_id.id,
             'company_id': self.company.id, 'struct_id': self.struct.id,
             'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
-        slip.write({'state': 'paid', 'paid_date': date(2026, 3, 20)})
+        confirmar_a_mano(slip, 'paid', paid_date=date(2026, 3, 20))
         return slip
 
     def test_envio_fallido_no_se_recompone_y_alerta(self):

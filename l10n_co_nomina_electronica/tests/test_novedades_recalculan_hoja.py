@@ -16,7 +16,7 @@ from unittest.mock import patch
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -94,7 +94,7 @@ class TestNovedadesRecalculanHoja(TransactionCase):
     # ── qué recibos no se tocan ───────────────────────────────────────
     def test_un_recibo_hecho_no_se_recalcula(self):
         recibo = self._recibo()
-        recibo.state = 'validated'
+        confirmar_a_mano(recibo)
         antes = self._totales(recibo)
         self._novedad(recibo, 200000.0)
         self.assertEqual(self._totales(recibo), antes)

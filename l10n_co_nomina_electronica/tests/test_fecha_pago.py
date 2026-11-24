@@ -7,7 +7,7 @@ from unittest.mock import patch
 from odoo import fields
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -71,7 +71,7 @@ class TestFechaPago(TransactionCase):
     # ── Registrar pago ───────────────────────────────────────────────
     def test_registrar_pago_pone_la_fecha_elegida(self):
         self.company.l10n_co_ne_fuente_fecha_pago = 'recibo'
-        self.slip.state = 'validated'
+        confirmar_a_mano(self.slip)
         self._registrar(self.slip, date(2026, 3, 16)).action_registrar_pago()
         self.assertEqual(self.slip.state, 'paid')
         self.assertEqual(self.slip.paid_date, date(2026, 3, 16))   # no "hoy" del nativo
@@ -79,7 +79,7 @@ class TestFechaPago(TransactionCase):
     def test_registrar_pago_valida(self):
         self.company.l10n_co_ne_fuente_fecha_pago = 'recibo'
         manana = fields.Date.context_today(self.slip) + timedelta(days=1)
-        self.slip.state = 'validated'
+        confirmar_a_mano(self.slip)
         with self.assertRaisesRegex(UserError, 'futura'):
             self._registrar(self.slip, manana).action_registrar_pago()
         self.slip.state = 'draft'
@@ -87,7 +87,7 @@ class TestFechaPago(TransactionCase):
             self._registrar(self.slip, date(2026, 3, 16)).action_registrar_pago()
 
     def test_registrar_pago_exige_fuente_recibo(self):
-        self.slip.state = 'validated'
+        confirmar_a_mano(self.slip)
         self.company.l10n_co_ne_fuente_fecha_pago = 'contabilidad'
         with self.assertRaisesRegex(UserError, 'no sale del recibo'):
             self._registrar(self.slip, date(2026, 3, 16)).action_registrar_pago()

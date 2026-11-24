@@ -20,7 +20,7 @@ from odoo.exceptions import AccessError, UserError
 from odoo.tests import Form
 from odoo.tests.common import TransactionCase, tagged
 
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 from .common_diario import fijar_diario_de_salarios
 
 _G_MANAGER = 'hr_payroll.group_hr_payroll_manager'
@@ -512,7 +512,7 @@ class TestConceptosDePago(TransactionCase):
             with self.assertRaises(UserError):
                 fila.write({'sequence': 5})
         hecho = self._recibo()
-        hecho.write({'state': 'validated'})        # v19: no hay 'done' (draft/validated/paid/cancel)
+        confirmar_a_mano(hecho)        # v19: no hay 'done' (draft/validated/paid/cancel)
         with self.assertRaises(UserError):
             hecho.l10n_co_concepto_ids[:1].write({'sequence': 5})
         recibo.invalidate_recordset()
@@ -556,7 +556,7 @@ class TestConceptosDePago(TransactionCase):
         recibo = self._recibo()
         fila = self._fila(recibo, 'CO_BASICO')
         cantidad = len(recibo.l10n_co_concepto_ids)
-        recibo.write({'state': 'validated'})
+        confirmar_a_mano(recibo)
         self.assertEqual(len(recibo.l10n_co_concepto_ids), cantidad)
         fila.invalidate_recordset()
         self.assertEqual((fila.edita_cantidad, fila.edita_porcentaje, fila.edita_importe), (False, False, False))
@@ -598,7 +598,7 @@ class TestConceptosDePago(TransactionCase):
         propias = self.Concepto.sudo().with_context(ne_regenerar_conceptos=True)
         propias.search([('slip_id', 'in', (recibo | otro).ids)]).unlink()
         self.assertFalse(recibo.l10n_co_concepto_ids)
-        otro.write({'state': 'validated'})                              # un recibo hecho también recibe sus filas, de solo lectura
+        confirmar_a_mano(otro)                              # un recibo hecho también recibe sus filas, de solo lectura
         espia, llamadas = self._contando_calculos(recibo)
         with espia:
             self.assertTrue(self.env['hr.payslip']._ne_generar_conceptos_pendientes())
@@ -618,7 +618,7 @@ class TestConceptosDePago(TransactionCase):
         ya calculado y de uno hecho quedan IGUALES, y no se publica ninguna nota ni se llama a ``compute_sheet``."""
         calculado = self._recibo()
         hecho = self._recibo()
-        hecho.write({'state': 'validated'})
+        confirmar_a_mano(hecho)
         recibos = calculado | hecho
 
         def foto(recibo):

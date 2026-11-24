@@ -5,7 +5,7 @@ from datetime import date
 from unittest.mock import patch
 
 from odoo.tests.common import TransactionCase, tagged
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -41,7 +41,7 @@ class TestDesgloseRecibo(TransactionCase):
                 'version_id': self.contrato.id, 'employee_id': self.empleado.id, 'quantity': 1.0, 'rate': 100.0,
                 'amount': total, 'total': total})
         if pagado:
-            recibo.write({'state': 'validated', 'paid_date': pagado})
+            confirmar_a_mano(recibo, paid_date=pagado)
         return recibo
 
     def _estructura(self, xmlid):
@@ -106,7 +106,7 @@ class TestDesgloseRecibo(TransactionCase):
     def test_sin_fecha_de_pago_el_desglose_no_falla_y_da_false(self):
         recibo = self._recibo(self._estructura('co_nomina'), ('CO_BASICO', 1000.0), ('CO_NETO', 1000.0))
         self.assertFalse(recibo._ne_desglose()['paid_date'])
-        recibo.write({'state': 'validated', 'paid_date': False})
+        confirmar_a_mano(recibo, paid_date=False)
         self.assertFalse(recibo._ne_desglose()['paid_date'])
 
     def test_no_recalcula_ni_escribe(self):

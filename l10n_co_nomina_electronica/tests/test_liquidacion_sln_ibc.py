@@ -17,7 +17,7 @@ retiro 2026-08-15, licencia no remunerada lun 3 a vie 7 de agosto (5 dias habile
 from datetime import date
 
 from odoo.tests.common import TransactionCase, tagged
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 from .ibc_previo import crear_recibo_previo
 
@@ -102,7 +102,7 @@ class TestLiquidacionSlnIbc(TransactionCase):
         employee, contract = self._contrato('SlnConsolidado')
         self._licencia(employee, date(2026, 8, 3), date(2026, 8, 7))
         slip = self._liquidacion(employee, contract)
-        slip.state = 'validated'
+        confirmar_a_mano(slip)
         consolidado = self.env['l10n.co.ibc.mensual']._refrescar(self.company, employee, RETIRO)
         self.assertAlmostEqual(consolidado.ibc_sln, 500000.0, delta=0.01)
         self.assertAlmostEqual(consolidado.ibc_sp, 1500000.0, delta=0.01)

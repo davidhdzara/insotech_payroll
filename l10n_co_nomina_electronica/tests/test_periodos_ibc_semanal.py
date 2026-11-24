@@ -15,7 +15,7 @@ from odoo.tests.common import TransactionCase, tagged
 from odoo.addons.l10n_co_nomina_electronica.services import documento_merge as dm
 
 from .test_documento_merge import PERIODO, _recibo as _datos_recibo
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -58,7 +58,7 @@ class TestPeriodosIbcSemanal(TransactionCase):
 
     def _consolidado(self, empleado, recibos, mes):
         for recibo in recibos:
-            recibo.state = 'validated'
+            confirmar_a_mano(recibo)
         recibos[0]._ne_refrescar_ibc_mensual()
         return self.env['l10n.co.ibc.mensual'].search([('employee_id', '=', empleado.id), ('period', '=', mes)])
 

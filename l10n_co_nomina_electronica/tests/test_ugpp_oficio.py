@@ -8,7 +8,7 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.models import l10n_co_nomina_ugpp as ugpp
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -40,7 +40,7 @@ class TestUgppOficio(TransactionCase):
             'company_id': cls.company.id,
             'struct_id': cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina').id,
             'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30)})
-        cls.recibo.write({'state': 'validated', 'paid_date': date(2026, 9, 30)})
+        confirmar_a_mano(cls.recibo, paid_date=date(2026, 9, 30))
         cls.reporte = cls.env['l10n_co_nomina.ugpp'].create({
             'year': 2026, 'month': '9', 'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 30),
             'company_id': cls.company.id, 'requerimiento_radicado': '2026-RAD-123',
@@ -96,7 +96,7 @@ class TestUgppOficio(TransactionCase):
             'name': 'Recibo Oficio 2', 'employee_id': self.empleado.id, 'version_id': self.contrato.id,
             'company_id': self.company.id, 'struct_id': self.recibo.struct_id.id,
             'date_from': date(2026, 9, 6), 'date_to': date(2026, 9, 20)})
-        segundo.write({'state': 'validated', 'paid_date': date(2026, 9, 20)})
+        confirmar_a_mano(segundo, paid_date=date(2026, 9, 20))
         self.recibo.paid_date = date(2026, 9, 5)
         self.assertEqual(self.reporte._ugpp_datos_oficio()['fechas_pago'], ['05/09/2026', '20/09/2026'])
 

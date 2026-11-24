@@ -24,7 +24,7 @@ from odoo.tests.common import TransactionCase, tagged
 from odoo.addons.l10n_co_nomina_electronica.services import soap_client, xml_signer
 
 from .test_documento_enviar import ACEPTADA
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 MODULO = 'odoo.addons.l10n_co_nomina_electronica'
 _SIGN_XML_REAL = xml_signer.sign_xml      # la función real, antes de que el setUp la parchee
@@ -91,7 +91,7 @@ class TestHoraBogota(TransactionCase):
                 'company_id': cls.company.id, 'struct_id': estructura.id,
                 'date_from': date(2026, 3, ini), 'date_to': date(2026, 3, fin)})
             recibo.compute_sheet()
-            recibo.write({'state': 'paid', 'paid_date': date(2026, 3, fin)})
+            confirmar_a_mano(recibo, 'paid', paid_date=date(2026, 3, fin))
             cls.recibos |= recibo
         # certificado autofirmado efímero: SOLO para ejercer la firma real (SigningTime)
         cls.llave = rsa.generate_private_key(public_exponent=65537, key_size=2048)

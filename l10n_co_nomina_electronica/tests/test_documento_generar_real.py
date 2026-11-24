@@ -20,7 +20,7 @@ from lxml import etree
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import xml_signer
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 _logger = logging.getLogger(__name__)
 CAJA = Path(__file__).resolve().parent.parent / 'DIAN' / 'Caja-de-Herramientas-Nomina-Electronica-V1-0'
@@ -77,7 +77,7 @@ class TestDocumentoGenerarReal(TransactionCase):
                 'company_id': cls.company.id, 'struct_id': estructura.id,
                 'date_from': date(2026, 3, ini), 'date_to': date(2026, 3, fin)})
             recibo.compute_sheet()
-            recibo.write({'state': 'paid', 'paid_date': date(2026, 3, fin)})
+            confirmar_a_mano(recibo, 'paid', paid_date=date(2026, 3, fin))
             cls.recibos |= recibo
 
     def setUp(self):

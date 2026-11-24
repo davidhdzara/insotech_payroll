@@ -10,7 +10,7 @@ from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.models import l10n_co_nomina_ugpp as ugpp
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 try:
     import openpyxl
@@ -60,7 +60,7 @@ class TestUgppDias(TransactionCase):
 
     def _confirmar(self, *slips):
         for s in slips:
-            s.state = 'validated'
+            confirmar_a_mano(s)
         slips[0]._ne_refrescar_ibc_mensual()
 
     def _filas(self, slips):
@@ -128,7 +128,7 @@ class TestUgppDias(TransactionCase):
     def test_sin_consolidado_es_error_y_no_asume_30(self):
         employee, contract = self._empleado()
         slip = self._recibo(employee, contract, date(2026, 9, 1), date(2026, 9, 30))
-        slip.state = 'validated'  # sin refrescar el consolidado ni líneas de IBC
+        confirmar_a_mano(slip)  # sin refrescar el consolidado ni líneas de IBC
         slip.line_ids.filtered(lambda l: l.code.startswith('CO_IBC')).unlink()
         with self.assertRaises(UserError):
             self._filas(slip)

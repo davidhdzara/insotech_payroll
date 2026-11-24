@@ -10,6 +10,8 @@ from odoo import fields
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests.common import TransactionCase, tagged
 
+from .common_version import confirmar_a_mano
+
 from .common_documento import DocumentoFixture
 
 
@@ -43,7 +45,7 @@ class TestNotaAjusteCrear(DocumentoFixture, TransactionCase):
             'name': 'Recibo tardío', 'employee_id': doc.employee_id.id, 'version_id': doc.version_id.id,
             'company_id': self.company.id, 'struct_id': self.struct.id,
             'date_from': date(2026, 3, 1), 'date_to': date(2026, 3, 31)})
-        slip.write({'state': 'paid', 'paid_date': date(2026, 3, dia_pago)})
+        confirmar_a_mano(slip, 'paid', paid_date=date(2026, 3, dia_pago))
         return slip
 
     # ── Precondiciones ───────────────────────────────────────────────

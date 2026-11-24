@@ -21,7 +21,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 NETOS = (
     ('hr_payroll_structure_co_nomina', 'CO_NETO'), ('hr_payroll_structure_co_liquidacion', 'CO_LIQ_NETO'),
@@ -231,7 +231,7 @@ class TestPagarNeto(TransactionCase):
     def test_pagar_con_la_cuenta_por_pagar_en_net_abre_el_asistente_nativo_con_la_linea_del_neto(self):
         self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
         asiento = self._asiento_publicado()
-        self.recibo.write({'state': 'validated'})
+        confirmar_a_mano(self.recibo)
         accion = self.recibo.action_register_payment()
         self.assertEqual(accion['res_model'], 'account.payment.register')
         self.assertEqual(accion['context']['default_partner_id'], self.empleado.work_contact_id.id)
@@ -242,7 +242,7 @@ class TestPagarNeto(TransactionCase):
         self._cuenta_del_neto(self.regla_net, False)
         self._cuenta_del_neto(self.regla_co_neto, self.neto_por_pagar)
         self._asiento_publicado()
-        self.recibo.write({'state': 'validated'})
+        confirmar_a_mano(self.recibo)
         with self.assertRaisesRegex(UserError, 'not reconciliable'):
             self.recibo.action_register_payment()
 
@@ -279,7 +279,7 @@ class TestPagarNeto(TransactionCase):
     def test_tras_pagar_con_el_asistente_nativo_la_fecha_de_pago_sale_de_la_linea_del_neto(self):
         self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
         asiento = self._asiento_publicado()
-        self.recibo.write({'state': 'validated'})
+        confirmar_a_mano(self.recibo)
         # Asistente limitado a la línea del neto: con la EPS (conciliable) en el asiento, el botón real pasaría todas las líneas.
         self._pagar_con_el_boton(self._linea_de(asiento, self.neto_por_pagar), date(2026, 4, 5), todas_las_lineas=False)
         self.assertEqual(self.recibo._ne_fechas_pagos_contables(), [date(2026, 4, 5)])
@@ -290,7 +290,7 @@ class TestPagarNeto(TransactionCase):
         en 2841 (recibo 63693: «Hecho → Pagado»)."""
         self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
         asiento = self._asiento_con_neto_en(self.neto_por_pagar)
-        self.recibo.write({'state': 'validated', 'move_id': asiento.id})
+        confirmar_a_mano(self.recibo, move_id=asiento.id)
         self._pagar_con_el_boton(self._linea_de(asiento, self.neto_por_pagar), date(2026, 4, 5))
         self.assertEqual(self.recibo.state, 'paid')
         self.assertEqual(self.recibo.paid_date, date(2026, 4, 5))
@@ -299,7 +299,7 @@ class TestPagarNeto(TransactionCase):
     def test_un_pago_parcial_con_el_boton_deja_el_recibo_en_hecho(self):
         self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
         asiento = self._asiento_con_neto_en(self.neto_por_pagar)
-        self.recibo.write({'state': 'validated', 'move_id': asiento.id})
+        confirmar_a_mano(self.recibo, move_id=asiento.id)
         self._pagar_con_el_boton(self._linea_de(asiento, self.neto_por_pagar), date(2026, 4, 5), monto=400.0)
         self.assertEqual(self.recibo.state, 'validated')
         self.assertFalse(self.recibo.paid_date)
@@ -311,7 +311,7 @@ class TestPagarNeto(TransactionCase):
         botón real, que pasa todas las líneas (ver la prueba siguiente)."""
         self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
         asiento = self._asiento_publicado()                # neto 900.000 + EPS 100.000 por pagar (conciliable)
-        self.recibo.write({'state': 'validated'})
+        confirmar_a_mano(self.recibo)
         self._pagar_con_el_boton(self._linea_de(asiento, self.neto_por_pagar), date(2026, 4, 5), todas_las_lineas=False)
         self.assertEqual(self.recibo.state, 'validated')
         self.assertFalse(self.recibo.paid_date)
@@ -321,7 +321,7 @@ class TestPagarNeto(TransactionCase):
         las líneas y el asistente nativo no deja avanzar («No es posible registrar los pagos de movimientos entrantes y salientes al
         mismo tiempo»); no llega a pagar el neto. Por eso solo la cuenta del neto debe permitir conciliación."""
         asiento = self._asiento_publicado(cuenta_neto=self.neto_pasivo_conciliable)   # neto: pasivo corriente; EPS: por pagar
-        self.recibo.write({'state': 'validated'})
+        confirmar_a_mano(self.recibo)
         with self.assertRaisesRegex(UserError, 'inbound and outbound'):
             self._asistente_del_boton(self._linea_de(asiento, self.neto_pasivo_conciliable))
         self.assertEqual(self.recibo.state, 'validated')
@@ -331,7 +331,7 @@ class TestPagarNeto(TransactionCase):
         contexto del botón el hook no corre): sigue en «Hecho», sin mensaje de pago y sin ``paid_date``."""
         self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
         asiento = self._asiento_con_neto_en(self.neto_por_pagar)
-        self.recibo.write({'state': 'validated', 'move_id': asiento.id})
+        confirmar_a_mano(self.recibo, move_id=asiento.id)
         self._pagar(self._linea_de(asiento, self.neto_por_pagar), self.empleado.work_contact_id, 1000.0, date(2026, 4, 5))
         self.assertEqual(self.recibo.state, 'validated')
         self.assertFalse(self.recibo.paid_date)
@@ -343,7 +343,7 @@ class TestPagarNeto(TransactionCase):
         self.company.l10n_co_ne_fuente_fecha_pago = 'recibo'
         self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
         self._asiento_publicado()
-        self.recibo.write({'state': 'validated'})
+        confirmar_a_mano(self.recibo)
         self.env['hr.payslip.registrar.pago'].create({
             'payslip_ids': [(6, 0, self.recibo.ids)], 'fecha': date(2026, 4, 5)}).action_registrar_pago()
         self.assertEqual(self.recibo.state, 'paid')
@@ -355,7 +355,7 @@ class TestPagarNeto(TransactionCase):
         self.company.l10n_co_ne_fuente_fecha_pago = 'recibo'
         self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
         asiento = self._asiento_con_neto_en(self.neto_por_pagar)
-        self.recibo.write({'state': 'validated', 'move_id': asiento.id})
+        confirmar_a_mano(self.recibo, move_id=asiento.id)
         self._pagar_con_el_boton(self._linea_de(asiento, self.neto_por_pagar), date(2026, 4, 5))
         self.assertEqual(self.recibo._ne_fechas_pago(), [date(2026, 4, 5)])
         with self.assertRaisesRegex(UserError, 'Solo se registra el pago'):
@@ -365,7 +365,7 @@ class TestPagarNeto(TransactionCase):
     def test_pagar_un_recibo_ya_marcado_como_pagado_lo_rechaza_el_nativo(self):
         self._cuenta_del_neto(self.regla_net, self.neto_por_pagar)
         self._asiento_publicado()
-        self.recibo.write({'state': 'paid'})
+        confirmar_a_mano(self.recibo, 'paid')
         with self.assertRaisesRegex(UserError, 'unpaid documents'):
             self.recibo.action_register_payment()
 

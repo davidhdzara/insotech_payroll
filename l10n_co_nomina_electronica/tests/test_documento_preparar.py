@@ -8,7 +8,7 @@ from unittest.mock import patch
 from odoo import fields
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -161,7 +161,7 @@ class TestDocumentoPreparar(TransactionCase):
 
     def test_un_recibo_sin_fecha_de_pago_sigue_disparando_faltan_recibos(self):
         a1, a2, _b1 = self._marzo()
-        a2.write({'state': 'validated', 'paid_date': False})
+        confirmar_a_mano(a2, paid_date=False)
         doc = self._preparar(a1)['documentos']
         self.assertIn('faltan_recibos', self._claves(doc))
 
