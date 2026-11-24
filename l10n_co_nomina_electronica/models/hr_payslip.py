@@ -973,7 +973,9 @@ class HrPayslip(models.Model):
                 continue
             if not revertir and att.has_total_amount and not att.remaining_amount \
                     and att.state == 'open' and att.employee_count == 1:
-                att.action_done()
+                # v19: ``hr.salary.attachment`` ya no tiene ``action_done``; se cierra con ``action_close`` (``hr_payroll/models/hr_salary_attachment.py:270-274``:
+                # ``state = 'close'`` y ``date_end`` de hoy; leido en el servidor 42494857, 24-nov). H-V19-10.
+                att.action_close()
 
     def _ne_cerrar_libranza_liquidada(self, att, revertir):
         """Al confirmar la liquidacion la libranza se cierra y deja constancia
@@ -989,7 +991,7 @@ class HrPayslip(models.Model):
                 'trabajador queda debiendo ese valor directamente a la entidad.',
                 saldo=debe))
         if att.state == 'open':
-            att.action_done()
+            att.action_close()      # v19: no hay ``action_done`` (H-V19-10); ``action_open`` de la reversion si existe (``hr_salary_attachment.py:321``)
 
     def _ne_refrescar_ibc_mensual(self):
         """Recalcula el IBC consolidado de cada empleado/mes afectado (idempotente)."""
