@@ -83,7 +83,7 @@ class HrPayslipNeto(models.Model):
                 'ese resultado. Revise las fórmulas que lo leen o lo escriben (por ejemplo result_rules.get(código, {}) '
                 'deja una entrada vacía).',
                 codigo=codigo, tipo=type(entrada).__name__,
-                claves=sorted(entrada) if isinstance(entrada, dict) else '-'))
+                claves=str(sorted(entrada)) if isinstance(entrada, dict) else '-'))      # str(): en v19 una lista VACIA pasada a `_()` sale vacia (visto en la N1 de G3: «claves )»; causa de `_()` NO VERIFICADA); como texto sale «[]» / «['amount']» igual en v18 y v19
         return entrada['total']
 
     def _ne_suma_lineas_redondeadas(self, result_rules, codigo_categoria):
