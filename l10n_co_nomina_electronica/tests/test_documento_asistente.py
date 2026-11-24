@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 from odoo.exceptions import AccessError, RedirectWarning, UserError
 from odoo.tests.common import TransactionCase, tagged
 
-from .common_version import confirmar_a_mano
+from .common_version import confirmar_a_mano, crear_usuario_nomina
 
 from odoo.addons.l10n_co_nomina_electronica.services import dian_utils, nomina_xml_builder, xml_signer
 
@@ -208,6 +208,30 @@ class TestDocumentoAsistente(DocumentoFixture, TransactionCase):
         with self.assertRaisesRegex(AccessError, 'administrador de nómina'):
             asistente.action_send_and_print()
         self.assertFalse(recibos.l10n_co_ne_documento_id)
+
+    def test_el_oficial_calcula_la_historia_de_habilitacion_sin_poder_leer_el_intercambio(self):
+        """H-V19-15 (TL 24-nov): ``_ne_historia_solo_habilitacion`` lee con sudo() SOLO el tipo (``operation``) de los intercambios y devuelve un
+        booleano (de ahi sale el resumen del asistente). Las DOS mitades: el oficial de nomina llama al metodo y no falla (v19 daba AccessError en
+        ``test_solo_el_administrador_de_nomina_prepara_documentos``) y el mismo oficial leyendo el campo directo SIGUE dando AccessError (H-F2-03:
+        el oficial no lee intercambios; el ACL de ``l10n.co.ne.exchange`` no cambia)."""
+        recibo = self._recibos()[:1]
+        Intercambio = self.env['l10n.co.ne.exchange']
+        prueba = Intercambio.create({'company_id': self.company.id, 'operation': 'send_test_set', 'endpoint': 'https://example.test/hab'})
+        recibo.write({'l10n_co_ne_exchange_ids': [(4, prueba.id)]})
+        oficial = crear_usuario_nomina(self.env, self.company, 'oficial_historia_hab')
+        self.assertFalse(oficial.has_group('hr_payroll.group_hr_payroll_manager'))
+        # Mitad 1: el oficial calcula el booleano. Solo intercambios del set de pruebas = historia SOLO de habilitacion.
+        recibo.invalidate_recordset()
+        self.assertIs(recibo.with_user(oficial)._ne_historia_solo_habilitacion(), True)
+        # Con un envio sincrono real ya no es solo de habilitacion; sigue siendo un booleano, nunca el recordset.
+        real = Intercambio.create({'company_id': self.company.id, 'operation': 'send_sync', 'endpoint': 'https://example.test/real'})
+        recibo.write({'l10n_co_ne_exchange_ids': [(4, real.id)]})
+        recibo.invalidate_recordset()
+        self.assertIs(recibo.with_user(oficial)._ne_historia_solo_habilitacion(), False)
+        # Mitad 2: leer el intercambio directo SIGUE prohibido para el oficial (H-F2-03).
+        recibo.invalidate_recordset()
+        with self.assertRaises(AccessError):
+            recibo.with_user(oficial).l10n_co_ne_exchange_ids.mapped('operation')
 
     def test_compania_no_colombiana_da_error_y_no_crea_nada(self):
         recibos = self._recibos()
