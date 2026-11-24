@@ -48,23 +48,36 @@ class TestContratoIntegralPiso(TransactionCase):
         with self.assertRaises(ValidationError) as exc:
             self._contrato(22761764.0, date(2026, 1, 1))
         msg = str(exc.exception)
-        self.assertIn('Contrato Piso Integral', msg)
+        # v19: el mensaje nombra al empleado y la fecha desde la que rige la VERSION («versión vigente desde el …»; ``hr_contract.py:154``, bloque 0),
+        # no el nombre del contrato de v18.
         self.assertIn('Piso Integral', msg)  # empleado
+        self.assertIn('versión vigente desde el %s' % date(2026, 1, 1), msg)
         # con la moneda y el idioma del usuario: se compara contra format_amount del mismo entorno
         self.assertIn(format_amount(self.env, 22761765.0, self.company.currency_id), msg)
         self.assertIn('13', msg)
 
     def test_contrato_de_2025_usa_el_smmlv_de_su_fecha_de_inicio(self):
         self.assertTrue(self._contrato(19000000.0, date(2025, 3, 1)))  # piso 18.505.500
-        with self.assertRaises(ValidationError):
-            self._contrato(18505499.0, date(2025, 3, 1))
+        # v19: ``hr.version`` es unica por (empleado, date_version) (``hr_version_check_unique_date_version``): el segundo contrato
+        # del mismo dia va con OTRO empleado, y se comprueba que el error es el del piso y no otro.
+        otro = self.env['hr.employee'].create({
+            'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'name': 'Piso Integral Dos',
+            'company_id': self.company.id, 'l10n_co_ne_payment_method': '10'})
+        with self.assertRaises(ValidationError) as exc:
+            crear_contrato(self.env, dict(self._vals(18505499.0, date(2025, 3, 1)), employee_id=otro.id))
+        self.assertIn(format_amount(self.env, 18505500.0, self.company.currency_id), str(exc.exception))
 
     def test_no_integral_con_salario_bajo_guarda(self):
         self.assertTrue(self._contrato(1800000.0, date(2026, 1, 1), integral=False))
 
-    def test_en_borrador_tambien_valida(self):
+    def test_sin_contrato_no_valida_el_piso_y_al_formalizarlo_si(self):
+        """v19: ``hr.version`` no tiene estado; el «borrador» de v18 es una version sin ``contract_date_start`` (sin contrato). Sin esa
+        fecha no hay SMMLV de inicio y el piso no se valida (``_ne_validar_piso_integral``: ``continue``); al formalizar el contrato (poner
+        ``contract_date_start``) ``write`` SI lo valida. Decision del TL 24-nov (opcion 1): se deja el modulo y se adapta la prueba."""
+        version = self._contrato(5000000.0, date(2026, 1, 1), state='draft')
+        self.assertFalse(version.contract_date_start)
         with self.assertRaises(ValidationError):
-            self._contrato(5000000.0, date(2026, 1, 1), state='draft')
+            version.contract_date_start = date(2026, 1, 1)
 
     def test_marcar_integral_un_contrato_con_salario_bajo_falla(self):
         contrato = self._contrato(5000000.0, date(2026, 1, 1), integral=False)
