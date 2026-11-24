@@ -16,6 +16,7 @@ V1.0, sección 6.2.8, atributos TipoContrato y SalarioIntegral.
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
+from odoo.tools import float_round
 from odoo.tools.misc import format_amount
 
 from .res_company import NE_CLASES_RIESGO
@@ -225,6 +226,39 @@ class HrVersion(models.Model):
                 'bloque PILA) la tienen configurada.',
                 employee=self.employee_id.name, company=self.company_id.name))
         return clase
+
+    def _ne_horas_semanales(self):
+        """Horas semanales del HORARIO DE TRABAJO de la versión: el campo NATIVO ``resource.calendar.hours_per_week`` de su calendario (v19, ``resource/models/resource_calendar.py:104-106``, lectura R1 del
+        consultor). En un horario fijo lo calcula el nativo de las asistencias (``_get_hours_per_week``: solo las de trabajo, sin el almuerzo ni las secciones; en un horario de dos semanas, la suma de las dos / 2); en uno
+        FLEXIBLE es el dato que la persona declaró. Se lee del calendario y no de ``hr.version.hours_per_week`` (ese relacionado lleva ``groups="hr.group_hr_user"``, ``hr_payroll/models/hr_version.py:39``).
+        Cero si la versión no tiene calendario o no se declararon horas. Decisión del TL (22-nov): opción A (campo nativo) sobre repetir la suma propia de v18."""
+        self.ensure_one()
+        return self.resource_calendar_id.hours_per_week or 0.0
+
+    def _ne_horas_laboradas_pila(self, dias, fecha):
+        """Número de horas laboradas del registro tipo 2 de la PILA (campo 96; H-F2-02, decisión del TL del 22-nov, corregida por él mismo): UNA sola fuente, sin el 8 fijo de antes. Son las horas SEMANALES del horario de
+        trabajo del contrato (``_ne_horas_semanales``) / 7 por los días cotizados ``dias`` (los de CCF/SENA/ICBF, ``CO_DIAS_PARAF``), redondeado a entero: la misma jornada de 42 h da 180 en 30 días trabaje 5 o 6 días a la
+        semana (una fórmula de horas por día × días cotizados cuenta como trabajados los días de descanso). Sin horario o sin horas semanales (calendario sin asistencias ni horas declaradas), el campo va VACÍO: es opcional para la mayoría de los tipos
+        de cotizante y no se inventa un valor. Si el tipo de cotizante del contrato es de los que lo exigen (parámetro ``l10n_co_pila_horas_laboradas_tipos``, p. ej. el 51 de tiempo parcial) y no hay de dónde sacarlo, error
+        claro que nombra al empleado y qué completar. Devuelve un entero o ``''``. Con la opción A (v19) un horario flexible con las horas declaradas SÍ da el dato (v18 lo dejaba vacío). NO VERIFICADO: la lista de tipos que lo exigen (Resolución 980 de 2017, art. 2; texto consolidado del Anexo Técnico 2 sin leer) y
+        qué espera el operador PILA en el campo."""
+        self.ensure_one()
+        semanales = self._ne_horas_semanales()
+        if semanales > 0:
+            return int(float_round(semanales / 7 * dias, precision_digits=0))
+        try:
+            exigidos = self.env['hr.rule.parameter']._get_parameter_from_code('l10n_co_pila_horas_laboradas_tipos', fecha)
+        except UserError:
+            raise UserError(_(
+                'Falta el parámetro de nómina «Colombia: Tipos de Cotizante que Exigen las Horas Laboradas en la PILA» (código l10n_co_pila_horas_laboradas_tipos) para el %(fecha)s, que se necesita para '
+                'armar el campo de horas laboradas de %(empleado)s. Actualice el módulo de nómina electrónica o créelo en Nómina > Configuración > Parámetros de reglas.',
+                fecha=fecha, empleado=self.employee_id.name)) from None
+        if self.l10n_co_pila_tipo_cotizante in exigidos:
+            raise UserError(_(
+                'El tipo de cotizante %(tipo)s de %(empleado)s exige el número de horas laboradas en la PILA (campo 96) y su versión del contrato vigente desde el %(version)s no tiene horas semanales: '
+                'asigne un horario de trabajo o declare las horas de la semana del horario flexible.',
+                tipo=self.l10n_co_pila_tipo_cotizante, empleado=self.employee_id.name or self.display_name, version=self.date_version))      # v19: la versión se nombra por su fecha (``hr.version.name`` no se leyó)
+        return ''
 
     def _ne_centro_trabajo(self):
         """Centro de trabajo ARL efectivo (contrato -> empresa). Sin ninguno: UserError."""
