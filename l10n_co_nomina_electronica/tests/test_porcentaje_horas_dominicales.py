@@ -30,7 +30,7 @@ class TestPorcentajeHorasDominicales(TransactionCase):
         super().setUpClass()
         cls.company = cls.env['res.company'].create({
             'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1',
-            'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía de Prueba Porcentaje Dominicales'})
+            'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía de Prueba Porcentaje Dominicales', 'l10n_co_ne_pago_dominical_mensual': 'dia_mas_recargo'})
         structure_type = cls.env['hr.payroll.structure.type'].create({'name': 'Prueba Estructura Porcentaje Dominicales', 'country_id': cls.env.ref('base.co').id})
         cls.nomina = cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
         # v19: el contrato es una versión (``common_version``); ``crear_empleado_con_contrato`` trae los tipos de trabajador, de contrato y de cotizante y el medio de pago «Efectivo».
@@ -43,7 +43,7 @@ class TestPorcentajeHorasDominicales(TransactionCase):
             'struct_id': self.nomina.id, 'date_from': desde, 'date_to': hasta})
         for xmlid, codigo, _concepto, _a, _d, _pa, _pd in CONCEPTOS:
             self.env['hr.payslip.input'].create({
-                'payslip_id': slip.id, 'code': codigo, 'amount': HORAS, 'input_type_id': self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).id})
+                'payslip_id': slip.id, 'amount': HORAS, 'input_type_id': self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).id})
         slip.compute_sheet()
         return slip
 
@@ -109,7 +109,7 @@ class TestPorcentajeHorasDominicales(TransactionCase):
             'struct_id': self.nomina.id, 'date_from': date(2026, 4, 1), 'date_to': date(2026, 4, 15)})
         for xmlid, codigo in (('input_co_hed', 'CO_HED'), ('input_co_hen', 'CO_HEN'), ('input_co_hrn', 'CO_HRN')):
             self.env['hr.payslip.input'].create({
-                'payslip_id': slip.id, 'code': codigo, 'amount': HORAS, 'input_type_id': self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).id})
+                'payslip_id': slip.id, 'amount': HORAS, 'input_type_id': self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).id})
         slip.compute_sheet()
         devengados = self._devengados(slip)
         self.assertEqual(devengados['HEDs'][0]['Porcentaje'], '25.00')
