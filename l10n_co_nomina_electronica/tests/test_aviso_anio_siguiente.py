@@ -30,10 +30,12 @@ class TestAvisoAnioSiguiente(TransactionCase):
         entorno = self.env
         if companias:
             entorno = self.env(context=dict(self.env.context, allowed_company_ids=companias.ids))
-        locales = {}
-        safe_eval(codigo, {'self': entorno['hr.payslip'], 'date': FechaFija()}, locales,
-                  mode='exec', nocopy=True)
-        return locales
+        # v19: ``safe_eval`` ya no tiene ``nocopy`` (TypeError en la N1 de 7c7d9db). El nativo pasa UN solo diccionario y lee de el el
+        # resultado (``hr_payroll/models/hr_payslip.py:1896-1916``: ``safe_eval(warning.evaluation_code, context, mode='exec')`` y luego
+        # ``context['warning_count']``); aqui se hace igual y se devuelve ese mismo diccionario.
+        contexto = {'self': entorno['hr.payslip'], 'date': FechaFija()}
+        safe_eval(codigo, contexto, mode='exec')
+        return contexto
 
     def setUp(self):
         """Independiente de la BD: deja SMMLV, UVT y auxilio con UN valor del 1-ene-2026 y ninguno
