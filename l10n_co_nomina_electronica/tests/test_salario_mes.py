@@ -12,6 +12,7 @@ EFECTIVO (con la herencia ya aplicada) para cada valor de ``schedule_pay`` y de 
 ejecutadas (no hay Odoo local) cuando se escribieron.
 """
 
+import unittest
 from lxml import etree
 
 from odoo.tests.common import TransactionCase, tagged
@@ -21,6 +22,14 @@ NOMBRE_ROTULO_NATIVO = 'wage_period_label'
 NOMBRE_ROTULO_CO = 'l10n_co_ne_wage_period_label'
 
 
+MOTIVO_BLOQUE_2 = (
+    'H-V19-14: vistas de hr.version pendientes de portar. Registro de impacto v19: fila «Bloque 2 vistas del contrato» (tabla bajo '
+    '«Bloque 1 — R2, X-1, Y-2») y §14. Las vistas del contrato (hr_contract_views.xml, hr_contract_deductions_views.xml y hr_contract_retefuente_views.xml) NO '
+    'estan en el manifest (TL 2026-11-18, __manifest__.py:111-116): hr.contract y su formulario no existen y la pantalla de la version la decide David; sin '
+    'esa vista no hay que probar. HUECO ABIERTO de F1 en v19, no un cierre: se reactiva y se reconvierte a hr.version cuando se porte la vista.')
+
+
+@unittest.skip(MOTIVO_BLOQUE_2)
 @tagged('post_install', '-at_install')
 class TestSalarioMes(TransactionCase):
 
