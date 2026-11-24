@@ -140,3 +140,21 @@ class TestIncapacidadVariacionIbc(base.TestIncapacidadTramoProrroga):
         self.assertAlmostEqual(self._pago_inc(recibo), 10 * 6000000.0 / 30 * PCT, delta=0.01)
         self.assertIn('No hay IBC del mes anterior (2026-07)', recibo.l10n_co_ne_aviso_ibc_anterior)
         self.assertNotIn('2.2.3.4.5', recibo.l10n_co_ne_aviso_ibc_anterior)
+
+    def test_el_helper_por_mes_ve_los_recibos_validados_y_pagados_y_no_los_borradores(self):
+        """H-V19-16 (TL y consultor, registro §22.2): TRAMPA SILENCIOSA y de dinero. ``_ne_ibc_normalizado_de_mes`` (el helper que P2 extrae de ``_ne_ibc_mes_anterior_datos``) filtra los recibos
+        confirmados por estado: en v18 eran ('done', 'paid'); en v19 'done' no existe y son ('validated', 'paid'). Con el texto de v18 el helper no veria NINGUN recibo: el IBC del mes anterior y el
+        promedio de los 12 meses darian (0.0, False) y la incapacidad saldria sin tope y SIN ERROR. Cubre los tres estados: validated y paid cuentan; draft no."""
+        empleado, contrato = self._empleado('VarEstados')
+        validado = self._mes(empleado, contrato, 2026, 5, 6000000.0)                                   # validated (el estado por defecto de crear_recibo_previo)
+        pagado = crear_recibo_previo(self.env, empleado, contrato, self.nomina, date(2026, 6, 1), date(2026, 6, 30), 7000000.0, estado='paid')
+        crear_recibo_previo(self.env, empleado, contrato, self.nomina, date(2026, 4, 1), date(2026, 4, 30), 5000000.0, estado='draft')
+        self.assertEqual((validado.state, pagado.state), ('validated', 'paid'))
+        ibc_mayo, con_base_mayo = validado._ne_ibc_normalizado_de_mes(date(2026, 5, 1))
+        ibc_junio, con_base_junio = validado._ne_ibc_normalizado_de_mes(date(2026, 6, 1))
+        ibc_abril, con_base_abril = validado._ne_ibc_normalizado_de_mes(date(2026, 4, 1))
+        self.assertTrue(con_base_mayo, 'Un recibo validado debe contar como base del mes.')
+        self.assertAlmostEqual(ibc_mayo, 6000000.0, delta=0.01)
+        self.assertTrue(con_base_junio, 'Un recibo pagado debe contar como base del mes.')
+        self.assertAlmostEqual(ibc_junio, 7000000.0, delta=0.01)
+        self.assertEqual((ibc_abril, con_base_abril), (0.0, False), 'Un borrador no es base de ningun mes.')
