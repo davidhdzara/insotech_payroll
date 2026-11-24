@@ -93,6 +93,7 @@ from . import test_secuencias_por_compania
 from . import test_retefuente_config_compartida
 from . import test_multiempresa_aislamiento
 from . import test_multiempresa_descubrimiento
+from . import test_guarda_de_transmision
 from . import test_oficial_alcance
 from . import test_informes_compania_del_recibo
 from . import test_inercia_informes
