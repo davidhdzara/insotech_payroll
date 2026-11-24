@@ -69,7 +69,10 @@ class TestDocumentoPreparar(TransactionCase):
         slip = self.env['hr.payslip'].create({
             'name': 'Recibo %s %s' % (empleado.name, hasta), 'employee_id': empleado.id, 'version_id': contrato.id,
             'company_id': self.company.id, 'struct_id': self.struct.id, 'date_from': desde, 'date_to': hasta})
-        slip.write({'state': estado, 'paid_date': pagado})
+        if estado in ('validated', 'paid'):
+            confirmar_a_mano(slip, estado, paid_date=pagado)      # v19: el recibo confirmado lleva done_date (H-V19-08); sin el, ``has_wrong_data`` da TypeError al recalcular
+        else:
+            slip.write({'state': estado, 'paid_date': pagado})
         return slip
 
     def _marzo(self):

@@ -7,7 +7,7 @@ from datetime import date
 
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 @tagged('post_install', '-at_install')
@@ -32,11 +32,16 @@ class TestRecibosSolapados(TransactionCase):
             'wage': 3000000.0, 'date_start': date(2024, 1, 1), 'state': 'open'})
 
     def _recibo(self, ini, fin, estado='draft', struct=None, **extra):
-        return self.env['hr.payslip'].create({
+        recibo = self.env['hr.payslip'].create({
             'name': 'Recibo %s' % ini, 'employee_id': self.employee.id,
             'version_id': self.contract.id, 'company_id': self.company.id,
             'struct_id': (struct or self.structure).id,
-            'date_from': ini, 'date_to': fin, 'state': estado, **extra})
+            'date_from': ini, 'date_to': fin, **extra})
+        if estado in ('validated', 'paid'):
+            confirmar_a_mano(recibo, estado)      # v19: el recibo confirmado lleva done_date (H-V19-08); sin el, ``has_wrong_data`` da TypeError al recalcular
+        elif estado != 'draft':
+            recibo.state = estado
+        return recibo
 
     def test_cruce_misma_estructura_es_error_y_nombra_al_otro(self):
         existente = self._recibo(date(2026, 9, 1), date(2026, 9, 30), 'validated')
