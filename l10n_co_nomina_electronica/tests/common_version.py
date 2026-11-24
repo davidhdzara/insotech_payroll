@@ -116,10 +116,10 @@ def crear_contrato(env, vals, completar_tipos=True):
     return env['hr.version'].create(vals)
 
 
-def crear_usuario_nomina(env, compania, login):
+def crear_usuario_nomina(env, compania, login, administrador=False):
     """Usuario OFICIAL de nómina (``hr_payroll.group_hr_payroll_user``, sin ``hr.group_hr_manager`` ni ``hr_payroll.group_hr_payroll_manager``)
     de ``compania``. Las pruebas corren como superusuario y esconden los AccessError de campos con grupos (``wage``, ``contract_date_*``:
-    ``hr_payroll/models/hr_version.py:23-29``); el humo del motor se repite con ``recibo.with_user(este_usuario)``.
+    ``hr_payroll/models/hr_version.py:23-29``); el humo del motor se repite con ``recibo.with_user(este_usuario)``. ``administrador=True`` le suma ``hr_payroll.group_hr_payroll_manager`` (administrador de nómina, tampoco HR manager).
 
     El campo de grupos de ``res.users`` se llama ``groups_id`` en Odoo 18 y ``group_ids`` en Odoo 19: VERIFICADO el nombre en 19 (``ir_model_fields`` del servidor 42494857: ``res.users.group_ids``; solo
     se vio ``group_ids`` en acciones, ``odoo/addons/base/models/ir_actions.py:329``); se elige por ``_fields`` en vez de suponerlo."""
@@ -127,4 +127,5 @@ def crear_usuario_nomina(env, compania, login):
     return env['res.users'].with_context(no_reset_password=True).create({
         'name': 'Usuario de nómina %s' % login, 'login': login, 'email': '%s@example.com' % login,
         'company_id': compania.id, 'company_ids': [(6, 0, compania.ids)],
-        campo_grupos: [(6, 0, [env.ref('base.group_user').id, env.ref('hr_payroll.group_hr_payroll_user').id])]})
+        campo_grupos: [(6, 0, [env.ref('base.group_user').id, env.ref('hr_payroll.group_hr_payroll_user').id]
+                       + ([env.ref('hr_payroll.group_hr_payroll_manager').id] if administrador else []))]})

@@ -6,7 +6,7 @@ nuevo de un aumento a mitad del periodo van en OTRO recibo (``date_from`` = la f
 completa y contaba dos veces las ausencias posteriores al aumento. ``HrPayslip._ne_rango_de_la_version`` es la ÚNICA fuente de la intersección y la usan
 ``_ne_rango_activo``, ``_ne_ausencia_calendario``, ``_ne_incapacidad_cadenas`` y ``_ne_ausencia_habil``.
 
-Fixture: un empleado con dos versiones del MISMO contrato (A hasta el día anterior al aumento, B desde el aumento; B se crea con ``hr.version.create`` directo: NO VERIFICADO) y
+Fixture: un empleado con dos versiones del MISMO contrato (A hasta el día anterior al aumento, B desde el aumento; B se crea con ``employee.create_version`` (el camino nativo del aumento; antes se creaba con ``hr.version.create`` directo: NO VERIFICADO) y
 DOS recibos del mismo periodo (A: ``date_from`` = inicio del periodo; B: ``date_from`` = el aumento). Septiembre de 2026 empieza en martes; el aumento es el miércoles 16 (15 días
 comerciales de A y 15 de B). Sueldos A 3.000.000 (100.000 por día) y B 3.300.000 (110.000 por día).
 
@@ -18,7 +18,7 @@ from datetime import date, timedelta
 
 from odoo.tests.common import TransactionCase, tagged
 
-from .common_version import VALORES_COLOMBIA, crear_empleado_con_contrato
+from .common_version import crear_empleado_con_contrato, crear_usuario_nomina
 
 AUMENTO = date(2026, 9, 16)
 INGRESO = date(2024, 1, 1)
@@ -71,10 +71,9 @@ class TestRangoDeLaVersion(TransactionCase):
             self.env, self.company, sueldo_a, INGRESO, self.structure_type, nombre='Empleado Rango %s' % self.n,
             l10n_co_primer_nombre='Prueba', l10n_co_primer_apellido='Fixture', identification_id='81%s' % self.n)
         empleado.l10n_co_ne_identification_type_id = self.env.ref('l10n_co.national_citizen_id').id
-        valores_b = {campo: valor for campo, valor in VALORES_COLOMBIA.items() if campo in self.env['hr.version']._fields}
-        version_b = self.env['hr.version'].create(dict(
-            valores_b, employee_id=empleado.id, date_version=aumento, contract_date_start=version_a.contract_date_start, wage=sueldo_b,
-            structure_type_id=self.structure_type.id))
+        # La versión B se crea por el camino NATIVO del aumento (``hr.employee.create_version``: copia la versión vigente en ``aumento`` con ``copy_data()``, calcula las fechas del contrato con
+        # ``_get_contract_dates`` y aplica los valores): hereda tipos de contrato y de cotizante, estructura y demás campos de A sin repetirlos aquí (v19, ``hr_employee.py:568-640`` de la lectura del servidor).
+        version_b = empleado.create_version({'date_version': aumento, 'wage': sueldo_b})
         self.assertEqual(empleado._get_version(aumento - timedelta(days=1)), version_a, 'Premisa: antes del aumento rige la versión A')
         self.assertEqual(empleado._get_version(aumento), version_b, 'Premisa: desde el aumento rige la versión B')
         return empleado, version_a, version_b
@@ -205,3 +204,26 @@ class TestRangoDeLaVersion(TransactionCase):
             self.assertIn('_ne_rango_de_la_version(', codigo, nombre)
             self.assertNotIn('contract_date_start', codigo.split('"""')[-1], '%s no recorta por el contrato' % nombre)
             self.assertNotIn('contract_date_end', codigo.split('"""')[-1], '%s no recorta por el contrato' % nombre)
+        # Nota: ``codigo.split('"""')[-1]`` es el texto posterior al ÚLTIMO ``"""`` del método (el cuerpo, sin su docstring): la comprobación sirve mientras ningún método de la lista tenga otra
+        # cadena de triple comilla en su cuerpo; si algún día la tiene, hay que comparar el cuerpo con ``ast`` en vez de partir el texto.
+
+    # ── 9) el oficial de nómina (sin HR manager) y 10) la pestaña «Nómina» que ven el oficial y el administrador ─────────────────────────────────────────────────────────────────────
+    def test_09_un_oficial_de_nomina_sin_hr_manager_calcula_el_rango_de_la_version(self):
+        """``_ne_rango_de_la_version`` lee ``date_start``/``date_end``/``contract_date_*`` de la versión con ``sudo()``: son campos con grupos de HR (``hr_payroll/models/hr_version.py:23-29``) y el oficial de
+        nómina (``group_hr_payroll_user``) no es HR manager. Sin el ``sudo()`` esta prueba daría AccessError con el usuario; las demás corren como superusuario y no lo verían."""
+        empleado, va, vb = self._empleado()
+        oficial = crear_usuario_nomina(self.env, self.company, 'oficial_rango_%s' % self.n)
+        a = self._recibo(empleado, va, date(2026, 9, 1), date(2026, 9, 30)).with_user(oficial)
+        b = self._recibo(empleado, vb, AUMENTO, date(2026, 9, 30)).with_user(oficial)
+        self.assertEqual(a._ne_rango_activo(), (date(2026, 9, 1), date(2026, 9, 15)))
+        self.assertEqual(b._ne_rango_activo(), (AUMENTO, date(2026, 9, 30)))
+        self.assertEqual((a._ne_dias_bajo_contrato(), b._ne_dias_bajo_contrato()), (15, 15))
+
+    def test_10_la_ficha_del_empleado_trae_la_pestana_de_nomina_para_el_oficial_y_el_administrador(self):
+        """Los mensajes de afiliación mandan a «la ficha del empleado, pestaña Nómina» (``NE_EMPLEADO_PAGINA`` = ``payroll_information``): el oficial y el administrador de nómina (ninguno HR manager) deben
+        ver esa página y los campos propios de la afiliación en el formulario del empleado."""
+        for login, administrador in (('oficial_pagina', False), ('administrador_pagina', True)):
+            usuario = crear_usuario_nomina(self.env, self.company, '%s_%s' % (login, self.n), administrador=administrador)
+            arch = self.env['hr.employee'].with_user(usuario).get_view(view_type='form')['arch']
+            self.assertIn('name="payroll_information"', arch, login)
+            self.assertIn('name="l10n_co_pila_eps_id"', arch, login)
