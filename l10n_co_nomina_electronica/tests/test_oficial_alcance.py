@@ -106,13 +106,14 @@ class TestOficialAlcance(DocumentoFixture, TransactionCase):
             doc.read(['period'])
 
     def test_las_reglas_del_oficial_son_las_nativas_del_recibo_y_solo_queda_la_multicompania(self):
-        """El dominio del oficial en los 7 modelos propios es el de ``hr_payroll_rule_officer`` (v19: ``[(1,'=',1)]``, hr_payroll_security.xml:37-42) y cada
+        """El dominio del oficial en los 9 modelos propios es el de ``hr_payroll_rule_officer`` (v19: ``[(1,'=',1)]``, hr_payroll_security.xml:37-42) y cada
         modelo conserva su regla global multicompañía. ``l10n.co.payslip.calculo`` (.294, «Cálculo del salario») entró en el port de .291-.298: su regla de v18 (empleado,
         departamento, jefe) dejaría la pestaña vacía para un oficial que en v19 sí ve el recibo."""
         nativa = ast.literal_eval(self.env.ref('hr_payroll.hr_payroll_rule_officer').domain_force)
         self.assertEqual(nativa, [(1, '=', 1)], 'Premisa: la regla nativa del oficial de v19 ve todo')
         modelos = ('l10n.co.ne.documento', 'l10n.co.ne.documento.intento', 'l10n.co.ibc.mensual', 'l10n.co.payslip.tercero',
-                   'l10n.co.payslip.ajuste', 'l10n.co.payslip.concepto', 'l10n.co.payslip.calculo')
+                   'l10n.co.payslip.ajuste', 'l10n.co.payslip.concepto', 'l10n.co.payslip.calculo',
+                   'l10n.co.employee.pacto', 'l10n.co.employee.descanso')       # H-F2-03 (C3): el pacto y el dia de descanso siguen la visibilidad del recibo (8 y 9)
         grupo = self.env.ref('hr_payroll.group_hr_payroll_user')
         for modelo in modelos:
             reglas = self.env['ir.rule'].sudo().search([('model_id.model', '=', modelo)])

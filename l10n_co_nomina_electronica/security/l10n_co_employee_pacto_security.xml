@@ -6,4 +6,21 @@
         <field name="model_id" ref="model_l10n_co_employee_pacto"/>
         <field name="domain_force">[('employee_id.company_id', 'in', company_ids)]</field>
     </record>
+    <!-- H-F2-03 (G4, decisión del TL del 22-nov; v19: decisión «el oficial ve toda su compañía»): el pacto trae información salarial y su documento firmado; su visibilidad sigue la del RECIBO (P6-3, doc 59 4.4). En v19
+         la regla nativa del oficial es ``hr_payroll_rule_officer`` = ``[(1, '=', 1)]`` (``hr_payroll_security.xml:36-42``): el oficial ve TODOS los recibos de su compañía y por eso TODOS los de este modelo de su compañía; v18 lo
+         limitaba a los empleados que veía en el recibo (usuario, sin departamento o jefe del departamento) y en v19 eso sería una inconsistencia con el recibo. Las reglas de grupo (``[(1, '=', 1)]``) no restringen más que la
+         global por compañía (``employee_id.company_id``, que sigue aislando: ``ir_rule.py`` ``_compute_domain``, R4); se conservan por simetría con los otros modelos y para que la prueba de alcance las compare con el nativo. El cálculo
+         del recibo lee el registro con ``sudo`` (``_vigente``), así que no depende de lo que el oficial vea. -->
+    <record id="rule_l10n_co_employee_pacto_oficial" model="ir.rule">
+        <field name="name">Pactos de desalarización: el oficial de nómina ve todo, como en el recibo (hr_payroll_rule_officer)</field>
+        <field name="model_id" ref="model_l10n_co_employee_pacto"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('hr_payroll.group_hr_payroll_user'))]"/>
+    </record>
+    <record id="rule_l10n_co_employee_pacto_administrador" model="ir.rule">
+        <field name="name">Pactos de desalarización: el administrador de nómina ve todo</field>
+        <field name="model_id" ref="model_l10n_co_employee_pacto"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('hr_payroll.group_hr_payroll_manager'))]"/>
+    </record>
 </odoo>
