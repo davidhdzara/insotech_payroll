@@ -153,7 +153,11 @@ class HrPayslip(models.Model):
         self.ensure_one()
         if self.l10n_co_ne_hab_set_id:
             return True
-        intercambios = self.l10n_co_ne_exchange_ids
+        # sudo() SOLO en esta lectura (H-V19-15, TL 24-nov): el oficial de nomina no tiene lectura de ``l10n.co.ne.exchange`` (ir.model.access: solo el
+        # administrador de nomina; H-F2-03 prohibe dársela) y en v19 leer el campo sin ese acceso da AccessError al armar el resumen del asistente
+        # (``hr.payslip.send._compute_resumen`` -> ``_ne_motivo_no_entra`` -> este metodo). Del intercambio solo se lee ``operation`` (su TIPO) y el
+        # metodo devuelve un booleano: ningun dato del intercambio (CUNE, mensaje, firma, zip_key) sale de aqui ni se devuelve el recordset.
+        intercambios = self.sudo().l10n_co_ne_exchange_ids
         return bool(intercambios) and not any(op == 'send_sync' for op in intercambios.mapped('operation'))
 
     l10n_co_ne_en_produccion = fields.Boolean(
