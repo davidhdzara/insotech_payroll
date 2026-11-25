@@ -25,7 +25,6 @@ compañía de prueba = 40 h/semana, 8 h por día. NO EJECUTADAS en Odoo.
 
 import json
 import logging
-import unittest
 from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
@@ -691,19 +690,16 @@ class TestDiasPorAsistencia(TransactionCase):
             resultado = recibo._ne_ajustar_dias_por_asistencia(valores)
         self.assertEqual([(r['work_entry_type_id'], r['number_of_days'], r['number_of_hours']) for r in resultado], [(asistencia.id, 30.0, 176.0)])
 
-    @unittest.skip('v19: la premisa (inicio UTC -> fecha local) ya no existe: la entrada tiene date (Date simple, no calculada) y duration '
-                   '(hr_work_entry/models/hr_work_entry.py:28-29, lectura PROVISIONAL de la imagen). Un reemplazo con date/duration depende de '
-                   '_check_if_error() (:258), que puede dejar la entrada en conflicto: se escribe cuando se lea ese metodo')
-    def test_la_fecha_de_una_entrada_es_la_local_del_calendario(self):
-        """Una entrada de 20:00 a 23:00 (hora de Bogotá) del sábado 12 de septiembre se guarda en UTC como 01:00 a 04:00 del domingo 13: cuenta
-        como trabajo del sábado (laborada, fuera del horario) y el domingo queda de descanso."""
+    def test_la_fecha_de_una_entrada_es_su_campo_date(self):
+        """v19: la entrada de trabajo no tiene inicio ni fin en UTC; lleva ``date`` (``Date``) y ``duration`` (``hr_work_entry/models/hr_work_entry.py:28-29``). Una entrada de 3 horas
+        con fecha del sábado 12 de septiembre cuenta como trabajo del sábado (laborada, fuera del horario) y el domingo queda de descanso.
+
+        COBERTURA PERDIDA respecto de v18 (``test_la_fecha_de_una_entrada_es_la_local_del_calendario``): la conversión a fecha local de un turno nocturno (20:00-23:00 de Bogotá, que en
+        UTC cae el día siguiente) la hace ahora el generador nativo de entradas (``hr_work_entry/models/hr_version.py``, sin leer en el servidor) y esta prueba NO la ejerce."""
         recibo = self._recibo(calcular=False)
-        recibo.version_id.resource_calendar_id.tz = 'America/Bogota'
-        zona = pytz.timezone('America/Bogota')
-        inicio = zona.localize(datetime(2026, 9, 12, 20, 0)).astimezone(pytz.utc).replace(tzinfo=None)
         entrada = self.env['hr.work.entry'].create({
-            'name': 'Turno nocturno', 'employee_id': recibo.employee_id.id, 'version_id': recibo.version_id.id,
-            'work_entry_type_id': recibo._ne_tipo_asistencia().id, 'date_start': inicio, 'date_stop': inicio + timedelta(hours=3)})
+            'name': 'Turno del sábado', 'employee_id': recibo.employee_id.id, 'version_id': recibo.version_id.id,
+            'work_entry_type_id': recibo._ne_tipo_asistencia().id, 'date': date(2026, 9, 12), 'duration': 3.0})
         self.assertEqual(entrada.state, 'draft', 'Premisa: la entrada creada a mano no queda en conflicto')
         clasificacion = recibo._ne_clasificar_fechas()
         self.assertIn(date(2026, 9, 12), clasificacion['laborados'])
