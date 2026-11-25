@@ -14,7 +14,7 @@ Referencia: Anexo Técnico – Documento Soporte de Pago de Nómina Electrónica
 V1.0, sección 6.2.8, atributos TipoContrato y SalarioIntegral.
 """
 
-from odoo import api, fields, models, _
+from odoo import SUPERUSER_ID, api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 from odoo.tools import float_round
 from odoo.tools.misc import format_amount
@@ -170,7 +170,7 @@ class HrVersion(models.Model):
         v19 ``date_start`` es la vigencia de la VERSIÓN, no el ingreso; T2, doc 02,
         ``hr/models/hr_version.py:561-580``)."""
         # H-V19-14 (acceso): la marca, la fecha de ingreso y el salario son de usuarios de nómina (``groups``), pero la validación corre para quien cree o edite la versión (p. ej. un
-        # responsable de Empleados sin nómina al dar de alta): se leen con sudo SOLO para validar el piso; no se escriben ni se devuelven.
+        # responsable de Empleados sin nómina al dar de alta): se leen con sudo SOLO para validar el piso; no se escriben ni se devuelven, y las cifras del mensaje salen solo para nómina.
         Parametro = self.env['hr.rule.parameter'].sudo()
         for contrato in self.sudo().filtered(
                 lambda c: c.l10n_co_ne_integral_salary and c.company_id._ne_es_colombia()):
@@ -184,6 +184,14 @@ class HrVersion(models.Model):
             moneda = contrato.company_id.currency_id
             salario = contrato.wage          # ``contrato`` ya va con sudo (ver arriba)
             if salario < piso:
+                # Las cifras (salario y piso) solo para quien puede ver el salario: se mira el grupo del usuario REAL (``sudo`` no cambia ``env.user``); el superusuario del sistema las ve.
+                if self.env.uid != SUPERUSER_ID and not self.env.user.has_group('hr_payroll.group_hr_payroll_user'):
+                    raise ValidationError(_(
+                        "El contrato de %(empleado)s (versión vigente desde el %(version)s) es de salario "
+                        "integral con un salario por debajo del piso legal (CST art. 132). Un usuario de nómina "
+                        "debe corregir el Salario del contrato o quitar la marca \"Salario Integral\".",
+                        empleado=contrato.employee_id.name or contrato.display_name,
+                        version=contrato.date_version))
                 raise ValidationError(_(
                     "El contrato de %(empleado)s (versión vigente desde el %(version)s) es de salario "
                     "integral con un salario de %(salario)s, por debajo del piso de %(piso)s "

@@ -8,6 +8,7 @@ from datetime import date
 
 from odoo.exceptions import AccessError, ValidationError
 from odoo.tests.common import TransactionCase, tagged
+from odoo.tools.misc import format_amount
 
 from . import test_documento_generar_real as real
 from .common_version import crear_empleado_con_contrato
@@ -130,6 +131,33 @@ class TestAccesoCamposContratoV19(TransactionCase):
             self._como(self.version, self.rrhh)._ne_validar_piso_integral()
         with self.assertRaises(ValidationError):
             self._como(self.empleado, self.rrhh).create_version({'date_version': date(2025, 6, 1)})
+
+    def test_el_error_del_piso_integral_solo_muestra_cifras_a_los_usuarios_de_nomina(self):
+        self._sql_en_la_version(self.version, 'wage', 1800000.0)
+        self._sql_en_la_version(self.version, 'l10n_co_ne_integral_salary', True)
+        fecha_nueva = date(2025, 6, 1)
+        vias = (
+            ('validacion', lambda: self._como(self.version, self.rrhh)._ne_validar_piso_integral()),
+            ('copia de la version', lambda: self._como(self.empleado, self.rrhh).create_version({'date_version': fecha_nueva})))
+        for via, llamada in vias:
+            with self.subTest(via=via):
+                with self.assertRaises(ValidationError) as error:
+                    llamada()
+                texto = str(error.exception)
+                self.assertIn('piso legal', texto)
+                # Las unicas cifras admitidas son la fecha de la version y el numero del articulo: ni salario, ni piso, ni salario minimo.
+                resto = texto.replace(str(self.version.date_version), '').replace(str(fecha_nueva), '').replace('art. 132', '')
+                self.assertNotRegex(resto, r'\d')
+
+        oficial = self._como(self.version, self.oficial)
+        with self.assertRaises(ValidationError) as error:
+            oficial._ne_validar_piso_integral()
+        texto = str(error.exception)
+        parametros = self.env['hr.rule.parameter']
+        piso = (parametros._get_parameter_from_code('l10n_co_piso_salario_integral_smmlv', date(2024, 1, 1))
+                * parametros._get_parameter_from_code('l10n_co_smmlv', date(2024, 1, 1)))
+        for cifra in (1800000.0, piso):
+            self.assertIn(format_amount(oficial.env, cifra, self.company.currency_id), texto)
 
 
 @tagged('post_install', '-at_install')
