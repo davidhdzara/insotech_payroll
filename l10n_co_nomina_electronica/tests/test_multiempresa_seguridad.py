@@ -155,19 +155,22 @@ class TestMultiempresaSeguridad(TransactionCase):
             usuario = self.admin[propia]
             suyo, otro = self.d[propia], self.d[ajena]
 
-            def valores(sembrado, periodo):
+            def valores(sembrado, periodo, anio_descanso):
                 return {
                     'l10n.co.retefuente.uvt': {'year': str(2040 + periodo.month), 'company_id': sembrado.compania.id, 'procedure': '1'},      # un año distinto por intento: la llave unica (año, compañia) no debe tapar la regla
-                    # vigencia CERRADA y anterior a la del descanso que siembra la fixture (desde 2026-01-01, sin fin): dos pactos del mismo empleado no pueden regir la misma fecha (``_check_sin_traslape``; N2 «dd»)
-                    'l10n.co.employee.descanso': {'employee_id': sembrado.empleado.id, 'dia_semana': '1', 'fecha_firma': date(2025, 1, 1), 'fecha_fin': date(2025, 12, 31)},
+                    # vigencia CERRADA y anterior a la del descanso que siembra la fixture (desde 2026-01-01, sin fin): dos pactos del mismo empleado no pueden regir la misma fecha (``_check_sin_traslape``; N2 «dd»).
+                    # v19 (H-V19-17, N1 de 46c2cec): el INTENTO ajeno y el control positivo usan años DISTINTOS (2024 y 2025). Con el mismo año, el control positivo de la 1.ª vuelta (descanso 2025 del empleado de A) hace que
+                    # el intento de B sobre ese mismo empleado se tope con la restriccion (que busca con ``sudo()``) y de ``ValidationError`` en vez de ``AccessError``: la prueba dependia del ORDEN «regla de registro antes
+                    # que restriccion» (en v18 se cumplia; en v19 NO VERIFICADO el orden del core). Con vigencias que no se cruzan da igual el orden: la restriccion pasa y solo queda la regla de la compañia.
+                    'l10n.co.employee.descanso': {'employee_id': sembrado.empleado.id, 'dia_semana': '1', 'fecha_firma': date(anio_descanso, 1, 1), 'fecha_fin': date(anio_descanso, 12, 31)},
                     'l10n.co.employee.pacto': {'employee_id': sembrado.empleado.id, 'salary_rule_id': self.regla.id, 'fecha_firma': date(2027, 1, 1)},
                     'l10n.co.ibc.mensual': {'company_id': sembrado.compania.id, 'employee_id': sembrado.empleado.id, 'period': periodo},
                     'l10n.co.pila.planilla': {'company_id': sembrado.compania.id, 'period': periodo, 'tipo_planilla': 'E', 'operador_code': 'X'},
                     'l10n.co.ne.documento': {'company_id': sembrado.compania.id, 'employee_id': sembrado.empleado.id, 'period': periodo}}
-            for modelo, vals in valores(otro, date(2026, 4, 1)).items():
+            for modelo, vals in valores(otro, date(2026, 4, 1), 2024).items():
                 with self.assertRaises(AccessError, msg='%s: %s no crea en %s' % (modelo, usuario.login, otro.compania.name)):
                     self._como(modelo, usuario).create(vals)
-            for modelo, vals in valores(suyo, date(2026, 5, 1)).items():
+            for modelo, vals in valores(suyo, date(2026, 5, 1), 2025).items():
                 creado = self._como(modelo, usuario).create(vals)
                 self.assertTrue(creado, 'Control positivo: %s crea en su compania (%s)' % (usuario.login, modelo))
 
