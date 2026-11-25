@@ -780,7 +780,7 @@ class L10nCoNominaUgpp(models.Model):
         if tipo is None or subtipo is None:
             raise UserError(_(
                 'El contrato de %(empleado)s no tiene tipo y subtipo de cotizante con equivalente en la UGPP. '
-                'Complételos en el contrato (pestaña PILA).', empleado=employee.display_name))
+                'Complételos en la ficha del empleado (pestaña Nómina, grupo «PILA - Cotización»).', empleado=employee.display_name))
         return tipo, subtipo
 
     def _ugpp_documento_trabajador(self, employee):

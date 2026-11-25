@@ -760,12 +760,12 @@ class ResCompany(models.Model):
     l10n_co_pila_clase_riesgo = fields.Selection(
         selection=NE_CLASES_RIESGO, string='Clase de Riesgo ARL general',
         help='Clase de riesgo ARL de la empresa. Un contrato puede tener otra clase propia '
-             '(pestaña PILA del contrato).',
+             '(ficha del empleado, pestaña Nómina, grupo «PILA - Cotización»).',
     )
     l10n_co_pila_centro_trabajo = fields.Char(
         string='Centro de Trabajo ARL general',
         help='Código del centro de trabajo ARL de la empresa. Un contrato puede tener otro '
-             'propio (pestaña PILA del contrato).',
+             'propio (ficha del empleado, pestaña Nómina, grupo «PILA - Cotización»).',
     )
     l10n_co_ne_payment_method = fields.Selection(
         selection=NE_MEDIOS_PAGO, string='Medio de Pago general',

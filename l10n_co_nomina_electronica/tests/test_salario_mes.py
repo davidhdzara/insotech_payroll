@@ -1,103 +1,98 @@
 # -*- coding: utf-8 -*-
-"""E-9 (H-QA-026): en compañías colombianas el Salario del contrato se rotula SIEMPRE «/ mes».
+"""E-9 (H-QA-026): el Salario es MENSUAL en Colombia (``CO_BASICO = wage / 30``), sin importar «Programar pago»; cargar $6.000.000 pensando que es por quincena pagaba $3.000.000
+por quincena.
 
-Trampa de captura que reprodujo QA: con «Programar pago» = Quincenal la pantalla rotulaba el Salario «/ quincena» (rótulo nativo
-de ``hr_payroll``), pero ``CO_BASICO = wage / 30`` trata el campo SIEMPRE como salario MENSUAL: cargar $6.000.000 pensando que es
-por quincena pagaba $3.000.000 por quincena. El rótulo nativo es un ``<div name="wage_period_label">/ month</div>`` que
-``hr_payroll`` vuelve condicional (``schedule_pay != 'monthly'``) y acompaña de 8 divs hermanos («/ year», «/ quincena»…), cada uno
-visible solo para su valor de ``schedule_pay``.
+v19 (H-V19-14, bloque 2; opción B del TL): no hay rótulos nativos de período junto al salario — el rótulo ES el selector ``schedule_pay``, que ``hr_payroll`` pone en la misma
+fila (``enterprise/hr_payroll/views/hr_employee_views.xml:51-54``). El selector se conserva intacto y, solo para compañías colombianas, se agrega junto al salario el texto fijo
+«El valor es mensual», sin clases ni estilos propios. (En v18 se ocultaban los 9 rótulos nativos y quedaba solo «/ mes».)
 
-Un ``arch`` de vista no se ve con el navegador en una prueba de servidor: se evalúan las condiciones ``invisible`` del ``arch``
-EFECTIVO (con la herencia ya aplicada) para cada valor de ``schedule_pay`` y de país, que es lo mismo que evalúa el cliente. NO
-ejecutadas (no hay Odoo local) cuando se escribieron.
-"""
+Un ``arch`` de vista no se ve con el navegador en una prueba de servidor: se evalúan las condiciones ``invisible`` del ``arch`` EFECTIVO (con la herencia ya aplicada), que es lo
+mismo que evalúa el cliente."""
 
-import unittest
 from lxml import etree
 
 from odoo.tests.common import TransactionCase, tagged
 from odoo.tools.safe_eval import safe_eval
 
-NOMBRE_ROTULO_NATIVO = 'wage_period_label'
-NOMBRE_ROTULO_CO = 'l10n_co_ne_wage_period_label'
+NOMBRE_TEXTO_CO = 'l10n_co_ne_wage_period_label'
+TEXTO_CO = 'El valor es mensual'
+VISTAS_PROPIAS = ('view_employee_form_ne', 'view_employee_form_ne_contrato', 'view_employee_form_ne_salario_mes',
+                  'view_employee_form_ne_deducciones', 'view_employee_form_ne_retefuente')
 
 
-MOTIVO_BLOQUE_2 = (
-    'H-V19-14: vistas de hr.version pendientes de portar. Registro de impacto v19: fila «Bloque 2 vistas del contrato» (tabla bajo '
-    '«Bloque 1 — R2, X-1, Y-2») y §14. Las vistas del contrato (hr_contract_views.xml, hr_contract_deductions_views.xml y hr_contract_retefuente_views.xml) NO '
-    'estan en el manifest (TL 2026-11-18, __manifest__.py:111-116): hr.contract y su formulario no existen y la pantalla de la version la decide David; sin '
-    'esa vista no hay que probar. HUECO ABIERTO de F1 en v19, no un cierre: se reactiva y se reconvierte a hr.version cuando se porte la vista.')
-
-
-@unittest.skip(MOTIVO_BLOQUE_2)
 @tagged('post_install', '-at_install')
 class TestSalarioMes(TransactionCase):
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.arch = etree.fromstring(cls.env['hr.contract'].get_view(view_type='form')['arch'].encode())
-        campo = cls.env['hr.contract']._fields['schedule_pay']
+        vista = cls.env.ref('hr.view_employee_form')
+        cls.arch = etree.fromstring(cls.env['hr.employee'].get_view(vista.id, 'form')['arch'].encode())
+        campo = cls.env['hr.employee']._fields['schedule_pay']
         cls.valores_schedule_pay = [valor for valor, _etiqueta in campo.get_description(cls.env)['selection']]
 
-    def _rotulos(self):
-        """Los divs que rotulan el período del salario: el nativo, los 8 que agrega ``hr_payroll`` (todos con una condición
-        sobre ``schedule_pay``) y el colombiano."""
-        nativo = self.arch.xpath("//div[@name='%s']" % NOMBRE_ROTULO_NATIVO)
-        self.assertEqual(len(nativo), 1, 'El rótulo nativo del salario ya no está en la vista del contrato.')
-        padre = nativo[0].getparent()
-        return [div for div in padre.xpath('./div')
-                if div.get('name') in (NOMBRE_ROTULO_NATIVO, NOMBRE_ROTULO_CO)
-                or 'schedule_pay' in (div.get('invisible') or '')]
+    def _fila_del_salario(self):
+        fila = self.arch.xpath("//page[@name='payroll_information']//div[@name='wage']")
+        self.assertEqual(len(fila), 1, 'La fila del salario ya no está en la pestaña Nómina de la ficha.')
+        return fila[0]
 
-    def _visibles(self, schedule_pay, country_code):
-        """Textos de los rótulos que el cliente mostraría para este contrato."""
-        contexto = {'schedule_pay': schedule_pay, 'country_code': country_code}
-        return [
-            ''.join(div.itertext()).strip() for div in self._rotulos()
-            if not (div.get('invisible') and safe_eval(div.get('invisible'), contexto))]
+    def _texto_co(self):
+        texto = self._fila_del_salario().xpath("./span[@name='%s']" % NOMBRE_TEXTO_CO)
+        self.assertEqual(len(texto), 1)
+        return texto[0]
+
+    def _selector(self):
+        selector = self._fila_del_salario().xpath("./field[@name='schedule_pay']")
+        self.assertEqual(len(selector), 1, 'El selector nativo de Programar pago ya no está en la fila del salario.')
+        return selector[0]
+
+    def _visible(self, nodo, schedule_pay, pais):
+        condicion = nodo.get('invisible')
+        return not (condicion and safe_eval(condicion, {'schedule_pay': schedule_pay, 'company_country_code': pais}))
 
     def test_la_vista_del_contrato_carga_con_el_rotulo_colombiano(self):
-        rotulo = self.arch.xpath("//div[@name='%s']" % NOMBRE_ROTULO_CO)
-        self.assertEqual(len(rotulo), 1)
-        self.assertEqual(''.join(rotulo[0].itertext()).strip(), '/ mes')
+        texto = self._texto_co()
+        self.assertEqual(''.join(texto.itertext()).strip(), TEXTO_CO)
+        self.assertEqual(set(texto.attrib), {'name', 'invisible'}, 'Sin clases ni estilos propios')
 
-    def test_hay_un_rotulo_nativo_por_cada_valor_de_programar_pago(self):
-        """Control de la premisa: la vista nativa tiene un rótulo para cada valor de ``schedule_pay`` (si Odoo agrega un valor
-        sin rótulo, o lo quita, esta prueba lo dice antes que el usuario)."""
+    def test_el_selector_nativo_esta_una_vez_y_el_texto_colombiano_no_se_ve_en_mexico(self):
+        """Control de la premisa: en v19 el período lo dice el selector nativo; fuera de Colombia nuestro texto no se ve con ningún valor."""
+        self._selector()
         for valor in self.valores_schedule_pay:
             with self.subTest(schedule_pay=valor):
-                self.assertEqual(len(self._visibles(valor, 'MX')), 1)
+                self.assertFalse(self._visible(self._texto_co(), valor, 'MX'))
 
-    def test_colombia_muestra_siempre_solo_mes_con_cualquier_programar_pago(self):
+    def test_colombia_muestra_el_texto_mensual_con_cualquier_programar_pago(self):
         self.assertIn('semi-monthly', self.valores_schedule_pay)
         for valor in self.valores_schedule_pay:
             with self.subTest(schedule_pay=valor):
-                self.assertEqual(self._visibles(valor, 'CO'), ['/ mes'])
+                self.assertTrue(self._visible(self._texto_co(), valor, 'CO'))
+                self.assertTrue(self._visible(self._selector(), valor, 'CO'), 'El selector nativo sigue visible')
 
-    def test_colombia_con_quincenal_no_muestra_quincena(self):
-        visibles = self._visibles('semi-monthly', 'CO')
-        self.assertEqual(visibles, ['/ mes'])
-        self.assertFalse([texto for texto in visibles if 'quincena' in texto.lower()])
+    def test_colombia_con_quincenal_muestra_el_texto_y_el_selector(self):
+        """Premisa invertida respecto de v18 (opción B): el selector «Quincenal» se conserva; el texto aclara que el valor es mensual."""
+        self.assertTrue(self._visible(self._texto_co(), 'semi-monthly', 'CO'))
+        self.assertTrue(self._visible(self._selector(), 'semi-monthly', 'CO'))
 
     def test_otra_compania_conserva_el_comportamiento_nativo(self):
-        """Fuera de Colombia queda exactamente lo nativo: un solo rótulo, el de su ``schedule_pay``, y nunca «/ mes»."""
         for pais in ('MX', 'EC', False, ''):
             for valor in self.valores_schedule_pay:
                 with self.subTest(pais=pais, schedule_pay=valor):
-                    visibles = self._visibles(valor, pais)
-                    self.assertEqual(len(visibles), 1)
-                    self.assertNotEqual(visibles[0], '/ mes')
+                    self.assertFalse(self._visible(self._texto_co(), valor, pais))
+                    self.assertTrue(self._visible(self._selector(), valor, pais))
 
     def test_el_rotulo_nativo_mensual_sigue_para_otra_compania(self):
-        self.assertEqual(self._visibles('monthly', 'MX'), ['/ month'])
+        """En otra compañía se ven el separador «/» y el selector nativos, sin nuestro texto."""
+        separador = [s for s in self._fila_del_salario().xpath('./span') if (s.text or '').strip() == '/']
+        self.assertEqual(len(separador), 1)
+        self.assertTrue(self._visible(separador[0], 'monthly', 'MX'))
+        self.assertTrue(self._visible(self._selector(), 'monthly', 'MX'))
+        self.assertFalse(self._visible(self._texto_co(), 'monthly', 'MX'))
 
     def test_no_se_toca_programar_pago(self):
-        """``schedule_pay`` (aviso de duración, factor de costos y la periodicidad de la retención lo leen) no se oculta ni se
-        vuelve de solo lectura por país POR ESTE MÓDULO: ni nuestras vistas lo mencionan como destino de un xpath o de un campo, ni
-        la vista efectiva lo condiciona a Colombia. Se verifica lo NUESTRO y no el atributo completo: la vista nativa ya trae su
-        propia condición (``country_code == 'MX'`` en ``invisible``, regresión bu del 16-nov-2026), que no es de este módulo."""
-        for xmlid in ('view_contract_form_ne', 'view_contract_form_ne_salario_mes'):
+        """``schedule_pay`` (aviso de duración, factor de costos y la periodicidad de la retención lo leen) no se oculta ni se vuelve de solo lectura POR ESTE MÓDULO: ni
+        nuestras vistas lo declaran o lo usan como destino de un xpath, ni la vista efectiva le pone condiciones."""
+        for xmlid in VISTAS_PROPIAS:
             with self.subTest(vista=xmlid):
                 propia = etree.fromstring(self.env.ref('l10n_co_nomina_electronica.%s' % xmlid).arch_db.encode())
                 self.assertFalse(propia.xpath("//field[@name='schedule_pay']"), 'La vista propia declara schedule_pay.')
@@ -105,23 +100,12 @@ class TestSalarioMes(TransactionCase):
                     self.assertNotRegex(
                         xpath.get('expr'), r"""field\[@name\s*=\s*['"]schedule_pay['"]\]""",
                         'Un xpath propio apunta al campo schedule_pay.')
-        campos = self.arch.xpath("//field[@name='schedule_pay']")
-        self.assertTrue(campos, 'Programar pago ya no está en la vista del contrato.')
-        # Con la localización de México instalada su vista (l10n_mx_hr_payroll_localisation/views/hr_contract_views.xml, herencia de
-        # hr_payroll.hr_contract_form_inherit) pone EXACTAMENTE ``invisible="country_code == 'MX'"`` al campo: es el único
-        # atributo que debe traer. Sin ella no trae ninguno. Readonly y required nunca los toca nadie.
-        mexico = self.env['ir.module.module'].search_count([
-            ('name', '=', 'l10n_mx_hr_payroll_localisation'), ('state', '=', 'installed')])
-        for campo in campos:
-            if mexico:
-                self.assertEqual(campo.get('invisible'), "country_code == 'MX'")
-            else:
-                self.assertFalse(campo.get('invisible'))
-            for atributo in ('readonly', 'required'):
-                self.assertFalse(campo.get(atributo), 'schedule_pay trae %s: %s.' % (atributo, campo.get(atributo)))
+        selector = self._selector()
+        for atributo in ('invisible', 'readonly', 'required'):
+            self.assertFalse(selector.get(atributo), 'schedule_pay trae %s: %s.' % (atributo, selector.get(atributo)))
 
     def test_el_salario_conserva_su_campo_y_su_contenedor(self):
-        """El campo ``wage`` sigue donde estaba, dentro del contenedor del rótulo (solo cambian los rótulos de al lado)."""
-        campo = self.arch.xpath("//div[@name='wage']/field[@name='wage']")
+        """El campo ``wage`` sigue donde estaba, dentro de la fila del salario (solo se agrega el texto al lado)."""
+        campo = self._fila_del_salario().xpath("./field[@name='wage']")
         self.assertEqual(len(campo), 1)
-        self.assertNotIn('country_code', campo[0].get('invisible') or '')
+        self.assertNotIn('country', campo[0].get('invisible') or '')

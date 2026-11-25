@@ -22,6 +22,32 @@ from odoo.tools.misc import format_amount
 from .res_company import NE_CLASES_RIESGO
 
 
+def _ne_proponer_clase_riesgo(registro):
+    """Propone la Clase de Riesgo ARL de la actividad elegida; el campo sigue editable. ``registro`` es la versión (``hr.version``) o la ficha (``hr.employee``), que expone los mismos
+    campos por ``_inherits``: los ``onchange`` de la versión NO corren en el formulario del empleado, por eso los dos modelos llaman a la misma lógica."""
+    actividad = registro.l10n_co_pila_actividad_economica
+    if actividad:
+        registro.l10n_co_pila_clase_riesgo = actividad.risk_class
+
+
+def _ne_aviso_clase_riesgo_distinta(registro):
+    """Aviso (sin bloquear) si la clase editada a mano no coincide con la de la actividad. ``registro``: versión o ficha, como en ``_ne_proponer_clase_riesgo``."""
+    actividad = registro.l10n_co_pila_actividad_economica
+    if actividad and registro.l10n_co_pila_clase_riesgo != actividad.risk_class:
+        # ``_description_selection`` sirve en los dos modelos: en la ficha el campo es heredado y su ``selection`` no es una lista.
+        etiquetas = dict(registro._fields['l10n_co_pila_clase_riesgo']._description_selection(registro.env))
+        return {'warning': {
+            'title': registro.env._('Clase de riesgo distinta a la de la actividad'),
+            'message': registro.env._(
+                'La actividad %(actividad)s está clasificada en %(esperada)s, pero el contrato '
+                'tiene %(actual)s. Puede guardar, pero verifique que sea correcto.',
+                actividad=actividad.display_name,
+                esperada=etiquetas.get(actividad.risk_class, actividad.risk_class),
+                actual=etiquetas.get(registro.l10n_co_pila_clase_riesgo, registro.l10n_co_pila_clase_riesgo or ''),
+            ),
+        }}
+
+
 class HrVersion(models.Model):
     """Campos del contrato laboral (versión del empleado) para Nómina Electrónica DIAN."""
 
@@ -209,8 +235,8 @@ class HrVersion(models.Model):
             if faltan:
                 raise ValidationError(_(
                     'El contrato de %(empleado)s (versión vigente desde el %(version)s) no puede tener '
-                    'fecha de inicio del contrato sin: %(faltan)s. Complételos en el contrato '
-                    '(Detalles del contrato y pestaña PILA).',
+                    'fecha de inicio del contrato sin: %(faltan)s. Complételos en la ficha del empleado '
+                    '(pestaña Nómina, grupos «Contrato DIAN» y «PILA - Cotización»).',
                     empleado=contrato.employee_id.name or contrato.display_name,
                     version=contrato.date_version, faltan=', '.join(faltan)))
 
@@ -222,7 +248,7 @@ class HrVersion(models.Model):
         if not clase:
             raise UserError(_(
                 'No hay Clase de Riesgo ARL para el contrato de %(employee)s: ni el contrato '
-                '(pestaña PILA) ni la empresa %(company)s (Nómina > Configuración > Ajustes, '
+                '(ficha del empleado, pestaña Nómina, grupo «PILA - Cotización») ni la empresa %(company)s (Nómina > Configuración > Ajustes, '
                 'bloque PILA) la tienen configurada.',
                 employee=self.employee_id.name, company=self.company_id.name))
         return clase
@@ -267,31 +293,29 @@ class HrVersion(models.Model):
         if not centro:
             raise UserError(_(
                 'No hay Centro de Trabajo ARL para el contrato de %(employee)s: ni el contrato '
-                '(pestaña PILA) ni la empresa %(company)s (Nómina > Configuración > Ajustes, '
+                '(ficha del empleado, pestaña Nómina, grupo «PILA - Cotización») ni la empresa %(company)s (Nómina > Configuración > Ajustes, '
                 'bloque PILA) lo tienen configurado.',
                 employee=self.employee_id.name, company=self.company_id.name))
         return centro
 
     @api.onchange('l10n_co_pila_actividad_economica')
     def _onchange_pila_actividad_economica(self):
-        """Propone la Clase de Riesgo de la actividad elegida; el campo sigue editable."""
-        actividad = self.l10n_co_pila_actividad_economica
-        if actividad:
-            self.l10n_co_pila_clase_riesgo = actividad.risk_class
+        _ne_proponer_clase_riesgo(self)
 
     @api.onchange('l10n_co_pila_clase_riesgo')
     def _onchange_pila_clase_riesgo_vs_actividad(self):
-        """Avisa (sin bloquear) si la clase editada a mano no coincide con la de la actividad."""
-        actividad = self.l10n_co_pila_actividad_economica
-        if actividad and self.l10n_co_pila_clase_riesgo != actividad.risk_class:
-            etiquetas = dict(self._fields['l10n_co_pila_clase_riesgo'].selection)
-            return {'warning': {
-                'title': _('Clase de riesgo distinta a la de la actividad'),
-                'message': _(
-                    'La actividad %(actividad)s está clasificada en %(esperada)s, pero el contrato '
-                    'tiene %(actual)s. Puede guardar, pero verifique que sea correcto.',
-                    actividad=actividad.display_name,
-                    esperada=etiquetas.get(actividad.risk_class, actividad.risk_class),
-                    actual=etiquetas.get(self.l10n_co_pila_clase_riesgo, self.l10n_co_pila_clase_riesgo or ''),
-                ),
-            }}
+        return _ne_aviso_clase_riesgo_distinta(self)
+
+
+class HrEmployeeRiesgoArl(models.Model):
+    """v19 (H-V19-14): la actividad y la clase de riesgo se editan en la ficha del empleado; misma lógica que en la versión."""
+
+    _inherit = 'hr.employee'
+
+    @api.onchange('l10n_co_pila_actividad_economica')
+    def _onchange_pila_actividad_economica(self):
+        _ne_proponer_clase_riesgo(self)
+
+    @api.onchange('l10n_co_pila_clase_riesgo')
+    def _onchange_pila_clase_riesgo_vs_actividad(self):
+        return _ne_aviso_clase_riesgo_distinta(self)

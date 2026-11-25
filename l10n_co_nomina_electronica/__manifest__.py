@@ -108,11 +108,11 @@ Funcionalidades principales:
         'views/res_partner_views.xml',
         'views/res_config_settings_views.xml',
         'views/hr_employee_views.xml',
-        # v19 (bloque 0): las 3 vistas de contrato (hr_contract_views, hr_contract_deductions_views y
-        # hr_contract_retefuente_views) heredan hr_payroll.hr_contract_form_inherit, que NO existe en v19
-        # (no hay formulario de hr.contract: los campos viven en hr.version y se editan en la ficha del
-        # empleado); sin sacarlas el modulo no carga. Los campos existen en hr.version pero sin pantalla
-        # hasta que David decida donde van (grupos en payroll_information). TL 2026-11-18.
+        # v19 (H-V19-14, bloque 2): los campos del contrato viven en hr.version y se editan en la ficha del
+        # empleado (grupos propios en la pestaña nativa «Nómina»); van DESPUES de hr_employee_views.xml.
+        'views/hr_contract_views.xml',
+        'views/hr_contract_deductions_views.xml',
+        'views/hr_contract_retefuente_views.xml',
         'views/hr_leave_prorroga_views.xml',
         'views/hr_payslip_views.xml',
         'views/hr_payslip_conceptos_views.xml',

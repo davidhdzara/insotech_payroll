@@ -1,57 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <record id="view_contract_form_ne_deductions" model="ir.ui.view">
-        <field name="name">hr.contract.form.ne.deductions</field>
-        <field name="model">hr.contract</field>
-        <field name="inherit_id" ref="hr_payroll.hr_contract_form_inherit"/>
-        <field name="priority">100</field>
+    <!-- v19 (H-V19-14): deducciones fijas de la versión del contrato en la ficha del empleado, pestaña nativa «Nómina» (ver hr_contract_views.xml). -->
+    <record id="view_employee_form_ne_deducciones" model="ir.ui.view">
+        <field name="name">hr.employee.form.ne.deducciones</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="priority">101</field>
         <field name="arch" type="xml">
-            <xpath expr="//notebook" position="inside">
-                <page string="Deducciones Fijas" name="deducciones_fijas"
-                      invisible="country_code != 'CO'">
-                    <group string="Deducciones configuradas en el contrato"
-                           name="deductions_main">
-                        <group string="Deducciones Legales"
-                               name="deductions_legal">
-                            <field name="l10n_co_ne_sindicato"/>
-                            <field name="l10n_co_ne_sindicato_partner_id" options="{'no_create': True}"
-                                   required="l10n_co_ne_sindicato &gt; 0"/>
-                        </group>
-                        <group string="Ahorro y Prevision"
-                               name="deductions_savings">
-                            <field name="l10n_co_ne_afc"/>
-                            <field name="l10n_co_ne_afc_partner_id" options="{'no_create': True}"
-                                   required="l10n_co_ne_afc &gt; 0"/>
-                            <field name="l10n_co_ne_pension_voluntaria"/>
-                            <field name="l10n_co_ne_pension_voluntaria_partner_id" options="{'no_create': True}"
-                                   required="l10n_co_ne_pension_voluntaria &gt; 0"/>
-                            <field name="l10n_co_ne_plan_complementario"/>
-                            <field name="l10n_co_ne_plan_complementario_partner_id" options="{'no_create': True}"
-                                   required="l10n_co_ne_plan_complementario &gt; 0"/>
-                        </group>
+            <xpath expr="//page[@name='payroll_information']" position="inside">
+                <field name="company_country_code" invisible="1"/>
+                <group string="Deducciones configuradas en el contrato"
+                       name="deducciones_fijas" invisible="company_country_code != 'CO'">
+                    <group string="Deducciones Legales"
+                           name="deductions_legal">
+                        <field name="l10n_co_ne_sindicato"/>
+                        <field name="l10n_co_ne_sindicato_partner_id" options="{'no_create': True}"
+                               required="l10n_co_ne_sindicato &gt; 0"/>
                     </group>
-                    <group>
-                        <group string="Otros Descuentos"
-                               name="deductions_other">
-                            <field name="l10n_co_ne_cooperativa"/>
-                            <field name="l10n_co_ne_cooperativa_partner_id" options="{'no_create': True}"
-                                   required="l10n_co_ne_cooperativa &gt; 0"/>
-                            <field name="l10n_co_ne_educacion"/>
-                            <field name="l10n_co_ne_educacion_partner_id" options="{'no_create': True}"
-                                   required="l10n_co_ne_educacion &gt; 0"/>
-                        </group>
-                        <group>
-                            <!-- Espacio reservado para futuras deducciones -->
-                        </group>
+                    <group string="Ahorro y Prevision"
+                           name="deductions_savings">
+                        <field name="l10n_co_ne_afc"/>
+                        <field name="l10n_co_ne_afc_partner_id" options="{'no_create': True}"
+                               required="l10n_co_ne_afc &gt; 0"/>
+                        <field name="l10n_co_ne_pension_voluntaria"/>
+                        <field name="l10n_co_ne_pension_voluntaria_partner_id" options="{'no_create': True}"
+                               required="l10n_co_ne_pension_voluntaria &gt; 0"/>
+                        <field name="l10n_co_ne_plan_complementario"/>
+                        <field name="l10n_co_ne_plan_complementario_partner_id" options="{'no_create': True}"
+                               required="l10n_co_ne_plan_complementario &gt; 0"/>
                     </group>
-                    <div class="alert alert-info" role="alert">
-                        <strong>Nota:</strong> Los valores configurados aqui se aplican
-                        automaticamente en cada nomina. Si se requiere un ajuste puntual
-                        para un mes, ingrese el valor manualmente como input en la nomina
-                        y este tendra prioridad sobre el valor del contrato.
-                    </div>
-                </page>
+                    <group string="Otros Descuentos"
+                           name="deductions_other">
+                        <field name="l10n_co_ne_cooperativa"/>
+                        <field name="l10n_co_ne_cooperativa_partner_id" options="{'no_create': True}"
+                               required="l10n_co_ne_cooperativa &gt; 0"/>
+                        <field name="l10n_co_ne_educacion"/>
+                        <field name="l10n_co_ne_educacion_partner_id" options="{'no_create': True}"
+                               required="l10n_co_ne_educacion &gt; 0"/>
+                    </group>
+                </group>
+                <div class="alert alert-info" role="alert" invisible="company_country_code != 'CO'">
+                    <strong>Nota:</strong> Los valores configurados aqui se aplican
+                    automaticamente en cada nomina. Si se requiere un ajuste puntual
+                    para un mes, ingrese el valor manualmente como input en la nomina
+                    y este tendra prioridad sobre el valor del contrato.
+                </div>
             </xpath>
         </field>
     </record>

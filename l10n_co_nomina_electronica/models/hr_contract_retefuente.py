@@ -54,6 +54,11 @@ class HrEmployeeRetefuenteProcedure(models.Model):
         string='Histórico Procedimiento 2',
     )
 
+    def action_calculate_retention_procedure2(self):
+        """Botón de la ficha del empleado (v19): calcula sobre la versión que la ficha muestra (``version_id`` sale del contexto o es la actual)."""
+        self.ensure_one()
+        return self.version_id.action_calculate_retention_procedure2()
+
 
 class HrVersionRetefuenteProcedure(models.Model):
     """Selección del procedimiento de retención en la fuente por contrato (versión del empleado)."""

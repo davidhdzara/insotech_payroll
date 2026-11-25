@@ -203,10 +203,10 @@
                             <field name="l10n_co_pila_ccf_id" options="{'no_create': True}"
                                    invisible="l10n_co_pila_ccf_por_empleado"/>
                         </setting>
-                        <setting string="Clase de Riesgo ARL" help="Clase de riesgo de la empresa. Un contrato puede tener otra propia (pestaña PILA del contrato).">
+                        <setting string="Clase de Riesgo ARL" help="Clase de riesgo de la empresa. Un contrato puede tener otra propia (ficha del empleado, pestaña Nómina, grupo «PILA - Cotización»).">
                             <field name="l10n_co_pila_clase_riesgo"/>
                         </setting>
-                        <setting string="Centro de Trabajo ARL" help="Código del centro de trabajo ARL de la empresa. Un contrato puede tener otro propio (pestaña PILA del contrato).">
+                        <setting string="Centro de Trabajo ARL" help="Código del centro de trabajo ARL de la empresa. Un contrato puede tener otro propio (ficha del empleado, pestaña Nómina, grupo «PILA - Cotización»).">
                             <field name="l10n_co_pila_centro_trabajo"/>
                         </setting>
                         <setting string="SENA" help="Contacto al que se causa el aporte parafiscal al SENA.">

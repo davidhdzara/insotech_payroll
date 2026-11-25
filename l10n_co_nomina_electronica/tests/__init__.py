@@ -180,3 +180,4 @@ from . import test_habitualidad_no_salarial
 from . import test_pacto_desalarizacion
 from . import test_consecutivos_proteccion
 from . import test_rango_de_la_version
+from . import test_ficha_contrato_v19
