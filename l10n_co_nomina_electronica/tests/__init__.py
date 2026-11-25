@@ -181,3 +181,4 @@ from . import test_pacto_desalarizacion
 from . import test_consecutivos_proteccion
 from . import test_rango_de_la_version
 from . import test_ficha_contrato_v19
+from . import test_acceso_campos_contrato_v19

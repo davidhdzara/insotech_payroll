@@ -77,6 +77,7 @@ class HrVersionRetefuenteProcedure(models.Model):
              '(Art. 384 ET) -- el cambio aplica de inmediato al guardar '
              'dentro de esa ventana, vigente para las nóminas que se '
              'calculen desde ese momento.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
     def write(self, vals):
         if 'l10n_co_ne_retention_procedure' in vals:

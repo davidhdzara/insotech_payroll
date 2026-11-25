@@ -72,6 +72,7 @@ class HrVersion(models.Model):
              '• 3 - Obra o Labor: duración atada a una obra específica.\n'
              '• 4 - Aprendizaje: contrato de aprendizaje SENA.\n'
              '• 5 - Prácticas o Pasantía: vinculación por práctica académica.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
 
     # ──────────────────────────────────────────────────────────────────
@@ -86,6 +87,7 @@ class HrVersion(models.Model):
              'cesantías, intereses a las cesantías ni prima de servicios.\n'
              'Se refleja en el atributo SalarioIntegral del nodo '
              '<Trabajador> del XML.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
 
 
@@ -108,6 +110,7 @@ class HrVersion(models.Model):
         ],
         string='Tipo Cotizante',
         help='Tipo de cotizante según tabla PILA.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
     l10n_co_pila_subtipo_cotizante = fields.Selection(
         selection=[
@@ -116,22 +119,26 @@ class HrVersion(models.Model):
             ('02', '02 - Independiente pensionado por vejez activo'),
         ],
         string='Subtipo Cotizante',
+        groups='hr_payroll.group_hr_payroll_user',
     )
     l10n_co_pila_salario_variable = fields.Boolean(
         string='Salario Variable',
         default=False,
         help='Marcar si el trabajador tiene salario variable.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
     l10n_co_pila_clase_riesgo = fields.Selection(
         selection=NE_CLASES_RIESGO,
         string='Clase de Riesgo ARL',
         help='Solo si este contrato tiene una clase distinta de la general de la empresa '
              '(Nómina > Configuración > Ajustes). Vacío: se usa la general.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
     l10n_co_pila_centro_trabajo = fields.Char(
         string='Centro de Trabajo',
         help='Código del centro de trabajo para ARL. Vacío: se usa el general de la empresa '
              '(Nómina > Configuración > Ajustes).',
+        groups='hr_payroll.group_hr_payroll_user',
     )
     l10n_co_pila_actividad_economica = fields.Many2one(
         'l10n.co.pila.ciiu',
@@ -139,15 +146,18 @@ class HrVersion(models.Model):
         domain="['|', ('date_end', '=', False), ('date_end', '>=', context_today().strftime('%Y-%m-%d'))]",
         help='Actividad económica del Decreto 768 de 2022 (busque por código o por descripción). '
              'Al elegirla se propone la Clase de Riesgo ARL de esa actividad.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
     l10n_co_pila_indicador_alto_riesgo = fields.Boolean(
         string='Alto Riesgo Pensional',
         default=False,
         help='Indica si el empleado aplica para pensión de alto riesgo.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
     l10n_co_pila_tarifa_especial_afp = fields.Char(
         string='Tarifa Especial AFP',
         help='Tarifa especial de AFP si aplica.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
 
     # ──────────────────────────────────────────────────────────────────
@@ -159,8 +169,10 @@ class HrVersion(models.Model):
         fecha. fecha: la del SMMLV; sin ella, la de inicio del contrato (``contract_date_start``: en
         v19 ``date_start`` es la vigencia de la VERSIÓN, no el ingreso; T2, doc 02,
         ``hr/models/hr_version.py:561-580``)."""
-        Parametro = self.env['hr.rule.parameter']
-        for contrato in self.filtered(
+        # H-V19-14 (acceso): la marca, la fecha de ingreso y el salario son de usuarios de nómina (``groups``), pero la validación corre para quien cree o edite la versión (p. ej. un
+        # responsable de Empleados sin nómina al dar de alta): se leen con sudo SOLO para validar el piso; no se escriben ni se devuelven.
+        Parametro = self.env['hr.rule.parameter'].sudo()
+        for contrato in self.sudo().filtered(
                 lambda c: c.l10n_co_ne_integral_salary and c.company_id._ne_es_colombia()):
             fecha_smmlv = fecha or contrato.contract_date_start
             if not fecha_smmlv:
@@ -170,11 +182,7 @@ class HrVersion(models.Model):
             smmlv = Parametro._get_parameter_from_code('l10n_co_smmlv', fecha_smmlv)
             piso = veces * smmlv
             moneda = contrato.company_id.currency_id
-            # ``wage`` tiene grupos (``hr``: hr.group_hr_manager, ``hr/models/hr_version.py:178-180``;
-            # ``hr_payroll`` lo redefine con group_hr_payroll_user, ``hr_payroll/models/hr_version.py:28``)
-            # y quien edita la marca de integral puede no tenerlos: el salario se lee con sudo SOLO para
-            # validar el piso (no se muestra ni se devuelve).
-            salario = contrato.sudo().wage
+            salario = contrato.wage          # ``contrato`` ya va con sudo (ver arriba)
             if salario < piso:
                 raise ValidationError(_(
                     "El contrato de %(empleado)s (versión vigente desde el %(version)s) es de salario "
@@ -227,7 +235,9 @@ class HrVersion(models.Model):
         Sustituto v19 de «En proceso»: en v18 la restricción valía para ``state == 'open'``, pero
         ``hr.version`` no tiene ``state`` (doc 02, T4); el contrato se deriva de las fechas.
         Decisión D-A, Tech Lead 2026-11-18."""
-        for contrato in self:
+        # H-V19-14 (acceso): los tres campos y la fecha de ingreso son de usuarios de nómina; la restricción debe dar su error también a quien no lo es, así que se leen con sudo (el mensaje solo
+        # nombra al empleado, la versión y los campos que faltan).
+        for contrato in self.sudo():
             if not contrato.contract_date_start or not contrato.company_id._ne_es_colombia():
                 continue
             faltan = [contrato._fields[c].string for c in self._NE_CAMPOS_OBLIGATORIOS_EN_PROCESO

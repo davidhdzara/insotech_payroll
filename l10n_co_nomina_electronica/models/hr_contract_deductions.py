@@ -30,6 +30,7 @@ class HrVersionDeductions(models.Model):
         currency_field='currency_id',
         help='Cuota sindical fija mensual. '
              'Se aplica automaticamente en cada nomina.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
 
     # ──────────────────────────────────────────────────────────────────
@@ -40,18 +41,21 @@ class HrVersionDeductions(models.Model):
         currency_field='currency_id',
         help='Ahorro para el Fomento de la Construccion (AFC). '
              'Art. 126-4 ET. Se deduce automaticamente cada mes.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
     l10n_co_ne_pension_voluntaria = fields.Monetary(
         string='Pensión Voluntaria Mensual',
         currency_field='currency_id',
         help='Aporte voluntario a fondo de pensiones. '
              'Art. 126-1 ET. Se deduce automaticamente cada mes.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
     l10n_co_ne_plan_complementario = fields.Monetary(
         string='Plan Complementario Salud',
         currency_field='currency_id',
         help='Plan complementario de salud (medicina prepagada). '
              'Se deduce automaticamente cada mes.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
 
     # ──────────────────────────────────────────────────────────────────
@@ -62,12 +66,14 @@ class HrVersionDeductions(models.Model):
         currency_field='currency_id',
         help='Cuota mensual de cooperativa o fondo de empleados. '
              'Se deduce automaticamente cada mes.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
     l10n_co_ne_educacion = fields.Monetary(
         string='Descuento Educacion',
         currency_field='currency_id',
         help='Descuento mensual por credito educativo o convenio. '
              'Se deduce automaticamente cada mes.',
+        groups='hr_payroll.group_hr_payroll_user',
     )
 
     # ──────────────────────────────────────────────────────────────────
@@ -78,24 +84,36 @@ class HrVersionDeductions(models.Model):
     l10n_co_ne_sindicato_partner_id = fields.Many2one(
         'res.partner', string='Sindicato',
         domain=[('l10n_co_entity_type', '=', 'other')],
-        help='Contacto del sindicato al que se paga la cuota sindical.')
+        help='Contacto del sindicato al que se paga la cuota sindical.',
+        groups='hr_payroll.group_hr_payroll_user',
+    )
     l10n_co_ne_afc_partner_id = fields.Many2one(
         'res.partner', string='Entidad AFC',
         domain=[('l10n_co_entity_type', '=', 'other')],
-        help='Contacto de la entidad donde está la cuenta AFC.')
+        help='Contacto de la entidad donde está la cuenta AFC.',
+        groups='hr_payroll.group_hr_payroll_user',
+    )
     l10n_co_ne_pension_voluntaria_partner_id = fields.Many2one(
         'res.partner', string='Fondo Pensión Voluntaria',
         domain=[('l10n_co_entity_type', '=', 'other')],
-        help='Contacto del fondo de pensión voluntaria.')
+        help='Contacto del fondo de pensión voluntaria.',
+        groups='hr_payroll.group_hr_payroll_user',
+    )
     l10n_co_ne_plan_complementario_partner_id = fields.Many2one(
         'res.partner', string='Entidad Plan Complementario',
         domain=[('l10n_co_entity_type', '=', 'other')],
-        help='Contacto de la entidad del plan complementario de salud.')
+        help='Contacto de la entidad del plan complementario de salud.',
+        groups='hr_payroll.group_hr_payroll_user',
+    )
     l10n_co_ne_cooperativa_partner_id = fields.Many2one(
         'res.partner', string='Cooperativa / Fondo',
         domain=[('l10n_co_entity_type', '=', 'other')],
-        help='Contacto de la cooperativa o fondo de empleados.')
+        help='Contacto de la cooperativa o fondo de empleados.',
+        groups='hr_payroll.group_hr_payroll_user',
+    )
     l10n_co_ne_educacion_partner_id = fields.Many2one(
         'res.partner', string='Entidad Educación',
         domain=[('l10n_co_entity_type', '=', 'other')],
-        help='Contacto de la entidad educativa o del convenio.')
+        help='Contacto de la entidad educativa o del convenio.',
+        groups='hr_payroll.group_hr_payroll_user',
+    )
