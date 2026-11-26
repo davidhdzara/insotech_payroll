@@ -1532,10 +1532,32 @@ class HrPayslip(models.Model):
     def create(self, vals_list):
         if any('l10n_co_ne_huella_calculo' in vals for vals in vals_list):
             self._ne_rechazar_huella_externa()
+        if self.env.context.get('ne_lote_por_tramo'):
+            vals_list = self._ne_fechas_por_tramo(vals_list)
         recibos = super().create(vals_list)
         if any(recibos.mapped('l10n_co_ne_huella_calculo')):          # por un valor por defecto (contexto ``default_...`` o valor definido por el usuario)
             self._ne_rechazar_huella_externa()
         return recibos
+
+    @api.model
+    def _ne_fechas_por_tramo(self, vals_list):
+        """H-F1-10: los recibos que genera un lote para un empleado con MÁS DE UNA versión vigente en el periodo quedan fechados por el tramo de su versión (A hasta la víspera, B desde el cambio). Solo Colombia
+        y la estructura general; con una sola versión las fechas son las del lote, como hasta ahora."""
+        general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina', raise_if_not_found=False)
+        for vals in vals_list:
+            if not general or vals.get('struct_id') != general.id or not (vals.get('version_id') and vals.get('date_from') and vals.get('date_to')):
+                continue
+            version = self.env['hr.version'].sudo().browse(vals['version_id'])
+            if not version.company_id._ne_es_colombia():
+                continue
+            desde, hasta = fields.Date.to_date(vals['date_from']), fields.Date.to_date(vals['date_to'])
+            otras = version.employee_id.version_ids.filtered(
+                lambda v: v != version and v.contract_date_start and v.date_start and v.date_start <= hasta and (not v.date_end or v.date_end >= desde))
+            if not otras:
+                continue
+            vals['date_from'] = max(desde, version.date_start) if version.date_start else desde
+            vals['date_to'] = min(hasta, version.date_end) if version.date_end else hasta
+        return vals_list
 
     def _ne_huella_calculo(self):
         """La huella de los datos ACTUALES del recibo (``services.huella_calculo``). Datos propios del recibo que el cálculo lee: cabecera (con su versión), salario del contrato (D1), tramo

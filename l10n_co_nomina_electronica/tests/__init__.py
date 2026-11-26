@@ -186,3 +186,4 @@ from . import test_hoja_al_dia
 from . import test_aprendiz_prestaciones
 from . import test_aprendiz_apoyo
 from . import test_firma_certificado
+from . import test_lote_por_tramo
