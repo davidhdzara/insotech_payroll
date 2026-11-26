@@ -91,10 +91,24 @@ class TestDocumentoMerge(TransactionCase):
 
     def test_trabajador_distinto_falla_nombrando_la_seccion(self):
         a, b = _recibo(), _recibo()
-        b['trabajador'] = dict(b['trabajador'], Sueldo='3500000.00')
+        b['trabajador'] = dict(b['trabajador'], TipoContrato='2')
         with self.assertRaises(dm.ErrorFusion) as exc:
             self._doc([a, b])
         self.assertIn('trabajador', str(exc.exception))
+
+    def test_el_sueldo_puede_cambiar_en_el_mes_y_es_el_del_ultimo_tramo(self):
+        """H-F1-10: los recibos llegan ordenados por fecha final (``l10n_co_ne_documento``); el Sueldo del documento es el del último. NV: no verificado contra el Anexo Técnico."""
+        a, b = _recibo(), _recibo()
+        b['trabajador'] = dict(b['trabajador'], Sueldo='3600000.00')
+        self.assertEqual(self._doc([a, b])['trabajador']['Sueldo'], '3600000.00')
+        self.assertEqual(self._doc([b, a])['trabajador']['Sueldo'], '3000000.00')
+        self.assertEqual((a['trabajador']['Sueldo'], b['trabajador']['Sueldo']), ('3000000.00', '3600000.00'), 'La fusión no toca los recibos de entrada')
+
+    def test_un_cambio_de_sueldo_no_esconde_otra_diferencia_del_trabajador(self):
+        a, b = _recibo(), _recibo()
+        b['trabajador'] = dict(b['trabajador'], Sueldo='3600000.00', TipoContrato='2')
+        with self.assertRaises(dm.ErrorFusion):
+            self._doc([a, b])
 
     def test_sin_fecha_de_pago_o_sin_recibos_falla(self):
         with self.assertRaises(dm.ErrorFusion):

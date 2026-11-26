@@ -245,15 +245,26 @@ def fusionar_documento(recibos, fechas_pagos, periodo, periodo_nomina='5'):
             raise ErrorFusion(
                 "El empleado %s (documento %s) cambia de tipo de trabajador dentro del mes (%s y %s, por ejemplo de la etapa lectiva a la practica de un aprendiz): el documento mensual exige un solo "
                 "TipoTrabajador, asi que esos recibos no se pueden fusionar en uno." % (nombre, trabajador_base.get('NumeroDocumento', ''), tipo_base, tipo_otro))
+    # H-F1-10: tras un aumento dentro del mes los recibos traen sueldos distintos; el resto de la seccion «trabajador» sigue siendo unico.
+    def comparable(recibo, seccion):
+        valor = recibo.get(seccion)
+        if seccion == 'trabajador' and valor:
+            return {clave: dato for clave, dato in valor.items() if clave != 'Sueldo'}
+        return valor
+
     for seccion in SECCIONES_IGUALES:
         for otro in recibos[1:]:
-            if otro.get(seccion) != base.get(seccion):
+            if comparable(otro, seccion) != comparable(base, seccion):
                 raise ErrorFusion(
                     "La seccion '%s' difiere entre los recibos del mes: el documento mensual la exige "
                     "unica." % seccion)
     documento = {clave: valor for clave, valor in base.items()
                  if clave in ('numero_secuencia', 'lugar_generacion', 'proveedor_xml', 'empleador',
                               'trabajador', 'pago', 'codigo_qr', 'notas')}
+    ultimo = recibos[-1].get('trabajador') or {}
+    if documento.get('trabajador') and 'Sueldo' in ultimo:
+        # el Sueldo del documento es el del ultimo tramo (los recibos llegan ordenados por fecha final). NV: no verificado contra el Anexo Tecnico.
+        documento['trabajador'] = dict(documento['trabajador'], Sueldo=ultimo['Sueldo'])
     informacion = dict(base.get('informacion_general', {}))
     informacion['PeriodoNomina'] = periodo_nomina
     documento['informacion_general'] = informacion
