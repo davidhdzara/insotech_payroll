@@ -484,7 +484,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         seq = 1
         for employee in payslips.mapped('employee_id'):
             slips = payslips.filtered(lambda s: s.employee_id == employee)
-            cotizantes.append(self._build_cotizante_data(slips[-1], seq, slips))
+            cotizantes.append(self._build_cotizante_data(self._ne_recibo_mas_reciente(slips), seq, slips))
             seq += 1
 
         # Generar archivo completo
@@ -696,6 +696,11 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 ibc_normal * tarifa_eps
                 + (0.0 if exonerado else ibc_sln * _p('l10n_co_pct_salud_empleador') / 100)),
         }
+
+    @api.model
+    def _ne_recibo_mas_reciente(self, recibos):
+        """H-F1-10: la linea PILA toma los datos del cotizante del recibo MAS RECIENTE del mes (el orden nativo de ``hr.payslip`` es ``date_to desc``: ``[-1]`` daba el mas antiguo)."""
+        return recibos.sorted(lambda slip: (slip.date_to, slip.date_from, slip.id))[-1]
 
     def _build_cotizante_data(self, payslip, seq, payslips=None):
         """Construye el diccionario de datos de un cotizante (Tipo 02).

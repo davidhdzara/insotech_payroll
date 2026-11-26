@@ -120,6 +120,12 @@ class TestLotePorTramo(MontajeLotePorTramo):
             self._confirmar(recibo)
         self.assertIn(str(CAMBIO), str(caso.exception))
 
+    def test_la_pila_toma_los_datos_del_recibo_mas_reciente(self):
+        _empleado, _version, recibos = self._recibos_del_lote()
+        asistente = self.env['l10n.co.hr.pila.wizard.v2']
+        for entrada in (recibos, recibos.sorted('date_from', reverse=True)):
+            self.assertEqual(asistente._ne_recibo_mas_reciente(entrada), recibos[1])
+
     def test_la_prima_no_se_parte(self):
         empleado, version_a, _b = self._empleado()
         lote = self._lote(self.prima)
