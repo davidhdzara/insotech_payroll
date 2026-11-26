@@ -195,3 +195,10 @@ class TestDiasDelMesPartido(MontajeLotePorTramo):
 
         self.assertEqual(dias(a, date(2026, 2, 27), date(2026, 2, 28)) + dias(b, date(2026, 2, 27), date(2026, 2, 28)), 4)
         self.assertEqual(dias(b, date(2026, 2, 28), date(2026, 2, 28)), 1)
+
+    def test_un_recibo_solo_del_dia_31_con_ausencia_queda_en_cero_dias_y_nunca_negativo(self):
+        _a, b = self._partido(date(2026, 10, 31))
+        self.assertEqual(b._ne_dias_bajo_contrato(), 0)
+        self.assertEqual(b._ne_dias_corridos_en_tramo(date(2026, 10, 31), date(2026, 10, 31), b.date_from, b.date_to, 30), 0)
+        with patch.object(type(b), '_ne_dias_habiles_excluidos', return_value=1):       # ausencia de dias habiles el 31
+            self.assertEqual(b._ne_dias_pagables(), 0)

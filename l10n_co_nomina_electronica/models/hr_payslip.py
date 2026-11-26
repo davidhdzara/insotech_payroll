@@ -2782,8 +2782,9 @@ class HrPayslip(models.Model):
         if ini > fin:
             return 0
         dias = self._ne_contar_dias(ini, fin)
-        if fecha_ini < ini:     # H-F1-10: la ausencia viene del tramo anterior
-            dias += self._ne_ajuste_cambio_en_ultimo_dia(ini)
+        ajuste = self._ne_ajuste_cambio_en_ultimo_dia(ini)
+        if fecha_ini < ini or ajuste < 0:     # H-F1-10: la ausencia viene del tramo anterior; el dia 31 no cuenta tampoco si la ausencia empieza ese dia
+            dias += ajuste
         return dias
 
     def _ne_ajuste_cambio_en_ultimo_dia(self, ini):
@@ -2903,7 +2904,11 @@ class HrPayslip(models.Model):
         # festivo o un día no laboral dentro de la ausencia).
         for codigo in _NOVEDAD_AUSENCIA_CALENDARIO_CODES:
             dias_excluidos += self._ne_ausencia_calendario(codigo)[0]
-        return dias_bajo_contrato - dias_excluidos
+        dias = dias_bajo_contrato - dias_excluidos
+        if dias < 0:        # los dias pagables nunca quedan negativos (un sueldo negativo no existe); se deja rastro en el log
+            _logger.warning('Recibo %s: las ausencias (%s dias) superan los dias del periodo (%s): los dias pagables quedan en 0.', self.id, dias_excluidos, dias_bajo_contrato)
+            return 0
+        return dias
 
     # ──────────────────────────────────────────────────────────────────────
     # .280 (doc 68, Fase 1): pestaña «Días trabajados» desde los días PAGADOS, no desde las horas de las entradas de trabajo
