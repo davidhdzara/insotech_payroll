@@ -1136,6 +1136,7 @@ class HrPayslip(models.Model):
         # Cada recibo se calcula en el contexto de SU compania: los parametros (hr.rule.parameter,
         # por pais) y env.company salen de la compania del recibo, no de la activa en el selector.
         res = True
+        con_huella._ne_liq_validar_nomina_posterior()   # P0: una nómina no vuelve a pagar días que una liquidación confirmada cerró
         con_huella._ne_liq_validar_mes()                # P0: la liquidación sabe qué días del mes están pagados, o no se calcula
         for company in self.company_id:
             recibos = self.filtered(lambda s, c=company: s.company_id == c).with_company(company)
@@ -1633,6 +1634,7 @@ class HrPayslip(models.Model):
         colombia._ne_validar_pacto_no_salarial()
         colombia._ne_validar_afiliaciones()       # H-F1-06: la afiliación completa, aun sin cuenta contable en las reglas
         por_confirmar = colombia.filtered(lambda r: r.state == 'draft')
+        por_confirmar._ne_liq_validar_nomina_posterior()          # P0: no se paga dos veces lo que una liquidación confirmada cerró
         por_confirmar._ne_liq_validar_mes()                       # P0: la liquidación se comprueba otra vez al confirmar
         por_confirmar._ne_liq_validar_pagados_vigentes()          # P0: los recibos que restó siguen siendo los de hoy
         por_confirmar._ne_liq_validar_reembolso()                 # P0: no se reembolsa un recibo que una liquidación confirmada restó
@@ -2967,6 +2969,24 @@ class HrPayslip(models.Model):
                                                      ('date_to', '>=', original.date_from)]):
                     if original.date_to >= max(liq.date_to.replace(day=1), inicio):
                         self._ne_liq_bloquear(recibo, liq)
+    def _ne_liq_validar_nomina_posterior(self):
+        """El sentido inverso (P0): con una liquidación confirmada, una nómina general del mismo contrato no se calcula ni se confirma si paga días del mes del retiro hasta la fecha de retiro: ya los pagó
+        la liquidación o un recibo que ella restó."""
+        general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
+        for recibo in self.filtered(lambda r: r.struct_id == general and r.version_id and r.date_to and not r.credit_note and not r.l10n_co_ne_is_adjustment):
+            inicio = recibo.version_id.sudo().contract_date_start
+            if not inicio:
+                continue
+            for liq in self._ne_liq_confirmadas([('employee_id', '=', recibo.employee_id.id), ('version_id.contract_date_start', '=', inicio), ('company_id', '=', recibo.company_id.id),
+                                                 ('date_to', '>=', recibo.date_from)]):
+                desde = max(liq.date_to.replace(day=1), inicio)
+                if recibo.date_to >= desde:
+                    raise UserError(_(
+                        'No se puede calcular ni confirmar «%(recibo)s» de %(empleado)s: la liquidación %(liquidacion)s, ya confirmada, cerró los días del %(desde)s al %(hasta)s de ese contrato (los pagó '
+                        'ella o los recibos que restó) y se pagarían dos veces. Primero la liquidación: saque este recibo (o al empleado, si es un lote) o, si hay que corregir, cancele la liquidación '
+                        '(o reembólsela y confirme ese reembolso).',
+                        recibo=recibo._ne_referencia(), empleado=recibo.employee_id.name, liquidacion=liq._ne_liq_nombres(), desde=desde, hasta=liq.date_to))
+
 
     def _ne_liq_nombres(self):
         return ', '.join(_('«%(recibo)s» (%(desde)s a %(hasta)s)', recibo=r._ne_referencia(), desde=r.date_from, hasta=r.date_to) for r in self)
