@@ -2781,7 +2781,20 @@ class HrPayslip(models.Model):
         fin = min(fecha_fin, tramo_fin)
         if ini > fin:
             return 0
-        return self._ne_contar_dias(ini, fin)
+        dias = self._ne_contar_dias(ini, fin)
+        if fecha_ini < ini:     # H-F1-10: la ausencia viene del tramo anterior
+            dias += self._ne_ajuste_cambio_en_ultimo_dia(ini)
+        return dias
+
+    def _ne_ajuste_cambio_en_ultimo_dia(self, ini):
+        """H-F1-10: ajuste del tramo que empieza porque la ficha cambió el ÚLTIMO día calendario de un mes, dentro del mismo contrato. ``_ne_dia_comercial`` lleva ese día al 30, así que el tramo contaba 1 y, sumado al
+        anterior, daba 28 en febrero (29 en bisiesto) y 31 en un mes de 31: se completa hasta el mes comercial (+2, +1 o -1; 0 en un mes de 30). Un ingreso, la liquidación y la nómina semanal no cambian."""
+        self.ensure_one()
+        version = self.version_id.sudo()
+        if (self._ne_es_semanal() or self._ne_es_liquidacion() or not version.contract_date_start or version.date_start != ini
+                or ini <= version.contract_date_start or ini.day != self._ne_dias_en_mes_calendario(ini.year, ini.month)):
+            return 0
+        return self._rule_parameter('l10n_co_dias_mes_comercial', self._ne_fecha_parametros()) - ini.day
 
     def _ne_salario(self, version=None):
         """ÚNICO punto de lectura del sueldo contractual para las reglas y los ayudantes del módulo (v19: ``hr.version.wage``).
@@ -2842,7 +2855,7 @@ class HrPayslip(models.Model):
         activo_ini, activo_fin = self._ne_rango_activo()
         if activo_ini > activo_fin:
             return 0
-        return self._ne_contar_dias(activo_ini, activo_fin)
+        return self._ne_contar_dias(activo_ini, activo_fin) + self._ne_ajuste_cambio_en_ultimo_dia(activo_ini)
 
     def _ne_codigos_tipos_no_remunerados(self):
         """Códigos de tipo de entrada de trabajo de los tipos de ausencia marcados ``unpaid`` (sin continuidad de pago del empleador):

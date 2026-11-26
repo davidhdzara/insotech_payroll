@@ -3,7 +3,7 @@
 """H-F1-10 (opción A; diseño aprobado por el TL el 25-nov): el lote nativo no generaba el recibo del tramo nuevo tras un cambio de versión dentro del contrato y creaba los recibos con las fechas del lote, así que dos
 recibos del mismo mes no se podían confirmar. Ahora (solo Colombia y estructura general) A llega hasta la víspera, B sale desde el cambio y no se duplica. NO EJECUTADAS en Odoo al escribirlas."""
 
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
 from odoo.exceptions import UserError
@@ -156,3 +156,42 @@ class TestLotePorTramo(MontajeLotePorTramo):
         empleado, version_a, _b = self._empleado()
         lote = self._lote(self.prima)
         self.assertEqual(lote._ne_versiones_por_tramo([version_a.id], MES[0], MES[1], self.prima.id, self.company.id), [version_a.id])
+
+
+@tagged('post_install', '-at_install')
+class TestDiasDelMesPartido(MontajeLotePorTramo):
+    """H-F1-10: los dos tramos de un mes suman 30 días comerciales también si el cambio cae el último día (el mes comercial mapea ese día al 30: en febrero faltaban 2 días, 1 en bisiesto; en un mes de 31 sobraba 1)."""
+
+    def _partido(self, cambio):
+        empleado, version_a = self._empleado(aumento=False)[:2]
+        version_b = empleado.create_version({'date_version': cambio, 'wage': 3600000.0})
+        primero = cambio.replace(day=1)
+        ultimo = (primero + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        return [self.env['hr.payslip'].create({
+            'name': 'Tramo %s' % desde, 'employee_id': empleado.id, 'version_id': version.id, 'company_id': self.company.id, 'struct_id': self.general.id, 'date_from': desde, 'date_to': hasta})
+            for version, desde, hasta in ((version_a, primero, cambio - timedelta(days=1)), (version_b, cambio, ultimo))]
+
+    def test_los_dos_tramos_suman_30_dias_en_febrero_bisiesto_y_mes_de_31(self):
+        for cambio in (date(2026, 2, 28), date(2026, 2, 15), date(2028, 2, 29), date(2028, 2, 15), date(2026, 10, 31), date(2026, 10, 16), date(2026, 9, 30)):
+            with self.subTest(cambio=cambio):
+                a, b = self._partido(cambio)
+                self.assertEqual(a._ne_dias_bajo_contrato() + b._ne_dias_bajo_contrato(), 30)
+
+    def test_el_lote_con_cambio_el_ultimo_dia_de_febrero_paga_30_dias_de_sueldo(self):
+        empleado, _version_a = self._empleado(aumento=False)[:2]
+        empleado.create_version({'date_version': date(2026, 2, 28), 'wage': 3600000.0})
+        lote = self.env['hr.payslip.run'].create({
+            'name': 'Lote Febrero', 'date_start': date(2026, 2, 1), 'date_end': date(2026, 2, 28), 'company_id': self.company.id, 'structure_id': self.general.id})
+        lote.generate_payslips(employee_ids=empleado.ids)
+        basico = lote.slip_ids.line_ids.filtered(lambda linea: linea.code == 'CO_BASICO')
+        self.assertEqual(sum(basico.mapped('quantity')), 30)
+        self.assertAlmostEqual(sum(basico.mapped('total')), 3000000.0 / 30 * 27 + 3600000.0 / 30 * 3, delta=0.05)
+
+    def test_una_ausencia_que_llega_al_fin_de_febrero_cuenta_como_en_el_mes_entero(self):
+        a, b = self._partido(date(2026, 2, 28))
+
+        def dias(recibo, desde, hasta):
+            return recibo._ne_dias_corridos_en_tramo(desde, hasta, recibo.date_from, recibo.date_to, 30)
+
+        self.assertEqual(dias(a, date(2026, 2, 27), date(2026, 2, 28)) + dias(b, date(2026, 2, 27), date(2026, 2, 28)), 4)
+        self.assertEqual(dias(b, date(2026, 2, 28), date(2026, 2, 28)), 1)
