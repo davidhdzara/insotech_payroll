@@ -212,6 +212,15 @@ class HrPayslip(models.Model):
             if not (isinstance(recibo.id, int) and recibo.state == 'draft' and recibo.worked_days_line_ids and recibo.version_id):
                 continue
             avisos = []
+            if recibo.company_id._ne_es_colombia():
+                try:
+                    bajo_contrato, excluidos = recibo._ne_dias_pagables_detalle()
+                except UserError:
+                    bajo_contrato, excluidos = 0, 0         # falta configuracion: el error ya sale al calcular
+                if excluidos > bajo_contrato:
+                    avisos.append(_(
+                        'Las ausencias de %(empleado)s (%(ausencias)s) suman más días que los de este recibo (%(periodo)s): los días pagables quedan en 0. Revise las fechas del recibo y las ausencias del periodo.',
+                        empleado=recibo.employee_id.name, ausencias='(%g)' % excluidos, periodo='(%g)' % bajo_contrato))
             if recibo._ne_desglosa_por_fecha():
                 try:
                     clasificacion = recibo._ne_clasificar_fechas()
@@ -2865,6 +2874,15 @@ class HrPayslip(models.Model):
         return set(unpaid_types.mapped('work_entry_type_id.code')) - {False}
 
     def _ne_dias_pagables(self, valores=None):
+        """Días pagables del periodo (``_ne_dias_pagables_detalle``); nunca negativos: un sueldo negativo no existe. El recorte se ve en el aviso de días del recibo y queda en el log."""
+        dias_bajo_contrato, dias_excluidos = self._ne_dias_pagables_detalle(valores=valores)
+        dias = dias_bajo_contrato - dias_excluidos
+        if dias < 0:
+            _logger.warning('Recibo %s: las ausencias (%s dias) superan los dias del periodo (%s): los dias pagables quedan en 0.', self.id, dias_excluidos, dias_bajo_contrato)
+            return 0
+        return dias
+
+    def _ne_dias_pagables_detalle(self, valores=None):
         """Días pagables del período -- misma convención de "mes comercial" colombiano que ya
         usa la regla salarial CO_BASICO (hr_salary_rule_co_basico, data/hr_payroll_structure_
         data.xml) y CO_AUX_TRANS para calcular el sueldo/auxilio. Única fuente para el sueldo
@@ -2904,11 +2922,7 @@ class HrPayslip(models.Model):
         # festivo o un día no laboral dentro de la ausencia).
         for codigo in _NOVEDAD_AUSENCIA_CALENDARIO_CODES:
             dias_excluidos += self._ne_ausencia_calendario(codigo)[0]
-        dias = dias_bajo_contrato - dias_excluidos
-        if dias < 0:        # los dias pagables nunca quedan negativos (un sueldo negativo no existe); se deja rastro en el log
-            _logger.warning('Recibo %s: las ausencias (%s dias) superan los dias del periodo (%s): los dias pagables quedan en 0.', self.id, dias_excluidos, dias_bajo_contrato)
-            return 0
-        return dias
+        return dias_bajo_contrato, dias_excluidos
 
     # ──────────────────────────────────────────────────────────────────────
     # .280 (doc 68, Fase 1): pestaña «Días trabajados» desde los días PAGADOS, no desde las horas de las entradas de trabajo

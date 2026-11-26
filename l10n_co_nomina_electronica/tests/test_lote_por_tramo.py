@@ -202,3 +202,16 @@ class TestDiasDelMesPartido(MontajeLotePorTramo):
         self.assertEqual(b._ne_dias_corridos_en_tramo(date(2026, 10, 31), date(2026, 10, 31), b.date_from, b.date_to, 30), 0)
         with patch.object(type(b), '_ne_dias_habiles_excluidos', return_value=1):       # ausencia de dias habiles el 31
             self.assertEqual(b._ne_dias_pagables(), 0)
+
+    def test_el_recorte_a_cero_dias_se_muestra_en_el_recibo_con_empleado_y_dias(self):
+        _a, b = self._partido(date(2026, 10, 31))
+        b.version_id.generate_work_entries(date(2026, 10, 1), date(2026, 10, 31))
+        b.compute_sheet()
+        self.assertTrue(b.worked_days_line_ids, 'Premisa: el recibo trae dias trabajados')
+        with patch.object(type(b), '_ne_dias_habiles_excluidos', return_value=1):
+            b.invalidate_recordset(['l10n_co_ne_aviso_dias'])
+            aviso = b.l10n_co_ne_aviso_dias or ''
+        for fragmento in (b.employee_id.name, 'quedan en 0', '(1)', '(0)'):
+            self.assertIn(fragmento, aviso)
+        b.invalidate_recordset(['l10n_co_ne_aviso_dias'])
+        self.assertNotIn('quedan en 0', b.l10n_co_ne_aviso_dias or '')
