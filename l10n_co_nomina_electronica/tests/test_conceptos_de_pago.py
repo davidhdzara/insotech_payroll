@@ -104,11 +104,11 @@ class TestConceptosDePago(TransactionCase):
         # v19: dos páginas nativas (``worked_days`` con name y la de novedades, sin name, que se encuentra por el campo que contiene).
         dias = arch.xpath("//page[@name='worked_days']")
         self.assertEqual(len(dias), 1)
-        self.assertEqual(dias[0].get('invisible'), 'not use_worked_day_lines or l10n_co_ne_usa_conceptos',
-                         'La pestaña de días solo se oculta en estructuras con conceptos y conserva la condición nativa')
+        self.assertEqual(dias[0].get('invisible'), 'not use_worked_day_lines or l10n_co_ne_oculta_pagina_novedades',
+                         'La pestaña de días solo se oculta donde «Conceptos de pago» la reemplaza y conserva la condición nativa')
         novedades = arch.xpath("//field[@name='input_line_ids']/ancestor::page")
         self.assertEqual(len(novedades), 1)
-        self.assertEqual(novedades[0].get('invisible'), 'l10n_co_ne_usa_conceptos', 'La pestaña de novedades solo se oculta en estructuras con conceptos')
+        self.assertEqual(novedades[0].get('invisible'), 'l10n_co_ne_oculta_pagina_novedades', 'La pestaña de novedades solo se oculta donde «Conceptos de pago» la reemplaza')
         self.assertTrue(novedades[0].xpath("following-sibling::page[1][@name='conceptos_de_pago']"), 'Conceptos de pago va después de las novedades')
         campo = pagina.xpath(".//field[@name='l10n_co_concepto_ids']")[0]
         # v19 (decisión de TL, 2026-11-22): lista one2many ESTÁNDAR, sin el widget de ``account``: el menú de filas de sección del widget (Duplicate y Delete sobre la
@@ -276,6 +276,7 @@ class TestConceptosDePago(TransactionCase):
         general = self._recibo()
         self.assertTrue(general.l10n_co_ne_usa_conceptos)
         self.assertTrue(general.l10n_co_concepto_ids)
+        self.prima.l10n_co_ne_conceptos_de_pago = False          # desde .328 la prima nace con el interruptor encendido
         prima = self._recibo(estructura=self.prima, desde=date(2026, 7, 1), hasta=date(2026, 12, 31))
         self.assertFalse(prima.l10n_co_ne_usa_conceptos)
         self.assertFalse(prima.l10n_co_concepto_ids, 'La estructura de prima no usa Conceptos de pago: sin filas')

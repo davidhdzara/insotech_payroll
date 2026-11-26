@@ -192,3 +192,4 @@ from . import test_aprendiz_prestaciones
 from . import test_aprendiz_apoyo
 from . import test_firma_certificado
 from . import test_lote_por_tramo
+from . import test_liquidacion_aux_y_prestaciones_ajustables   # .328 (porte de v18 6a2e383)
