@@ -131,7 +131,8 @@ class TestLotePorTramo(MontajeLotePorTramo):
 
     def test_los_recibos_partidos_avisan_lo_que_se_repite_sin_bloquear(self):
         empleado, version_a, _b = self._empleado(aumento=False)
-        version_a.write({'l10n_co_ne_sindicato': 50000.0})
+        entidad = self.env['res.partner'].create({'name': 'Sindicato Lote por Tramo', 'l10n_co_entity_type': 'other'})     # sin el contacto, calcular la deducción es un error
+        version_a.write({'l10n_co_ne_sindicato': 50000.0, 'l10n_co_ne_sindicato_partner_id': entidad.id})
         empleado.create_version({'date_version': CAMBIO, 'wage': 3600000.0})
         lote = self._lote()
         lote.generate_payslips(employee_ids=empleado.ids)
@@ -204,8 +205,8 @@ class TestDiasDelMesPartido(MontajeLotePorTramo):
             self.assertEqual(b._ne_dias_pagables(), 0)
 
     def test_el_recorte_a_cero_dias_se_muestra_en_el_recibo_con_empleado_y_dias(self):
-        _a, b = self._partido(date(2026, 10, 31))
-        b.version_id.generate_work_entries(date(2026, 10, 1), date(2026, 10, 31))
+        _a, b = self._partido(date(2026, 8, 31))      # 31-ago-2026 es lunes: un 31 en fin de semana no deja líneas de días trabajados
+        b.version_id.generate_work_entries(date(2026, 8, 1), date(2026, 8, 31))
         b.compute_sheet()
         self.assertTrue(b.worked_days_line_ids, 'Premisa: el recibo trae dias trabajados')
         with patch.object(type(b), '_ne_dias_habiles_excluidos', return_value=1):

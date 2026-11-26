@@ -95,9 +95,10 @@ class TestDocumentoXml(DocumentoFixture, TransactionCase):
         def distinto():
             llamadas.append(1)
             datos = _datos_recibo()
-            datos['trabajador'] = dict(datos['trabajador'], Sueldo='9999999.00' if len(llamadas) == 2 else '3000000.00')
+            # H-F1-10: el Sueldo puede cambiar en el mes (test_documento_merge lo fija); cualquier otro dato del trabajador sigue siendo único.
+            datos['trabajador'] = dict(datos['trabajador'], NumeroDocumento='9999999999' if len(llamadas) == 2 else '1020304050')
             return datos
-        with self.assertRaisesRegex(UserError, "trabajador"):
+        with self.assertRaisesRegex(UserError, "La seccion 'trabajador' difiere"):
             self._datos(doc, recibo=distinto)
 
     def test_xml_sin_firmar_usa_el_builder_con_los_datos_fusionados(self):
