@@ -47,6 +47,7 @@ from datetime import date, datetime
 from odoo import fields
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
+from .common_dane import ciudad_con_dane
 from .common_version import crear_contrato
 
 
@@ -91,11 +92,7 @@ class TestAusenciasNomina(TransactionCase):
                 'code': 'PA',
                 'country_id': co_country.id,
             })
-        co_city = cls.env['res.city'].create({
-            'name': 'Ciudad Prueba Ausencias',
-            'state_id': co_state.id,
-            'country_id': co_country.id,
-        })
+        co_city = ciudad_con_dane(cls.env, co_state, 'Ciudad Prueba Ausencias')
         cls.company.partner_id.write({
             'country_id': co_country.id,
             'state_id': co_state.id,

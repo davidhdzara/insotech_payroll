@@ -18,6 +18,7 @@ from datetime import date, timedelta
 
 from odoo.tests.common import TransactionCase, tagged
 
+from .common_dane import ciudad_con_dane
 from .common_version import crear_empleado_con_contrato, crear_usuario_nomina
 
 AUMENTO = date(2026, 9, 16)
@@ -42,7 +43,7 @@ class TestRangoDeLaVersion(TransactionCase):
         pais = cls.env.ref('base.co')
         departamento = cls.env['res.country.state'].search([('country_id', '=', pais.id)], limit=1) or cls.env['res.country.state'].create({
             'name': 'Departamento Prueba Rango', 'code': 'PR', 'country_id': pais.id})
-        ciudad = cls.env['res.city'].create({'name': 'Ciudad Prueba Rango', 'state_id': departamento.id, 'country_id': pais.id})
+        ciudad = ciudad_con_dane(cls.env, departamento, 'Ciudad Prueba Rango')          # H-F3-06: el XML exige los códigos DANE
         cls.company.partner_id.write({'country_id': pais.id, 'state_id': departamento.id, 'city_id': ciudad.id, 'street': 'Calle Prueba Rango # 1-1'})
         cls.structure_type = cls.env['hr.payroll.structure.type'].create({'name': 'Prueba Estructura Rango', 'country_id': pais.id})
         ref = cls.env.ref
