@@ -126,6 +126,32 @@ class TestLotePorTramo(MontajeLotePorTramo):
         for entrada in (recibos, recibos.sorted('date_from', reverse=True)):
             self.assertEqual(asistente._ne_recibo_mas_reciente(entrada), recibos[1])
 
+    def _avisos_de_mes_partido(self, recibo):
+        return [aviso for aviso in recibo._get_warnings_by_slip()[recibo] if 'Mes partido' in aviso['message']]
+
+    def test_los_recibos_partidos_avisan_lo_que_se_repite_sin_bloquear(self):
+        empleado, version_a, _b = self._empleado(aumento=False)
+        version_a.write({'l10n_co_ne_sindicato': 50000.0})
+        empleado.create_version({'date_version': CAMBIO, 'wage': 3600000.0})
+        lote = self._lote()
+        lote.generate_payslips(employee_ids=empleado.ids)
+        recibos = lote.slip_ids
+        self.assertEqual(len(recibos), 2)
+        for recibo in recibos:
+            avisos = self._avisos_de_mes_partido(recibo)
+            self.assertEqual([aviso['level'] for aviso in avisos], ['warning'])
+            sindicato = recibo.line_ids.filtered(lambda l: l.code == 'CO_SINDICATO')
+            self.assertTrue(sindicato, 'Premisa: la cuota sindical sale en cada recibo')
+            for fragmento in (sindicato.name, 'solidaridad', 'exoneración'):
+                self.assertIn(fragmento, avisos[0]['message'])
+        self.assertTrue(self._confirmar(recibos).called, 'El aviso no bloquea')
+
+    def test_un_recibo_del_mes_completo_no_avisa(self):
+        empleado, _a, _b = self._empleado(aumento=False)
+        lote = self._lote()
+        lote.generate_payslips(employee_ids=empleado.ids)
+        self.assertFalse(self._avisos_de_mes_partido(lote.slip_ids))
+
     def test_la_prima_no_se_parte(self):
         empleado, version_a, _b = self._empleado()
         lote = self._lote(self.prima)

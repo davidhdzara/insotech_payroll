@@ -1624,6 +1624,43 @@ class HrPayslip(models.Model):
                     rec.l10n_co_ne_consecutive = temporal_number
         return res
 
+    # H-F1-10: lo que se repite en cada recibo de un mes partido (el cierre del mes aun no existe)
+    _NE_CODIGOS_REPETIBLES = ('CO_SINDICATO', 'CO_AFC', 'CO_PENSION_VOL', 'CO_COOPERATIVA', 'CO_PLAN_COMP', 'CO_EDUCACION', 'CO_LIBRANZAS', 'CO_EMBARGO')
+
+    @api.model
+    def _issues_dependencies(self):
+        return super()._issues_dependencies() + ['line_ids']       # el aviso nombra lineas: se rehace al calcular la hoja
+
+    def _ne_otros_recibos_del_mes_partido(self):
+        """Los demas recibos sin cancelar (ni ajustes ni notas credito) del empleado y la estructura en el mes de ``date_to``, calculados con OTRA version de su ficha."""
+        self.ensure_one()
+        inicio = self.date_to.replace(day=1)
+        fin = (inicio + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        return self.search([
+            ('id', '!=', self._origin.id), ('employee_id', '=', self.employee_id.id), ('company_id', '=', self.company_id.id), ('struct_id', '=', self.struct_id.id),
+            ('version_id', '!=', self.version_id.id), ('state', '!=', 'cancel'), ('credit_note', '=', False), ('l10n_co_ne_is_adjustment', '=', False),
+            ('date_from', '<=', fin), ('date_to', '>=', inicio)])
+
+    def _get_warnings_by_slip(self):
+        """Aviso nativo, NO bloqueante, en los recibos de un mes partido (H-F1-10; decision del TL del 25-nov)."""
+        avisos = super()._get_warnings_by_slip()
+        general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina', raise_if_not_found=False)
+        for slip in self.filtered(lambda s: s.struct_id == general and s.version_id and s.date_to and s.state in ('draft', 'validated') and not s.credit_note
+                                  and not s.l10n_co_ne_is_adjustment and s.company_id._ne_es_colombia()):
+            otros = slip._ne_otros_recibos_del_mes_partido()
+            if not otros:
+                continue
+            propias = {linea.code: linea.name for linea in slip.line_ids if linea.code in self._NE_CODIGOS_REPETIBLES and linea.total}
+            en_otros = set(otros.line_ids.filtered(lambda linea: linea.total).mapped('code'))
+            repetidos = ', '.join(sorted(propias[codigo] for codigo in set(propias) & en_otros))
+            avisos[slip].append({
+                'message': _(
+                    'Mes partido por un cambio en la ficha de %(empleado)s: hay otro recibo del mes con otra versión. Descuentos fijos, libranzas y embargos que se repiten en los recibos: %(repetidos)s. El fondo de '
+                    'solidaridad pensional y la exoneración de aportes se deciden por recibo y no por el mes. Revíselos antes de confirmar.',
+                    empleado=slip.employee_id.name, repetidos=repetidos or _('ninguno por ahora')),
+                'action_text': _('Otro recibo del mes'), 'action': otros._get_records_action(), 'level': 'warning'})
+        return avisos
+
     def _ne_validar_tramos_cubiertos(self):
         """H-F1-10 (opción A): al CONFIRMAR un recibo de la estructura general (no ajustes ni notas crédito). El periodo es el del lote si lo tiene, si no el del recibo. Dos errores: el recibo incluye dentro de sus
         fechas el inicio de otra versión del mismo contrato; o un tramo del periodo con otra versión no tiene ningún recibo sin cancelar. Un tramo que solo es el día 31 no cuenta (mes comercial de 30). Límite
