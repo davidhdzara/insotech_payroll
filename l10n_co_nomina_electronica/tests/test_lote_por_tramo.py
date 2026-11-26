@@ -4,7 +4,9 @@
 recibos del mismo mes no se podían confirmar. Ahora (solo Colombia y estructura general) A llega hasta la víspera, B sale desde el cambio y no se duplica. NO EJECUTADAS en Odoo al escribirlas."""
 
 from datetime import date
+from unittest.mock import patch
 
+from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from .common_version import crear_empleado_con_contrato
@@ -63,6 +65,60 @@ class TestLotePorTramo(MontajeLotePorTramo):
         lote = self._lote()
         lote.generate_payslips(employee_ids=empleado.ids)
         self.assertEqual([(r.version_id, r.date_from, r.date_to) for r in lote.slip_ids], [(version_a, MES[0], MES[1])])
+
+    def _confirmar(self, recibos):
+        """Confirma con las demás validaciones, el asiento y el nativo parchados: solo actúan los tramos y el solape. Devuelve el parche del nativo."""
+        tipo = type(recibos)
+        nombres = ['_ne_validar_duracion_periodo', '_ne_validar_cuenta_neto', '_ne_validar_pacto_no_salarial', '_ne_validar_afiliaciones', '_ne_validar_hoja_al_dia',
+                   '_ne_aplicar_libranzas', '_ne_refrescar_ibc_mensual']
+        if hasattr(tipo, '_action_create_account_move'):
+            nombres.append('_action_create_account_move')
+        parches = [patch.object(tipo, nombre) for nombre in nombres]
+        for parche in parches:
+            parche.start()
+        try:
+            with patch('odoo.addons.hr_payroll.models.hr_payslip.HrPayslip.action_payslip_done', return_value=True) as nativo:
+                recibos.action_payslip_done()
+        finally:
+            for parche in parches:
+                parche.stop()
+        return nativo
+
+    def _recibos_del_lote(self):
+        empleado, version_a, version_b = self._empleado()
+        lote = self._lote()
+        lote.generate_payslips(employee_ids=empleado.ids)
+        return empleado, version_a, lote.slip_ids.sorted('date_from')
+
+    def test_a_y_b_del_lote_se_confirman_juntos(self):
+        _empleado, _version, recibos = self._recibos_del_lote()
+        self.assertEqual(len(recibos), 2)
+        self.assertTrue(self._confirmar(recibos).called)
+
+    def test_confirmar_sin_el_recibo_de_un_tramo_dice_cual_falta(self):
+        empleado, _version, recibos = self._recibos_del_lote()
+        for queda, falta in ((recibos[0], recibos[1]), ):
+            desde = falta.date_from
+            falta.unlink()
+            with self.assertRaisesRegex(UserError, 'Falta el recibo') as caso:
+                self._confirmar(queda)
+            self.assertIn(empleado.name, str(caso.exception))
+            self.assertIn(str(desde), str(caso.exception))
+
+    def test_confirmar_b_sin_a_tambien_lo_dice(self):
+        _empleado, _version, recibos = self._recibos_del_lote()
+        recibos[0].unlink()
+        with self.assertRaisesRegex(UserError, 'Falta el recibo'):
+            self._confirmar(recibos[1])
+
+    def test_un_recibo_que_incluye_el_cambio_no_se_confirma(self):
+        empleado, version_a, _b = self._empleado()
+        recibo = self.env['hr.payslip'].create({
+            'name': 'Recibo completo', 'employee_id': empleado.id, 'version_id': version_a.id, 'company_id': self.company.id, 'struct_id': self.general.id,
+            'date_from': MES[0], 'date_to': MES[1]})
+        with self.assertRaisesRegex(UserError, 'incluye un cambio') as caso:
+            self._confirmar(recibo)
+        self.assertIn(str(CAMBIO), str(caso.exception))
 
     def test_la_prima_no_se_parte(self):
         empleado, version_a, _b = self._empleado()

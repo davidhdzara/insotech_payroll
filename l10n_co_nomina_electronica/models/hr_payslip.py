@@ -1608,6 +1608,7 @@ class HrPayslip(models.Model):
         colombia = self._ne_solo_colombia()
         colombia._ne_validar_duracion_periodo()
         colombia._ne_validar_sin_solape()
+        colombia._ne_validar_tramos_cubiertos()   # H-F1-10: ningun recibo incluye un cambio de la ficha y ningun tramo del periodo queda sin recibo
         colombia._ne_validar_cuenta_neto()
         colombia._ne_validar_pacto_no_salarial()
         colombia._ne_validar_afiliaciones()       # H-F1-06: la afiliación completa, aun sin cuenta contable en las reglas
@@ -1622,6 +1623,34 @@ class HrPayslip(models.Model):
                     temporal_number = company.l10n_co_ne_pre_sequence_id.next_by_id()
                     rec.l10n_co_ne_consecutive = temporal_number
         return res
+
+    def _ne_validar_tramos_cubiertos(self):
+        """H-F1-10 (opción A): al CONFIRMAR un recibo de la estructura general (no ajustes ni notas crédito). El periodo es el del lote si lo tiene, si no el del recibo. Dos errores: el recibo incluye dentro de sus
+        fechas el inicio de otra versión del mismo contrato; o un tramo del periodo con otra versión no tiene ningún recibo sin cancelar. Un tramo que solo es el día 31 no cuenta (mes comercial de 30). Límite
+        aceptado (TL, 25-nov): un recibo hecho a mano, sin lote y ya acortado a la víspera, no delata que falte el siguiente."""
+        general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina', raise_if_not_found=False)
+        for slip in self.filtered(lambda s: s.struct_id == general and s.version_id and not s.credit_note and not s.l10n_co_ne_is_adjustment):
+            version = slip.version_id.sudo()
+            if not version.contract_date_start:
+                continue
+            lote = slip.payslip_run_id
+            inicio, fin = (lote.date_start, lote.date_end) if lote else (slip.date_from, slip.date_to)
+            otras = version.employee_id.version_ids.filtered(lambda v: v != version and v.contract_date_start == version.contract_date_start and v.date_start)
+            for otra in otras.sorted('date_start'):
+                if slip.date_from < otra.date_start <= slip.date_to and otra.date_start.day != 31:
+                    raise UserError(_(
+                        'El recibo «%(recibo)s» de %(empleado)s incluye un cambio en la ficha del empleado desde el %(desde)s: su fecha final debe ser %(vispera)s y desde ese día va en su propio recibo.',
+                        recibo=slip._ne_referencia(), empleado=slip.employee_id.name, desde=otra.date_start, vispera=otra.date_start - timedelta(days=1)))
+                desde = max(inicio, otra.date_start)
+                hasta = min(fin, otra.date_end) if otra.date_end else fin
+                if desde > hasta or desde.day == 31:
+                    continue
+                if not self.sudo().search_count([
+                        ('employee_id', '=', slip.employee_id.id), ('struct_id', '=', general.id), ('version_id', '=', otra.id), ('state', '!=', 'cancel'), ('credit_note', '=', False),
+                        ('l10n_co_ne_is_adjustment', '=', False), ('date_from', '<=', hasta), ('date_to', '>=', desde)], limit=1):
+                    raise UserError(_(
+                        'Falta el recibo de %(empleado)s para el tramo del %(desde)s al %(hasta)s (cambio en la ficha del empleado): genérelo con el lote o créelo con esas fechas antes de confirmar.',
+                        empleado=slip.employee_id.name, desde=desde, hasta=hasta))
 
     def _ne_validar_sin_solape(self):
         """Límite conocido "recibos solapados": dos recibos confirmados del mismo empleado y

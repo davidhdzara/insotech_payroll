@@ -118,7 +118,8 @@ class TestHojaAlDia(TransactionCase):
     def _parches(self, recibos):
         tipo = type(recibos)
         nombres = ['_ne_validar_duracion_periodo', '_ne_validar_sin_solape', '_ne_validar_cuenta_neto', '_ne_validar_pacto_no_salarial', '_ne_validar_afiliaciones',
-                   '_ne_aplicar_libranzas', '_ne_refrescar_ibc_mensual']
+                   '_ne_aplicar_libranzas', '_ne_refrescar_ibc_mensual',
+                   '_ne_validar_tramos_cubiertos']      # H-F1-10: aquí solo se prueba la hoja al día
         if hasattr(tipo, '_action_create_account_move'):        # el asiento de hr_payroll_account: fuera de lo que se prueba
             nombres.append('_action_create_account_move')
         return [patch.object(tipo, nombre) for nombre in nombres]
