@@ -27,6 +27,8 @@ from cryptography.hazmat.backends import default_backend
 
 from lxml import etree
 
+from odoo.exceptions import UserError
+
 _logger = logging.getLogger(__name__)
 
 # =====================================================================
@@ -58,6 +60,13 @@ SIGNATURE_POLICY_DIGEST = 'dMoMvtcG5aIzgYo0tIsSQeVJBDnUnfSOfBpxXrmor0Y='
 # =====================================================================
 # Carga de certificado desde certificate.certificate nativo
 # =====================================================================
+
+def _certificado_ilegible(certificate):
+    """Error único cuando no se puede leer el certificado de firma, su llave o un certificado de su cadena."""
+    raise UserError(certificate.env._(
+        'No se puede firmar con el certificado «%(certificado)s»: el certificado, su llave privada o un certificado de su cadena se leen vacíos, o la llave está cifrada y la clave registrada falta o no '
+        'corresponde. Vuelva a cargar el archivo del certificado como un certificado nuevo, con su clave, y déjelo de último en la compañía.', certificado=certificate.display_name))
+
 
 def load_from_certificate(certificate) -> tuple:
     """Extrae private key y certificado PEM/DER de un certificate.certificate nativo.
@@ -92,19 +101,35 @@ def load_from_certificate(certificate) -> tuple:
     """
     certificate.ensure_one()
     cert = certificate.with_context(bin_size=False)
-    key = cert.private_key_id.with_context(bin_size=False)
+    key = cert.private_key_id and cert.private_key_id.with_context(bin_size=False)
+    # Un certificado o una llave que se leen vacíos (adjunto sin archivo, base neutralizada) no se pueden firmar: se dice cuál y qué hacer.
+    if not (cert.pem_certificate and key and key.pem_key):
+        _certificado_ilegible(certificate)
 
     pem_key_bytes = base64.b64decode(key.pem_key)
     pem_cert_bytes = base64.b64decode(cert.pem_certificate)
 
-    private_key = serialization.load_pem_private_key(
-        pem_key_bytes, password=None, backend=default_backend(),
-    )
+    # La clave del registro se usa SOLO si la llave viene cifrada (una llave cargada aparte); la que sale de un .p12 ya está sin cifrar.
+    clave = None
+    if b'ENCRYPTED' in pem_key_bytes:
+        if not key.password:
+            _certificado_ilegible(certificate)
+        clave = key.password.encode()
+    try:
+        private_key = serialization.load_pem_private_key(
+            pem_key_bytes, password=clave, backend=default_backend(),
+        )
+    except (TypeError, ValueError):
+        if clave is None:
+            raise
+        _certificado_ilegible(certificate)
     cert_obj = x509.load_pem_x509_certificate(pem_cert_bytes, default_backend())
     cert_pem = cert_obj.public_bytes(serialization.Encoding.PEM)
     cert_der = cert_obj.public_bytes(serialization.Encoding.DER)
 
     chain_records = cert._get_certificate_chain()
+    if not all(chain_cert.with_context(bin_size=False).pem_certificate for chain_cert in chain_records):
+        _certificado_ilegible(certificate)
     chain_cert_objects = [
         x509.load_pem_x509_certificate(
             base64.b64decode(

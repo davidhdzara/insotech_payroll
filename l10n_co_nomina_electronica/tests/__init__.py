@@ -185,3 +185,4 @@ from . import test_acceso_campos_contrato_v19
 from . import test_hoja_al_dia
 from . import test_aprendiz_prestaciones
 from . import test_aprendiz_apoyo
+from . import test_firma_certificado
