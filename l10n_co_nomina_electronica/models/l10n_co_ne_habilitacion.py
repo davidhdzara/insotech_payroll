@@ -53,6 +53,7 @@ class L10nCoNeHabilitacion(models.AbstractModel):
         self.env['l10n.co.ne.documento.mixin']._ne_exigir_administrador_de_nomina()      # H-F2-03: llega al certificado: solo el administrador de nomina
         company.ensure_one()
         self._check_puede_habilitar(company)
+        self._ne_exigir_accion_planificada_activa()
         if company.l10n_co_ne_hab_state == 'running':
             return self._toast(
                 _('Habilitación en proceso'),
@@ -301,6 +302,15 @@ class L10nCoNeHabilitacion(models.AbstractModel):
         Aislado en un método para que las pruebas lo reemplacen: Odoo prohíbe cr.commit() en un test.
         """
         self.env.cr.commit()
+
+    @api.model
+    def _ne_exigir_accion_planificada_activa(self):
+        """El proceso lo avanza un ``ir.cron`` que nace inactivo (``data/ir_cron_habilitacion.xml``): sin activarlo, «Iniciar» dejaba la habilitación «en proceso» sin avanzar ni avisar."""
+        cron = self.env.ref(_CRON_XMLID, raise_if_not_found=False)
+        if not cron or not cron.sudo().active:
+            raise UserError(_(
+                'La acción planificada «%(accion)s» está inactiva: sin ella la habilitación no avanza. Un administrador del sistema debe activarla en Ajustes > Técnico > Acciones planificadas y después '
+                'volver a presionar «Iniciar Proceso de Habilitación».', accion=cron.sudo().name if cron else 'Nómina Electrónica: avance de la habilitación DIAN'))
 
     @api.model
     def _schedule(self, delay_seconds):

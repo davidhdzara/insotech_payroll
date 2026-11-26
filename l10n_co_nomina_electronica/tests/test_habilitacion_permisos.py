@@ -2,7 +2,7 @@
 """H-022: ``l10n.co.ne.habilitacion.start`` exige rol y compañía antes de escribir nada."""
 from unittest.mock import patch
 
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, UserError
 from odoo.tests.common import TransactionCase, tagged
 
 _ENGINE = 'odoo.addons.l10n_co_nomina_electronica.models.l10n_co_ne_habilitacion.L10nCoNeHabilitacion'
@@ -17,6 +17,9 @@ class TestHabilitacionPermisos(TransactionCase):
         cls.company = cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía Prueba Permisos Habilitación'})
         cls.otra = cls.env['res.company'].create({'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U', 'country_id': cls.env.ref('base.co').id, 'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real', 'l10n_co_ne_redondeo_dias': 'DOWN', 'name': 'Compañía Ajena Permisos Habilitación'})
         cls.company.l10n_co_ne_hab_state = 'idle'
+        # la accion planificada nace inactiva y sin ella no se puede iniciar: las pruebas de permisos parten de ella activa
+        cls.cron = cls.env.ref('l10n_co_nomina_electronica.ir_cron_ne_habilitacion')
+        cls.cron.active = True
 
     def _usuario(self, login, grupos, companies=None):
         companies = companies or self.company
@@ -37,6 +40,21 @@ class TestHabilitacionPermisos(TransactionCase):
 
     def _assert_sin_efectos(self):
         self.assertEqual(self.company.l10n_co_ne_hab_state, 'idle')
+        self.assertFalse(self.schedule_llamado)
+
+    def test_con_la_accion_planificada_inactiva_da_un_error_claro_y_no_cambia_nada(self):
+        self.cron.active = False
+        user = self._usuario('hab_cron', ['hr_payroll.group_hr_payroll_manager'])
+        with self.assertRaisesRegex(UserError, 'está inactiva') as caso:
+            self._start(user)
+        self.assertIn(self.cron.name, str(caso.exception))
+        self._assert_sin_efectos()
+
+    def test_una_habilitacion_en_proceso_con_la_accion_inactiva_tambien_lo_avisa(self):
+        self.cron.active = False
+        self.company.l10n_co_ne_hab_state = 'running'
+        with self.assertRaisesRegex(UserError, 'está inactiva'):
+            self._start(self._usuario('hab_cron_en_proceso', ['hr_payroll.group_hr_payroll_manager']))
         self.assertFalse(self.schedule_llamado)
 
     def test_usuario_interno_sin_rol_no_puede(self):
