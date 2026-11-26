@@ -203,13 +203,67 @@ class HrVersion(models.Model):
                     piso=format_amount(self.env, piso, moneda), veces=veces,
                     smmlv=format_amount(self.env, smmlv, moneda), fecha=fecha_smmlv))
 
+    def _ne_validar_etapa_de_version_nueva(self):
+        """v19: el cambio normal de etapa es una VERSIÓN nueva. Se compara con la versión anterior del mismo contrato; copiar una versión sin cambiar el tipo de cotizante ni el de contrato no se valida."""
+        for version in self.filtered(lambda v: v.company_id._ne_es_colombia()):
+            propia = version.sudo()
+            inicio = propia.contract_date_start
+            if not inicio:
+                continue
+            otras = propia.employee_id.with_context(active_test=False).version_ids.filtered(lambda v: v.id not in self.ids and v.contract_date_start == inicio)
+            if not otras:
+                continue
+            previas = otras.filtered(lambda v: v.date_version <= propia.date_version).sorted('date_version')
+            anterior = previas[-1] if previas else otras.sorted('date_version')[0]
+            nuevo = version._ne_etapa_declarada()
+            if nuevo != anterior._ne_etapa_declarada():
+                version._ne_validar_cambio_de_etapa(nuevo, inicio)
+
     @api.model_create_multi
     def create(self, vals_list):
         contratos = super().create(vals_list)
+        contratos._ne_validar_etapa_de_version_nueva()
         contratos._ne_validar_piso_integral()
         return contratos
 
+    _NE_CAMPOS_DE_ETAPA = ('l10n_co_pila_tipo_cotizante', 'l10n_co_ne_contract_type')
+
+    def _ne_etapa_declarada(self):
+        """(tipo de cotizante, tipo de contrato) de la versión: de ellos sale la etapa del aprendiz. Con ``sudo()``: los campos exigen usuario de nómina y quien edita la ficha puede ser solo de Empleados."""
+        self.ensure_one()
+        version = self.sudo()
+        return tuple(version[campo] or '' for campo in self._NE_CAMPOS_DE_ETAPA)
+
+    def _ne_validar_cambio_de_etapa(self, nuevo, inicio):
+        """H-F1-09 (D3, doc 88; Decreto 223 de 2026, art. 2.2.6.3.3.6, par. 3: solo la fase práctica o la formación dual cuentan como tiempo de servicio). La antigüedad para prima, cesantías y vacaciones sale
+        de la fecha de inicio del contrato: un contrato con recibos confirmados de una etapa de aprendiz SIN prestaciones no puede pasar a una etapa de aprendiz que SÍ las causa. Un contrato por etapa.
+
+        v19: el contrato son las versiones del empleado con la misma ``contract_date_start`` (el criterio de ``hr.payslip._ne_dominio_mismo_contrato``), así que se miran los recibos de TODAS ellas.
+        ``nuevo``: (tipo de cotizante, tipo de contrato) con que quedará la versión; ``inicio``: su fecha de inicio de contrato (una fecha nueva es un contrato nuevo y no arrastra los recibos anteriores)."""
+        self.ensure_one()
+        if not inicio:
+            return
+        Recibo = self.env['hr.payslip'].sudo()      # quien edita la ficha (Empleados) no tiene por qué leer recibos ni parámetros de nómina: solo se usa para decidir y dar el error
+        empleado = self.sudo().employee_id
+        etapa = Recibo._ne_regimen_de(nuevo[0], nuevo[1], fields.Date.context_today(self), empleado.name)
+        if not (etapa['es_aprendiz'] and etapa['causa_prestaciones']):
+            return
+        for recibo in Recibo.search([('employee_id', '=', empleado.id), ('date_from', '>=', inicio), ('state', 'in', ('validated', 'paid'))]):
+            anterior = recibo._ne_regimen_cotizante()
+            if anterior['es_aprendiz'] and not anterior['causa_prestaciones']:
+                raise UserError(_(
+                    'El contrato de %(empleado)s tiene recibos confirmados de la etapa lectiva (por ejemplo «%(recibo)s») y no puede pasar a la etapa práctica: la antigüedad para prima, '
+                    'cesantías y vacaciones sale de la fecha de inicio del contrato y contaría la lectiva (Decreto 223 de 2026, art. 2.2.6.3.3.6, parágrafo 3). Cierre este contrato y cree el de la práctica en la '
+                    'ficha del empleado > Nómina: una nueva fecha de inicio de contrato y, como sueldo, el apoyo de esa etapa.', empleado=empleado.name, recibo=recibo._ne_referencia()))
+
     def write(self, vals):
+        if set(self._NE_CAMPOS_DE_ETAPA) & set(vals):
+            for version in self.filtered(lambda v: v.company_id._ne_es_colombia()):
+                actual = version._ne_etapa_declarada()
+                nuevo = tuple((vals[campo] or '') if campo in vals else actual[i] for i, campo in enumerate(self._NE_CAMPOS_DE_ETAPA))
+                if nuevo != actual:             # ANTES de escribir: la etapa de cada recibo se lee con los datos actuales
+                    inicio = fields.Date.to_date(vals['contract_date_start']) if 'contract_date_start' in vals else version.sudo().contract_date_start
+                    version._ne_validar_cambio_de_etapa(nuevo, inicio)
         resultado = super().write(vals)
         if {'wage', 'l10n_co_ne_integral_salary', 'contract_date_start'} & set(vals):
             # Un cambio solo de salario se valida con el SMMLV de hoy; si se toca el ingreso o
