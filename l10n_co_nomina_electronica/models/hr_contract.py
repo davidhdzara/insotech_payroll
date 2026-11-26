@@ -238,8 +238,9 @@ class HrVersion(models.Model):
         """H-F1-09 (D3, doc 88; Decreto 223 de 2026, art. 2.2.6.3.3.6, par. 3: solo la fase práctica o la formación dual cuentan como tiempo de servicio). La antigüedad para prima, cesantías y vacaciones sale
         de la fecha de inicio del contrato: un contrato con recibos confirmados de una etapa de aprendiz SIN prestaciones no puede pasar a NINGÚN régimen que las cause (práctica, formación dual o empleado). Un contrato por etapa.
 
-        v19: el contrato son las versiones del empleado con la misma ``contract_date_start`` (el criterio de ``hr.payslip._ne_dominio_mismo_contrato``), así que se miran los recibos de TODAS ellas.
-        ``nuevo``: (tipo de cotizante, tipo de contrato) con que quedará la versión; ``inicio``: su fecha de inicio de contrato (una fecha nueva es un contrato nuevo y no arrastra los recibos anteriores)."""
+        v19: el contrato son las versiones del empleado con la misma ``contract_date_start``, así que se miran los recibos cuya VERSIÓN es de ese contrato (incluye el del primer mes, que empieza antes que el contrato).
+        ``nuevo``: (tipo de cotizante, tipo de contrato) con que quedará la versión; ``inicio``: la fecha de inicio ACTUAL de su contrato. Editar esa fecha NO crea un contrato nuevo (el nativo mueve las fechas de las
+        versiones del contrato): un contrato nuevo se hace poniendo fecha de fin al actual y creando otra versión con su propia fecha de inicio."""
         self.ensure_one()
         if not inicio:
             return
@@ -248,13 +249,14 @@ class HrVersion(models.Model):
         etapa = Recibo._ne_regimen_de(nuevo[0], nuevo[1], fields.Date.context_today(self), empleado.name)
         if not etapa['causa_prestaciones']:
             return
-        for recibo in Recibo.search([('employee_id', '=', empleado.id), ('date_from', '>=', inicio), ('state', 'in', ('validated', 'paid'))]):
+        for recibo in Recibo.search([('employee_id', '=', empleado.id), ('version_id.contract_date_start', '=', inicio), ('state', 'in', ('validated', 'paid'))]):
             anterior = recibo._ne_regimen_cotizante()
             if anterior['es_aprendiz'] and not anterior['causa_prestaciones']:
                 raise UserError(_(
                     'El contrato de %(empleado)s tiene recibos confirmados de una etapa de aprendiz sin prestaciones (por ejemplo «%(recibo)s») y no puede pasar a un régimen que las causa (práctica, formación '
-                    'dual o empleado): la antigüedad para prima, cesantías y vacaciones sale de la fecha de inicio del contrato y contaría esa etapa (Decreto 223 de 2026, art. 2.2.6.3.3.6, parágrafo 3). Cierre '
-                    'este contrato y cree un contrato nuevo en la ficha del empleado > Nómina: una nueva fecha de inicio de contrato y el sueldo que le corresponde (en la práctica, el apoyo de esa etapa).',
+                    'dual o empleado): la antigüedad para prima, cesantías y vacaciones sale de la fecha de inicio del contrato y contaría esa etapa (Decreto 223 de 2026, art. 2.2.6.3.3.6, parágrafo 3). Ponga '
+                    'la fecha de fin a este contrato y cree un contrato nuevo en la ficha del empleado > Nómina: un registro nuevo con su propia fecha de inicio de contrato y el sueldo que le corresponde (en la '
+                    'práctica, el apoyo de esa etapa). No cambie la fecha de inicio de este contrato.',
                     empleado=empleado.name, recibo=recibo._ne_referencia()))
 
 
@@ -264,7 +266,8 @@ class HrVersion(models.Model):
                 actual = version._ne_etapa_declarada()
                 nuevo = tuple((vals[campo] or '') if campo in vals else actual[i] for i, campo in enumerate(self._NE_CAMPOS_DE_ETAPA))
                 if nuevo != actual:             # ANTES de escribir: la etapa de cada recibo se lee con los datos actuales
-                    inicio = fields.Date.to_date(vals['contract_date_start']) if 'contract_date_start' in vals else version.sudo().contract_date_start
+                    # el contrato ACTUAL: una fecha de inicio que llegue en este guardado no lo vuelve nuevo; solo cuenta si la versión aún no tenía contrato
+                    inicio = version.sudo().contract_date_start or fields.Date.to_date(vals.get('contract_date_start'))
                     version._ne_validar_cambio_de_etapa(nuevo, inicio)
         resultado = super().write(vals)
         if {'wage', 'l10n_co_ne_integral_salary', 'contract_date_start'} & set(vals):

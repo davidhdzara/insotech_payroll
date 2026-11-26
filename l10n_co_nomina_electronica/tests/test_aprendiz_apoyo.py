@@ -14,7 +14,7 @@ from datetime import date
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
-from .common_version import confirmar_a_mano, crear_empleado_con_contrato, crear_usuario_nomina
+from .common_version import confirmar_a_mano, crear_contrato, crear_empleado_con_contrato, crear_usuario_nomina
 
 INICIO = date(2026, 1, 1)
 RETIRO = date(2026, 8, 15)
@@ -217,6 +217,33 @@ class TestAprendizApoyo(TransactionCase):
         self.assertEqual(copia.l10n_co_pila_tipo_cotizante, '19')
         with self.assertRaisesRegex(UserError, 'cree un contrato nuevo'):
             empleado.create_version({'date_version': date(2026, 6, 1), 'l10n_co_pila_tipo_cotizante': '01'})
+
+    def test_cambiar_la_fecha_de_inicio_y_la_etapa_en_el_mismo_guardado_se_rechaza_como_en_v18(self):
+        """v19 no crea otro contrato al editar la fecha de inicio: el nativo mueve las fechas de las versiones del mismo contrato (registro §32 del consultor)."""
+        contrato = self._aprendiz(LECTIVA, ' inicio')
+        confirmar_a_mano(self._recibo(contrato, self.general, *MARZO))
+        with self.assertRaisesRegex(UserError, 'cree un contrato nuevo'):
+            contrato.write({'contract_date_start': date(2026, 4, 1), 'l10n_co_pila_tipo_cotizante': '01'})
+        self.assertEqual((contrato.contract_date_start, contrato.l10n_co_pila_tipo_cotizante), (INICIO, '19'))
+
+    def test_el_recibo_del_primer_mes_parcial_tambien_cuenta(self):
+        """El recibo del mes de ingreso empieza antes que el contrato: se busca por el contrato de su versión y no por la fecha del recibo."""
+        _empleado, contrato = crear_empleado_con_contrato(
+            self.env, self.company, 0.75 * self._parametro('l10n_co_smmlv'), date(2026, 3, 16), self.structure_type, nombre='Apoyo Mes Parcial',
+            l10n_co_ne_contract_type='4', l10n_co_pila_tipo_cotizante='19')
+        confirmar_a_mano(self._recibo(contrato, self.general, *MARZO))
+        with self.assertRaisesRegex(UserError, 'cree un contrato nuevo'):
+            contrato.write({'l10n_co_pila_tipo_cotizante': '01'})
+
+    def test_con_fecha_de_fin_y_contrato_nuevo_si_se_pasa_a_practica(self):
+        contrato = self._aprendiz(LECTIVA, ' camino')
+        confirmar_a_mano(self._recibo(contrato, self.general, *MARZO))
+        contrato.write({'contract_date_end': date(2026, 3, 31)})
+        nuevo = crear_contrato(self.env, {
+            'employee_id': contrato.employee_id.id, 'structure_type_id': self.structure_type.id, 'wage': contrato.wage, 'date_start': date(2026, 4, 1), 'state': 'open',
+            'l10n_co_ne_contract_type': '4', 'l10n_co_pila_tipo_cotizante': '19', 'l10n_co_pila_subtipo_cotizante': '00'})
+        nuevo.write({'l10n_co_pila_tipo_cotizante': '01'})
+        self.assertEqual(nuevo.l10n_co_pila_tipo_cotizante, '01')
 
     def test_los_demas_cambios_de_tipo_se_permiten(self):
         sin_recibos = self._aprendiz(LECTIVA, ' sin recibos')
