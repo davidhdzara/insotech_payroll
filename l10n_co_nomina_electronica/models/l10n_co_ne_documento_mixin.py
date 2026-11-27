@@ -1337,8 +1337,12 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         self._ne_validar_cuenta_transferencia()
         # H-024: nombre y apellido completos, también antes de gastar el consecutivo.
         employee._l10n_co_nombre_dian()
-
-    def _validate_company_ne_config(self, company):
+        # Q-17 (.332): «PeriodoNomina» sale del calendario de pago; la nota de ajuste tipo Eliminar no lo lleva.
+        if not (self.l10n_co_ne_is_adjustment and self.l10n_co_ne_adjustment_type == '2') and not self._ne_periodo_nomina():
+            raise UserError(_(
+                'No se puede generar el XML de %(empleado)s: ni su contrato ni el tipo de estructura tienen «Calendario de pago», y de ahí sale el '
+                '«Periodo de Nómina». Elíjalo en la ficha del empleado, pestaña «Nómina», o en el tipo de estructura.',
+                empleado=employee.name))
         """Envoltorio: la validación vive en ``res.company._l10n_co_ne_validar_config()`` (doc 53
         §23.13); se conserva el nombre para el ciclo por recibo, la habilitación y las pruebas."""
         return company._l10n_co_ne_validar_config()

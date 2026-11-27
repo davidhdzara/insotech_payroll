@@ -147,6 +147,17 @@ class TestDianPaisMoneda(TransactionCase):
         self.assertEqual(data['empleador']['Pais'], 'CO')
         self.assertEqual(data['trabajador']['LugarTrabajoPais'], 'CO')
 
+    def test_periodo_nomina_de_los_datos_sale_del_calendario_de_pago(self):
+        """Q-17 (.332): el código no depende de los días del recibo; sin calendario el dato no se escribe (el documento mensual envía el suyo) y la
+        recolección sigue funcionando."""
+        payslip = self._make_payslip()
+        payslip.version_id.schedule_pay = 'semi-monthly'
+        payslip.write({'date_from': date(2026, 2, 16), 'date_to': date(2026, 2, 28)})
+        self.assertEqual(payslip._collect_payslip_data()['informacion_general']['PeriodoNomina'], '4')
+        payslip.version_id.structure_type_id.default_schedule_pay = False
+        payslip.version_id.schedule_pay = False
+        self.assertNotIn('PeriodoNomina', payslip._collect_payslip_data()['informacion_general'])
+
     def test_lugar_trabajo_default_usa_los_4_de_la_compania(self):
         """H-018 (2026-10-11), punto (a): un empleado sin Dirección de Trabajo propia
         hereda la de la compañía (address_id, compute nativo) -- los 4 atributos
