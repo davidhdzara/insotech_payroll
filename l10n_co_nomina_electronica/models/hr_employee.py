@@ -35,6 +35,30 @@ NE_EMPLEADO_GRUPO_AFILIACION = _lt('PILA - Administradoras')
 NE_UBICACION_AJUSTES_PILA = _lt('Nómina > Configuración > Ajustes, bloque PILA')
 
 
+# Anexo Técnico de nómina electrónica V1.0 (Res. DIAN 000013/2021), tablas 5.5.3 y 5.5.4: los códigos que admite el XML.
+NE_TIPOS_TRABAJADOR_DIAN = [
+    ('01', '01 - Dependiente'),
+    ('02', '02 - Servicio doméstico'),
+    ('04', '04 - Madre comunitaria'),
+    ('12', '12 - Aprendices del SENA en etapa lectiva'),
+    ('18', '18 - Funcionarios públicos sin tope máximo de IBC'),
+    ('19', '19 - Aprendices del SENA en etapa productiva'),
+    ('21', '21 - Estudiantes de postgrado en salud'),
+    ('22', '22 - Profesor de establecimiento particular'),
+    ('23', '23 - Estudiantes aportes solo riesgos laborales'),
+    ('30', '30 - Dependiente entidades o universidades públicas con régimen especial en salud'),
+    ('31', '31 - Cooperados o precooperativas de trabajo asociado'),
+    ('47', '47 - Trabajador dependiente de entidad beneficiaria del Sistema General de Participaciones - aportes patronales'),
+    ('51', '51 - Trabajador de tiempo parcial'),
+    ('54', '54 - Prepensionado de entidad en liquidación'),
+    ('56', '56 - Prepensionado con aporte voluntario a salud'),
+    ('58', '58 - Estudiantes de prácticas laborales en el sector público'),
+]
+NE_SUBTIPOS_TRABAJADOR_DIAN = [('00', '00 - No aplica'), ('01', '01 - Dependiente pensionado por vejez activo')]
+# La ficha conserva ademas el 02 (no esta en la tabla 5.5.4 y el XML no lo admite): no se retira mientras no este verificado que hace una actualizacion con el valor ya guardado.
+NE_SUBTIPOS_DE_LA_FICHA = NE_SUBTIPOS_TRABAJADOR_DIAN + [('02', '02 - Dependiente Pensionado por Vejez – Alto Riesgo (no lo admite la DIAN)')]
+
+
 class HrEmployee(models.Model):
     """Campos del trabajador para Nómina Electrónica DIAN."""
 
@@ -377,18 +401,7 @@ class HrEmployee(models.Model):
     # Tipo y Subtipo de Trabajador
     # ──────────────────────────────────────────────────────────────────
     l10n_co_ne_worker_type = fields.Selection(
-        selection=[
-            ('01', '01 - Trabajador Dependiente'),
-            ('02', '02 - Servicio Doméstico'),
-            ('04', '04 - Madre Comunitaria'),
-            ('12', '12 - Aprendiz del SENA en Etapa Lectiva'),
-            ('19', '19 - Aprendiz del SENA en Etapa Productiva'),
-            ('22', '22 - Profesor de Establecimiento Particular'),
-            ('23', '23 - Estudiante de Práctica o Pasantía'),
-            ('30', '30 - Dependiente de Entidad No Obligada a Cotizar SENA e ICBF'),
-            ('31', '31 - Cooperado o Precooperativa de Trabajo Asociado'),
-            ('51', '51 - Trabajador de Tiempo Parcial'),
-        ],
+        selection=NE_TIPOS_TRABAJADOR_DIAN,
         string='Tipo Trabajador',
         help='Tipo de trabajador según el anexo técnico de nómina '
              'electrónica de la DIAN. El XML lo toma del registro del '
@@ -396,11 +409,7 @@ class HrEmployee(models.Model):
              'lo avisa.',
     )
     l10n_co_ne_worker_subtype = fields.Selection(
-        selection=[
-            ('00', '00 - No Aplica'),
-            ('01', '01 - Dependiente Pensionado por Vejez Activo'),
-            ('02', '02 - Dependiente Pensionado por Vejez – Alto Riesgo'),
-        ],
+        selection=NE_SUBTIPOS_DE_LA_FICHA,
         string='Subtipo Trabajador',
         help='Subtipo del trabajador. El XML lo toma del registro del '
              'contrato del recibo (Subtipo Cotizante); si difieren, el '
