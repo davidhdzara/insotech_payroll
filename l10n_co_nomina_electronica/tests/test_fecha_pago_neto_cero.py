@@ -82,6 +82,15 @@ class TestFechaPagoNetoCero(TransactionCase):
             recibo._ne_fechas_pago()
         self.assertEqual(recibo.state, 'done')
 
+    def test_desmarcar_el_pago_borra_la_fecha_registrada(self):
+        """.334: tras «Unpaid» el recibo sigue Hecho y no puede entrar al documento mensual con la fecha del pago anulado."""
+        recibo = self._recibo()
+        self._registrar(recibo)
+        self.assertIn(recibo, self._del_mes(3), 'Premisa')
+        recibo.action_payslip_unpaid()
+        self.assertEqual((recibo.state, recibo.l10n_co_ne_fecha_pago_registrada), ('done', False))
+        self.assertNotIn(recibo, self._del_mes(3))
+
     def test_volver_a_borrador_borra_la_fecha_registrada(self):
         recibo = self._recibo()
         self._registrar(recibo)
