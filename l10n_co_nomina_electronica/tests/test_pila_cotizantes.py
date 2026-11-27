@@ -7,6 +7,7 @@ import base64
 from datetime import date
 
 from odoo.addons.l10n_co_nomina_electronica.services import pila_generator_v2
+from odoo.fields import Command
 from odoo.tests.common import TransactionCase, tagged
 
 from .test_pila_ubicacion_laboral import direccion_de_trabajo, ubicaciones_de_prueba
@@ -37,12 +38,12 @@ class TestPilaCotizantesPorEmpleado(TransactionCase):
         cls.nomina = cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
         cls.env['l10n.co.retefuente.uvt'].create({'year': '2026', 'company_id': cls.company.id, 'procedure': '1'})
 
-    def _contrato(self, nombre, documento):
+    def _contrato(self, nombre, documento, desde=date(2024, 1, 1)):
         empleado = self.env['hr.employee'].create({
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'name': nombre, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10',
             'identification_id': documento, 'l10n_co_primer_nombre': nombre, 'l10n_co_primer_apellido': 'Prueba', 'address_id': self.lugar.id,
             'l10n_co_pila_eps_id': self.entidades['eps'].id, 'l10n_co_pila_afp_id': self.entidades['afp'].id, 'l10n_co_pila_ccf_id': self.entidades['ccf'].id})
-        return self._contrato_de(empleado)
+        return self._contrato_de(empleado, desde=desde)
 
     def _contrato_de(self, empleado, salario=SALARIO, desde=date(2024, 1, 1)):
         contrato = self.env['hr.contract'].create({
@@ -127,3 +128,56 @@ class TestPilaCotizantesPorEmpleado(TransactionCase):
         self.assertEqual(len(detalle), 1)
         self.assertEqual(self._campo(pila_generator_v2._TIPO_02_FIELDS, detalle[0], 'salario_basico'), '4000000')
 
+    # ── las novedades salen de todos los recibos del mes ─────────────
+    def _sin_calcular(self, contrato, desde, hasta, estructura=None):
+        return self.env['hr.payslip'].create({
+            'name': 'Recibo %s %s' % (contrato.employee_id.name, hasta), 'employee_id': contrato.employee_id.id, 'contract_id': contrato.id,
+            'company_id': self.company.id, 'struct_id': (estructura or self.nomina).id, 'date_from': desde, 'date_to': hasta})
+
+    def _quincenas(self, contrato):
+        return self._sin_calcular(contrato, date(2026, 9, 1), date(2026, 9, 15)), self._sin_calcular(contrato, date(2026, 9, 16), date(2026, 9, 30))
+
+    def _novedades(self, de_la_linea, recibos):
+        return self.env['l10n.co.hr.pila.wizard.v2']._detect_novedades(de_la_linea, recibos)
+
+    def test_una_ausencia_de_la_primera_quincena_se_marca_aunque_la_linea_salga_de_la_segunda(self):
+        contrato = self._contrato('Incapacidad', '1000000004')
+        ausencia = self.env['hr.leave'].create({
+            'employee_id': contrato.employee_id.id, 'holiday_status_id': self.env.ref('l10n_co_nomina_electronica.hr_leave_type_co_inc_comun').id,
+            'request_date_from': date(2026, 9, 3), 'request_date_to': date(2026, 9, 4)})
+        ausencia.action_validate()
+        primera, segunda = self._quincenas(contrato)
+        novedades = self._novedades(segunda, primera | segunda)
+        self.assertEqual((novedades['ige'], novedades['fecha_inicio_ige'], novedades['fecha_fin_ige']), ('X', '2026-09-03', '2026-09-04'))
+
+    def test_el_aporte_voluntario_de_cualquier_recibo_del_mes_se_marca(self):
+        primera, segunda = self._quincenas(self._contrato('Voluntario', '1000000005'))
+        regla = self.env['hr.salary.rule'].search([('struct_id', '=', self.nomina.id), ('code', '=', 'CO_PENSION_VOL')], limit=1)
+        primera.write({'line_ids': [Command.create({
+            'name': regla.name, 'code': regla.code, 'salary_rule_id': regla.id, 'contract_id': primera.contract_id.id, 'employee_id': primera.employee_id.id,
+            'sequence': regla.sequence, 'amount': -100000.0, 'quantity': 1.0, 'rate': 100.0, 'total': -100000.0})]})
+        self.assertEqual(self._novedades(segunda, primera | segunda)['avp'], 'X')
+
+    def test_un_otrosi_dentro_del_mes_no_es_ingreso_ni_retiro(self):
+        anterior = self._contrato('Otrosi', '1000000006')
+        anterior.write({'date_end': date(2026, 9, 15), 'state': 'close'})
+        nuevo = self._contrato_de(anterior.employee_id, desde=date(2026, 9, 16))
+        primera = self._sin_calcular(anterior, date(2026, 9, 1), date(2026, 9, 15))
+        segunda = self._sin_calcular(nuevo, date(2026, 9, 16), date(2026, 9, 30))
+        novedades = self._novedades(segunda, primera | segunda)
+        self.assertEqual((novedades['ing'], novedades['ret']), ('', ''))
+
+    def test_el_retiro_con_liquidacion_marca_retiro_y_no_ingreso(self):
+        """En la liquidación «Desde» es el inicio del contrato: el mes de la planilla sale del «Hasta»."""
+        contrato = self._contrato('Retiro', '1000000007')
+        contrato.write({'date_end': date(2026, 9, 20), 'state': 'close'})
+        primera = self._sin_calcular(contrato, date(2026, 9, 1), date(2026, 9, 15))
+        liquidacion = self._sin_calcular(contrato, date(2024, 1, 1), date(2026, 9, 20), self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion'))
+        novedades = self._novedades(liquidacion, primera | liquidacion)
+        self.assertEqual((novedades['ret'], novedades['fecha_ret'], novedades['ing']), ('X', '2026-09-20', ''))
+
+    def test_el_ingreso_en_el_mes_se_marca_con_su_fecha(self):
+        contrato = self._contrato('Ingreso', '1000000008', desde=date(2026, 9, 1))
+        primera, segunda = self._quincenas(contrato)
+        novedades = self._novedades(segunda, primera | segunda)
+        self.assertEqual((novedades['ing'], novedades['fecha_ing'], novedades['ret']), ('X', '2026-09-01', ''))

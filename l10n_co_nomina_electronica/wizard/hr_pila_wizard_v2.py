@@ -14,7 +14,7 @@ Genera el archivo PILA completo con registros Tipo 01 (encabezado)
 
 import base64
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
@@ -797,7 +797,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         tarifa_icbf = _p('l10n_co_pct_icbf') / 100
 
         # Detectar novedades del período
-        novedades = self._detect_novedades(payslip)
+        novedades = self._detect_novedades(payslip, payslips)
 
         # Indicador de exoneración parafiscales (Art. 114-1 ET, Ley 1607/2012)
         # -- mismo criterio centralizado que usan las reglas salariales
@@ -973,20 +973,26 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     # ──────────────────────────────────────────────────────────────────
     # Detección de novedades
     # ──────────────────────────────────────────────────────────────────
-    def _detect_novedades(self, payslip):
-        """Detecta novedades del período desde hr.leave y contrato.
+    def _detect_novedades(self, payslip, recibos=None):
+        """Detecta las novedades PILA del MES desde los contratos, hr.leave y los recibos.
 
-        Analiza el contrato (fechas de ingreso/retiro) y las
+        Analiza los contratos (fechas de ingreso/retiro), las
         ausencias validadas (incapacidades, maternidad, vacaciones,
-        etc.) para determinar las marcas de novedades PILA.
+        etc.) y el aporte voluntario de TODOS los recibos del mes
+        (.330: antes solo se miraba el recibo de la línea).
 
         Args:
-            payslip: hr.payslip recordset.
+            payslip: hr.payslip del que sale la línea (el más reciente del mes).
+            recibos: todos los recibos del mes del cotizante; sin él, solo ``payslip``.
 
         Returns:
             dict con las claves de novedades para el registro Tipo 02.
         """
+        recibos = recibos or payslip
         contract = payslip.contract_id
+        # El mes sale del «Hasta»: en la liquidación «Desde» es el inicio del contrato.
+        inicio_mes = payslip.date_to.replace(day=1)
+        siguiente = (inicio_mes + timedelta(days=32)).replace(day=1)
         nov = {
             'ing': '', 'fecha_ing': '',
             'ret': '', 'fecha_ret': '',
@@ -1003,29 +1009,24 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             'irl': '', 'fecha_inicio_irl': '', 'fecha_fin_irl': '',
         }
 
-        # Ingreso: si fecha inicio del contrato está en el período
-        if contract.date_start:
-            cs = contract.date_start
-            if (cs.year == payslip.date_from.year
-                    and cs.month == payslip.date_from.month):
-                nov['ing'] = 'X'
-                nov['fecha_ing'] = str(cs)
+        # Ingreso: el contrato más antiguo de los recibos del mes empezó en el mes (un otrosí no es un ingreso)
+        ingreso = min(recibos.mapped('contract_id').filtered('date_start').mapped('date_start'), default=False)
+        if ingreso and inicio_mes <= ingreso < siguiente:
+            nov['ing'] = 'X'
+            nov['fecha_ing'] = str(ingreso)
 
-        # Retiro: si contrato tiene fecha fin en el período
-        if contract.date_end:
-            ce = contract.date_end
-            if (ce.year == payslip.date_from.year
-                    and ce.month == payslip.date_from.month):
-                nov['ret'] = 'X'
-                nov['fecha_ret'] = str(ce)
+        # Retiro: el contrato del recibo más reciente termina en el mes (el que termina para seguir con otro no es un retiro)
+        if contract.date_end and inicio_mes <= contract.date_end < siguiente:
+            nov['ret'] = 'X'
+            nov['fecha_ret'] = str(contract.date_end)
 
-        # Buscar ausencias validadas del empleado en el período
+        # Ausencias validadas del empleado que tocan el mes, en orden: con dos del mismo tipo quedan las fechas de la última
         leaves = self.env['hr.leave'].search([
             ('employee_id', '=', payslip.employee_id.id),
             ('state', '=', 'validate'),
-            ('date_from', '<=', payslip.date_to),
-            ('date_to', '>=', payslip.date_from),
-        ])
+            ('date_from', '<', siguiente),
+            ('date_to', '>=', inicio_mes),
+        ], order='date_from, id')
 
         for leave in leaves:
             leave_type = leave.holiday_status_id
@@ -1057,9 +1058,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 nov['fecha_fin_vac_lr'] = str(d_to) if d_to else ''
 
         # Aporte voluntario pensión
-        avp_line = payslip.line_ids.filtered(
-            lambda l: l.code == 'CO_PENSION_VOL')
-        if avp_line and abs(avp_line.total) > 0:
+        if any(linea.total for linea in recibos.line_ids if linea.code == 'CO_PENSION_VOL'):
             nov['avp'] = 'X'
 
         return nov
