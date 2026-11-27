@@ -40,12 +40,12 @@ class TestPilaCotizantesPorEmpleado(TransactionCase):
         cls.nomina = cls.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
         cls.env['l10n.co.retefuente.uvt'].create({'year': '2026', 'company_id': cls.company.id, 'procedure': '1'})
 
-    def _contrato(self, nombre, documento, desde=date(2024, 1, 1)):
+    def _contrato(self, nombre, documento, desde=date(2024, 1, 1), tipo='01', tipo_contrato='2'):
         """Empleado con su contrato (devuelve la versión)."""
         _empleado, version = crear_empleado_con_contrato(
             self.env, self.company, SALARIO, desde, self.tipo_quincenal, nombre=nombre, identification_id=documento, l10n_co_primer_nombre=nombre,
             l10n_co_primer_apellido='Prueba', address_id=self.lugar.id, l10n_co_pila_eps_id=self.entidades['eps'].id, l10n_co_pila_afp_id=self.entidades['afp'].id,
-            l10n_co_pila_ccf_id=self.entidades['ccf'].id, l10n_co_pila_centro_trabajo='1')
+            l10n_co_pila_ccf_id=self.entidades['ccf'].id, l10n_co_pila_centro_trabajo='1', l10n_co_pila_tipo_cotizante=tipo, l10n_co_ne_contract_type=tipo_contrato)
         version.generate_work_entries(date(2026, 9, 1), date(2026, 9, 30))
         return version
 
@@ -182,3 +182,80 @@ class TestPilaCotizantesPorEmpleado(TransactionCase):
         primera, segunda = self._quincenas(contrato)
         novedades = self._novedades(segunda, primera | segunda)
         self.assertEqual((novedades['ing'], novedades['fecha_ing'], novedades['ret']), ('X', '2026-09-01', ''))
+
+    # ── campo 20 del encabezado: suma del IBC de Caja (.331) ─────────
+    def test_el_valor_total_de_la_nomina_es_la_suma_del_ibc_de_caja_de_las_lineas(self):
+        asistente = self._planilla_del_mes()
+        encabezado, detalle = self._archivo(asistente)
+        del_detalle = sum(int(self._campo(pila_generator_v2._TIPO_02_FIELDS, linea, 'ibc_ccf')) for linea in detalle)
+        self.assertEqual(del_detalle, int(SALARIO * 1.5), 'Premisa: mes completo + una quincena, sin auxilio de transporte')
+        self.assertEqual(self._campo(pila_generator_v2._TIPO_01_FIELDS, encabezado, 'valor_total_nomina'), str(del_detalle))
+        self.assertAlmostEqual(asistente.summary_total_nomina, del_detalle, delta=0.01)
+
+    def test_quien_no_aporta_a_caja_no_suma_en_el_valor_total(self):
+        """Aprendiz en etapa lectiva (tipo 19): su registro lleva IBC de Caja en cero."""
+        lectiva = self._contrato('Lectiva', '1000000010', tipo='19', tipo_contrato='4')
+        empleado = self._contrato('Dependiente', '1000000011')
+        for contrato in (lectiva, empleado):
+            self._confirmado(contrato, date(2026, 9, 1), date(2026, 9, 15))
+        asistente = self.env['l10n.co.hr.pila.wizard.v2'].create({'company_id': self.company.id, 'year': '2026', 'month': '09', 'tipo_planilla': 'E'})
+        asistente.action_validate()
+        self.assertTrue(asistente.validation_ok, asistente.validation_errors)
+        encabezado, detalle = self._archivo(asistente)
+        por_documento = {self._campo(pila_generator_v2._TIPO_02_FIELDS, linea, 'numero_documento'): self._campo(pila_generator_v2._TIPO_02_FIELDS, linea, 'ibc_ccf') for linea in detalle}
+        self.assertEqual(por_documento, {'1000000010': '0', '1000000011': str(int(SALARIO / 2))})
+        self.assertEqual(self._campo(pila_generator_v2._TIPO_01_FIELDS, encabezado, 'valor_total_nomina'), str(int(SALARIO / 2)))
+
+    # ── marcas de ausencia por el código del tipo de entrada de trabajo (.331) ──
+    def _marcas(self, documento, *ausencias):
+        """Novedades de un empleado con las ausencias ``(tipo del módulo, desde, hasta)`` validadas en septiembre."""
+        contrato = self._contrato('Marcas%s' % documento[-2:], documento)
+        for tipo, desde, hasta in ausencias:
+            self.env['hr.leave'].create({
+                'employee_id': contrato.employee_id.id, 'holiday_status_id': self.env.ref('l10n_co_nomina_electronica.hr_leave_type_co_%s' % tipo).id,
+                'request_date_from': desde, 'request_date_to': hasta}).action_approve(check_state=False)
+        primera, segunda = self._quincenas(contrato)
+        return self._novedades(segunda, primera | segunda)
+
+    def test_el_accidente_de_trabajo_es_irl_con_sus_dias_y_no_ige(self):
+        novedades = self._marcas('1000000012', ('inc_laboral', date(2026, 9, 3), date(2026, 9, 4)), ('inc_laboral', date(2026, 9, 14), date(2026, 9, 16)))
+        self.assertEqual(novedades['irl'], 5)
+        self.assertEqual(novedades['ige'], '')
+        self.assertEqual((novedades['fecha_inicio_irl'], novedades['fecha_fin_irl']), ('2026-09-14', '2026-09-16'))
+
+    def test_los_dias_de_irl_se_cuentan_solo_dentro_del_mes(self):
+        novedades = self._marcas('1000000013', ('inc_laboral', date(2026, 8, 28), date(2026, 9, 2)))
+        self.assertEqual(novedades['irl'], 2)
+
+    def test_sin_accidente_de_trabajo_el_campo_irl_es_cero(self):
+        self.assertEqual(self._marcas('1000000014')['irl'], 0)
+
+    def test_cada_ausencia_marca_su_campo(self):
+        casos = (('inc_comun', 'ige', 'X'), ('lic_mat', 'lma', 'X'), ('lic_pat', 'lma', 'X'), ('vac', 'vac_lr', 'X'), ('lic_rem', 'vac_lr', 'L'), ('lic_nr', 'sln', 'X'))
+        for indice, (tipo, campo, marca) in enumerate(casos):
+            with self.subTest(tipo=tipo):
+                novedades = self._marcas('10000001%02d' % (20 + indice), (tipo, date(2026, 9, 8), date(2026, 9, 9)))
+                marcadas = {nombre: novedades[nombre] for nombre in ('sln', 'ige', 'lma', 'vac_lr', 'irl') if novedades[nombre]}
+                self.assertEqual(marcadas, {campo: marca})
+
+    def test_la_marca_no_depende_del_nombre_de_la_ausencia(self):
+        tipo = self.env.ref('l10n_co_nomina_electronica.hr_leave_type_co_lic_pat')
+        tipo.sudo().name = 'Incapacidad con un nombre propio de la empresa'
+        novedades = self._marcas('1000000015', ('lic_pat', date(2026, 9, 8), date(2026, 9, 9)))
+        self.assertEqual((novedades['lma'], novedades['ige']), ('X', ''))
+
+    def test_el_archivo_lleva_los_dias_de_irl_en_el_campo_numerico(self):
+        """La incapacidad cae en la segunda quincena, que no se calcula aquí: el campo sale de las ausencias del mes."""
+        contrato = self._contrato('ArchivoIrl', '1000000016')
+        self.env['hr.leave'].create({
+            'employee_id': contrato.employee_id.id, 'holiday_status_id': self.env.ref('l10n_co_nomina_electronica.hr_leave_type_co_inc_laboral').id,
+            'request_date_from': date(2026, 9, 17), 'request_date_to': date(2026, 9, 18)}).action_approve(check_state=False)
+        sin_ausencia = self._contrato('ArchivoSin', '1000000017')
+        for recibo_de in (contrato, sin_ausencia):
+            self._confirmado(recibo_de, date(2026, 9, 1), date(2026, 9, 15))
+        asistente = self.env['l10n.co.hr.pila.wizard.v2'].create({'company_id': self.company.id, 'year': '2026', 'month': '09', 'tipo_planilla': 'E'})
+        asistente.action_validate()
+        self.assertTrue(asistente.validation_ok, asistente.validation_errors)
+        _encabezado, detalle = self._archivo(asistente)
+        irl = {self._campo(pila_generator_v2._TIPO_02_FIELDS, linea, 'numero_documento'): self._campo(pila_generator_v2._TIPO_02_FIELDS, linea, 'nov_irl') for linea in detalle}
+        self.assertEqual(irl, {'1000000016': '2', '1000000017': '0'})

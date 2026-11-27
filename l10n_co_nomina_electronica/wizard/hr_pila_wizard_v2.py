@@ -184,7 +184,8 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         readonly=True,
     )
     summary_total_nomina = fields.Monetary(
-        string='Total Nomina',
+        string='Valor total de la nómina',
+        help='Campo 20 del encabezado de la planilla: suma del IBC de Caja de Compensación de los cotizantes del archivo. No es el neto pagado.',
         currency_field='currency_id',
         readonly=True,
     )
@@ -374,14 +375,8 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 )
 
         # Calcular resumen sobre los mismos registros que lleva el archivo (.330)
-        resumen = pila_generator_v2.compute_summary(self._ne_cotizantes_pila(payslips))
-
-        # Calcular total nómina
-        total_nomina = sum(
-            l.total
-            for p in payslips
-            for l in p.line_ids.filtered(lambda l: l.code == 'CO_NETO')
-        )
+        cotizantes = self._ne_cotizantes_pila(payslips)
+        resumen = pila_generator_v2.compute_summary(cotizantes)
 
         # Preparar valores de actualización
         vals = {
@@ -397,7 +392,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             'summary_total_sena': resumen['total_aporte_sena'],
             'summary_total_icbf': resumen['total_aporte_icbf'],
             'summary_total_general': resumen['total_general'],
-            'summary_total_nomina': total_nomina,
+            'summary_total_nomina': self._ne_valor_total_nomina(cotizantes),
         }
         self.write(vals)
 
@@ -461,14 +456,14 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                 self.month, self.year, company.name,
             ))
 
+        # Construir datos de cotizantes (Tipo 02); el encabezado suma sus valores
+        cotizantes = self._ne_cotizantes_pila(payslips)
+
         # Construir datos del aportante (Tipo 01)
         periodo_str = '%s-%s' % (self.year, self.month)
         aportante = self._build_aportante_data(
-            company, payslips, periodo_str,
+            company, payslips, periodo_str, cotizantes,
         )
-
-        # Construir datos de cotizantes (Tipo 02)
-        cotizantes = self._ne_cotizantes_pila(payslips)
 
         # Generar archivo completo
         file_content = pila_generator_v2.generate_pila_file_v2(
@@ -594,7 +589,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     # ──────────────────────────────────────────────────────────────────
     # Builder: Datos del aportante (Tipo 01)
     # ──────────────────────────────────────────────────────────────────
-    def _build_aportante_data(self, company, payslips, periodo_str):
+    def _build_aportante_data(self, company, payslips, periodo_str, cotizantes):
         """Construye el diccionario de datos del aportante (Tipo 01).
 
         Lee los datos de configuración de la compañía y calcula
@@ -604,6 +599,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             company: res.company recordset.
             payslips: hr.payslip recordset (nóminas del período).
             periodo_str: Período como 'YYYY-MM'.
+            cotizantes: lista de registros tipo 2 del mismo archivo.
 
         Returns:
             dict con los campos del registro Tipo 01.
@@ -619,13 +615,6 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             doc_type = company.partner_id.l10n_co_document_type
             if doc_type and doc_type != 'rut':
                 tipo_doc = dian_utils.get_doc_type_code(doc_type)
-
-        # Total nómina
-        total_nomina = sum(
-            l.total
-            for p in payslips
-            for l in p.line_ids.filtered(lambda l: l.code == 'CO_NETO')
-        )
 
         return {
             'tipo_registro': '01',
@@ -646,7 +635,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             'periodo_cotizacion_salud': periodo_str,
             'periodo_cotizacion_pension': periodo_str,
             'numero_total_cotizantes': len(payslips.mapped('employee_id')),          # .330: cotizantes, no recibos (igual que los registros tipo 2)
-            'valor_total_nomina': total_nomina,
+            'valor_total_nomina': self._ne_valor_total_nomina(cotizantes),
             'tipo_aportante': company._ne_valor_obligatorio('l10n_co_pila_tipo_aportante'),
             'codigo_operador': company.l10n_co_pila_operador_code or '',
             'fecha_pago': '',
@@ -664,6 +653,12 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             slips = payslips.filtered(lambda s: s.employee_id == employee)
             cotizantes.append(self._build_cotizante_data(self._ne_recibo_mas_reciente(slips), secuencia, slips))      # H-F1-10
         return cotizantes
+
+    @api.model
+    def _ne_valor_total_nomina(self, cotizantes):
+        """Campo 20 del encabezado (Anexo Técnico 2 de la Res. 2388/2016, num. 2.1.1.1): suma del campo 45 «IBC CCF» de los registros tipo 2 del mismo archivo, redondeado como cada línea; quien no aporta a
+        Caja lo lleva en cero. No es el neto pagado."""
+        return sum(int(round(float(cotizante.get('ibc_ccf') or 0))) for cotizante in cotizantes)
 
     # ──────────────────────────────────────────────────────────────────
     # Builder: Datos de cotizante (Tipo 02)
@@ -864,7 +859,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             'nov_vac': novedades.get('vac_lr', ''),
             'nov_avp': novedades.get('avp', ''),
             'nov_vct': novedades.get('vct', ''),
-            'nov_irl': novedades.get('irl', ''),
+            'nov_irl': novedades.get('irl', 0),
 
             # Administradoras
             'codigo_afp': getattr(
@@ -973,6 +968,18 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
     # ──────────────────────────────────────────────────────────────────
     # Detección de novedades
     # ──────────────────────────────────────────────────────────────────
+    # Código del tipo de entrada de trabajo -> (novedad, marca) del registro tipo 2 (Anexo Técnico 2 de la Res. 2388/2016, campos 24 SLN, 25 IGE, 26 LMA, 27 VAC-LR y 30 IRL). Son códigos internos del
+    # módulo y letras del formato, no valores que cambie la ley. IRL no lleva letra: el campo es el número de días.
+    _NE_MARCA_PILA_POR_CODIGO = {
+        'CO_LIC_NR': ('sln', 'X'),
+        'CO_INC_COMUN': ('ige', 'X'),
+        'CO_LIC_MAT': ('lma', 'X'),
+        'CO_LIC_PAT': ('lma', 'X'),
+        'CO_VAC': ('vac_lr', 'X'),
+        'CO_LIC_REM': ('vac_lr', 'L'),
+        'CO_INC_LABORAL': ('irl', None),
+    }
+
     def _detect_novedades(self, payslip, recibos=None):
         """Detecta las novedades PILA del MES desde los contratos, hr.leave y los recibos.
 
@@ -993,6 +1000,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         # El mes sale del «Hasta»: en la liquidación «Desde» es el inicio del contrato.
         inicio_mes = payslip.date_to.replace(day=1)
         siguiente = (inicio_mes + timedelta(days=32)).replace(day=1)
+        fin_mes = siguiente - timedelta(days=1)
         nov = {
             'ing': '', 'fecha_ing': '',
             'ret': '', 'fecha_ret': '',
@@ -1006,7 +1014,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             'vac_lr': '', 'fecha_inicio_vac_lr': '', 'fecha_fin_vac_lr': '',
             'avp': '',
             'vct': '', 'fecha_inicio_vct': '', 'fecha_fin_vct': '',
-            'irl': '', 'fecha_inicio_irl': '', 'fecha_fin_irl': '',
+            'irl': 0, 'fecha_inicio_irl': '', 'fecha_fin_irl': '',          # campo 30: numérico, días de incapacidad por riesgo laboral
         }
 
         # Ingreso: el contrato más antiguo de los recibos del mes empezó en el mes (un otrosí no es un ingreso: sus registros comparten la fecha de inicio del contrato). v19: las fechas del contrato
@@ -1022,44 +1030,30 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             nov['ret'] = 'X'
             nov['fecha_ret'] = str(retiro)
 
-        # Ausencias validadas del empleado que tocan el mes, en orden: con dos del mismo tipo quedan las fechas de la última
+        # Ausencias validadas del empleado que tocan el mes, en orden: con dos del mismo campo quedan la marca y las fechas de la última (la línea por novedad aún no existe)
         leaves = self.env['hr.leave'].search([
             ('employee_id', '=', payslip.employee_id.id),
             ('state', '=', 'validate'),
-            ('date_from', '<', siguiente),
-            ('date_to', '>=', inicio_mes),
-        ], order='date_from, id')
+            ('request_date_from', '<=', fin_mes),
+            ('request_date_to', '>=', inicio_mes),
+        ], order='request_date_from, id')
 
+        dias_irl = 0
         for leave in leaves:
-            leave_type = leave.holiday_status_id
-            code = getattr(leave_type, 'code', '') or ''
-            name = (leave_type.name or '').upper()
+            # La marca sale del código del tipo de entrada de trabajo (el mismo que usa la nómina), nunca del nombre de la ausencia
+            campo, marca = self._NE_MARCA_PILA_POR_CODIGO.get(leave.holiday_status_id.work_entry_type_id.code, (False, False))
+            if not campo:
+                continue
+            if campo == 'irl':
+                dias_irl += payslip._ne_dias_comerciales(max(leave.request_date_from, inicio_mes), min(leave.request_date_to, fin_mes))
+            else:
+                nov[campo] = marca
+            nov['fecha_inicio_%s' % campo] = str(leave.request_date_from)
+            nov['fecha_fin_%s' % campo] = str(leave.request_date_to)
+        if dias_irl:
+            nov['irl'] = int(min(dias_irl, payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip._ne_fecha_parametros())))
 
-            d_from = leave.date_from.date() if leave.date_from else ''
-            d_to = leave.date_to.date() if leave.date_to else ''
-
-            if 'IGE' in code or 'INCAPACIDAD' in name:
-                nov['ige'] = 'X'
-                nov['fecha_inicio_ige'] = str(d_from) if d_from else ''
-                nov['fecha_fin_ige'] = str(d_to) if d_to else ''
-            elif 'IRL' in code or 'LABORAL' in name or 'ARL' in name:
-                nov['irl'] = 'X'
-                nov['fecha_inicio_irl'] = str(d_from) if d_from else ''
-                nov['fecha_fin_irl'] = str(d_to) if d_to else ''
-            elif 'LMA' in code or 'MATERNIDAD' in name:
-                nov['lma'] = 'X'
-                nov['fecha_inicio_lma'] = str(d_from) if d_from else ''
-                nov['fecha_fin_lma'] = str(d_to) if d_to else ''
-            elif 'SLN' in code or 'NO REMUN' in name:
-                nov['sln'] = 'X'
-                nov['fecha_inicio_sln'] = str(d_from) if d_from else ''
-                nov['fecha_fin_sln'] = str(d_to) if d_to else ''
-            elif 'VAC' in code or 'VACACION' in name or 'LR' in code:
-                nov['vac_lr'] = 'X'
-                nov['fecha_inicio_vac_lr'] = str(d_from) if d_from else ''
-                nov['fecha_fin_vac_lr'] = str(d_to) if d_to else ''
-
-        # Aporte voluntario pensión
+        # Aporte voluntario a pensión, en cualquier recibo del mes
         if any(linea.total for linea in recibos.line_ids if linea.code == 'CO_PENSION_VOL'):
             nov['avp'] = 'X'
 
