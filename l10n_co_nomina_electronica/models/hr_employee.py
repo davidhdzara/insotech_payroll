@@ -391,8 +391,9 @@ class HrEmployee(models.Model):
         ],
         string='Tipo Trabajador',
         help='Tipo de trabajador según el anexo técnico de nómina '
-             'electrónica de la DIAN. Determina las reglas de cotización '
-             'a seguridad social.',
+             'electrónica de la DIAN. El XML lo toma del registro del '
+             'contrato del recibo (Tipo Cotizante); si difieren, el recibo '
+             'lo avisa.',
     )
     l10n_co_ne_worker_subtype = fields.Selection(
         selection=[
@@ -401,8 +402,9 @@ class HrEmployee(models.Model):
             ('02', '02 - Dependiente Pensionado por Vejez – Alto Riesgo'),
         ],
         string='Subtipo Trabajador',
-        help='Subtipo del trabajador. Aplica para pensionados activos '
-             'y pensionados de alto riesgo.',
+        help='Subtipo del trabajador. El XML lo toma del registro del '
+             'contrato del recibo (Subtipo Cotizante); si difieren, el '
+             'recibo lo avisa.',
     )
 
     # ──────────────────────────────────────────────────────────────────

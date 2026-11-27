@@ -254,7 +254,8 @@ class TestAprendizApoyo(TransactionCase):
         sigue_lectiva.write({'l10n_co_ne_contract_type': '2'})                          # sigue siendo lectiva (19): sin prestaciones
         practica = self._aprendiz(PRACTICA, ' a lectiva')
         confirmar_a_mano(self._recibo(practica, self.general, *MARZO))
-        practica.write({'l10n_co_pila_tipo_cotizante': '19'})
+        with self.assertRaisesRegex(UserError, 'registro nuevo'):      # H-F3-04 (doc 117): con recibos confirmados el tipo de cotizante no se reescribe
+            practica.write({'l10n_co_pila_tipo_cotizante': '19'})
         dependiente = self._contrato('Cambio Dependiente', '01', '2', 3000000.0)
         confirmar_a_mano(self._recibo(dependiente, self.general, *MARZO))
         dependiente.with_user(self._gestor_de_contratos()).write({'l10n_co_ne_contract_type': '1'})

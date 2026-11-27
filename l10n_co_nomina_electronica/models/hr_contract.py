@@ -260,6 +260,23 @@ class HrVersion(models.Model):
                     empleado=empleado.name, recibo=recibo._ne_referencia()))
 
 
+    def _ne_validar_tipo_con_recibos(self, vals):
+        """H-F3-04 (doc 117): la nómina electrónica y la PILA leen el tipo y el subtipo de cotizante de la versión de cada recibo, así que no se reescriben en una versión colombiana con recibos
+        confirmados o pagados: un cambio es un registro nuevo con su fecha. Completar un dato vacío sí se permite."""
+        Recibo = self.env['hr.payslip'].sudo()      # quien edita la ficha no tiene por qué leer recibos: solo se usa para decidir y dar el error
+        for version in self.sudo().filtered(lambda v: v.company_id._ne_es_colombia()):
+            cambiados = [campo for campo in ('l10n_co_pila_tipo_cotizante', 'l10n_co_pila_subtipo_cotizante')
+                         if campo in vals and version[campo] and (vals[campo] or False) != version[campo]]
+            if not cambiados:
+                continue
+            recibo = Recibo.search([('version_id', '=', version.id), ('state', 'in', ('validated', 'paid'))], limit=1)
+            if recibo:
+                raise UserError(_(
+                    'El registro de %(empleado)s vigente desde el %(version)s tiene recibos confirmados (por ejemplo «%(recibo)s») y no se le puede cambiar «%(campos)s»: la nómina electrónica y la '
+                    'PILA toman ese dato del registro de cada recibo. Cree un registro nuevo en la ficha del empleado > Nómina con la fecha desde la que rige el cambio.',
+                    empleado=version.employee_id.name, version=version.date_version, recibo=recibo._ne_referencia(),
+                    campos=', '.join(version._fields[campo].string for campo in cambiados)))
+
     def write(self, vals):
         if set(self._NE_CAMPOS_DE_ETAPA) & set(vals):
             for version in self.filtered(lambda v: v.company_id._ne_es_colombia()):
@@ -269,6 +286,8 @@ class HrVersion(models.Model):
                     # el contrato ACTUAL: una fecha de inicio que llegue en este guardado no lo vuelve nuevo; solo cuenta si la versión aún no tenía contrato
                     inicio = version.sudo().contract_date_start or fields.Date.to_date(vals.get('contract_date_start'))
                     version._ne_validar_cambio_de_etapa(nuevo, inicio)
+        if {'l10n_co_pila_tipo_cotizante', 'l10n_co_pila_subtipo_cotizante'} & set(vals):
+            self._ne_validar_tipo_con_recibos(vals)
         resultado = super().write(vals)
         if {'wage', 'l10n_co_ne_integral_salary', 'contract_date_start'} & set(vals):
             # Un cambio solo de salario se valida con el SMMLV de hoy; si se toca el ingreso o
