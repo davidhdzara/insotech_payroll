@@ -18,11 +18,11 @@ Dependencias externas:
 Sin dependencias de Odoo.
 """
 
-import math
 from typing import Any, Optional, Union
 from lxml import etree
 
 from ._dict_to_xml import dict_to_xml
+from .montos import format_amount
 
 # =====================================================================
 # Namespaces
@@ -167,9 +167,7 @@ def _fmt(value: Union[int, float, str, None], decimals: int = 2) -> str:
     """
     if value is None or value == '':
         return '0.' + '0' * decimals
-    factor = 10 ** decimals
-    truncated = math.trunc(float(value) * factor) / factor
-    return ('%%.%df' % decimals) % truncated
+    return format_amount(value, decimals)
 
 
 def _dias_trabajados_requerido(basico: dict) -> str:

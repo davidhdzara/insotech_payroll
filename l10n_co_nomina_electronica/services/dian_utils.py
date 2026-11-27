@@ -9,12 +9,12 @@ dependen de modelos Odoo (partner_to_dian_dict, get_partner_doc_type).
 """
 
 import logging
-import math
 import re
 from datetime import date as _date_type
 from typing import Optional, Union
 
 from . import cune as _cune_module
+from .montos import format_amount  # noqa: F401 -- se publica también desde aquí
 
 _logger = logging.getLogger(__name__)
 
@@ -106,34 +106,6 @@ def get_doc_type_code(l10n_co_document_code: str) -> str:
         return '13'  # Default: Cédula
     code = str(l10n_co_document_code).lower().strip()
     return DOC_TYPE_MAP.get(code, code)
-
-
-# =====================================================================
-# Formateo de montos para CUNE
-# =====================================================================
-
-def format_amount(value: Union[int, float, str]) -> str:
-    """Formatea un valor numérico a string con 2 decimales truncados.
-
-    El cálculo del CUNE requiere que los montos se representen con
-    exactamente 2 decimales *truncados* (no redondeados) según el
-    Anexo Técnico DIAN.
-
-    Args:
-        value: Valor numérico (int, float o string numérico).
-
-    Returns:
-        String con 2 decimales truncados (ej: '1500000.00').
-
-    Examples:
-        >>> format_amount(1500000)
-        '1500000.00'
-        >>> format_amount('25000.5')
-        '25000.50'
-        >>> format_amount('25000.999')
-        '25000.99'
-    """
-    return '%.2f' % (math.trunc(float(value) * 100) / 100)
 
 
 # =====================================================================
