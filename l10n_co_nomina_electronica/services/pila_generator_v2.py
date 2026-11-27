@@ -236,7 +236,7 @@ _TIPO_02_FIELDS = [
     ('nov_vac', 'str'),                  # Vacaciones / licencia remunerada
     ('nov_avp', 'str'),                  # Aporte voluntario pensión
     ('nov_vct', 'str'),                  # Variación centros de trabajo
-    ('nov_irl', 'str'),                  # IRL (incapacidad riesgo laboral)
+    ('nov_irl', 'int'),                  # IRL (incapacidad riesgo laboral): 0 o los días
 
     # --- Códigos administradoras (campos 31-35) ---
     ('codigo_afp', 'str'),              # Código fondo de pensiones
