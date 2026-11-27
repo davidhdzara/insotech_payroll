@@ -629,9 +629,11 @@ class TestRetefuenteMesPartido(MontajeRetencionMes):
             (version_a | version_b).write({'contract_date_end': fin})
         return version_a, version_b
 
-    def _lote(self, empleado, desde=date(2026, 9, 1), hasta=date(2026, 9, 30)):
-        lote = self.env['hr.payslip.run'].create({
-            'name': 'Lote Retención Partido', 'date_start': desde, 'date_end': hasta, 'company_id': self.company.id, 'structure_id': self.general.id})
+    def _lote(self, empleado, desde=date(2026, 9, 1), hasta=date(2026, 9, 30), periodicidad=None):
+        """El lote nativo solo toma las versiones de SU calendario de pago (``hr_payroll/models/hr_payslip_run.py:141-142``); sin indicarlo es el del tipo de estructura (mensual)."""
+        lote = self.env['hr.payslip.run'].create(dict(
+            {'name': 'Lote Retención Partido', 'date_start': desde, 'date_end': hasta, 'company_id': self.company.id, 'structure_id': self.general.id},
+            **({'schedule_pay': periodicidad} if periodicidad else {})))
         lote.generate_payslips(employee_ids=empleado.ids)
         return lote.slip_ids.sorted('date_from')
 
@@ -696,7 +698,7 @@ class TestRetefuenteMesPartido(MontajeRetencionMes):
     def test_quincenal_con_cambio_el_20_el_cierre_suma_la_primera_confirmada_y_el_tramo_del_lote(self):
         va, vb = self._partido(periodicidad='semi-monthly', cambio=date(2026, 9, 20))
         primera = self._hecho(self._primera(va))
-        a, b = self._lote(va.employee_id, date(2026, 9, 16), date(2026, 9, 30))
+        a, b = self._lote(va.employee_id, date(2026, 9, 16), date(2026, 9, 30), periodicidad='semi-monthly')
         self.assertEqual((a.date_to, b.date_from, b.version_id), (date(2026, 9, 19), date(2026, 9, 20), vb))
         self.assertFalse(a.line_ids.filtered(lambda l: l.code == 'CO_RETEFUENTE'))
         self.assertAlmostEqual(-self._total(b, 'CO_RETEFUENTE'), self._mes(b, primera, a, b), delta=1.0)
