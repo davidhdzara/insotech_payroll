@@ -268,6 +268,20 @@ class TestRetefuenteMes(MontajeRetencionMes):
         self.assertAlmostEqual(semestre.average_gross, base, delta=1.0)
         self.assertAlmostEqual(semestre.fixed_percentage, calculo['retencion_uvt'] / calculo['base_uvt'] * 100, places=2)
 
+    def test_el_porcentaje_fijo_usa_la_tabla_vigente_el_dia_del_calculo(self):
+        """.334: en diciembre se calcula el semestre siguiente (UVT de ese año) con la tabla vigente ese día, no con la que ya esté cargada para el 1 de enero. Tablas planas: el porcentaje es el de la tabla."""
+        contrato = self._contrato()
+        self._procedimiento_2(contrato, porcentaje=0.0)          # el recibo de septiembre necesita el porcentaje de su semestre
+        self.env['l10n.co.retefuente.uvt'].create({'year': '2027', 'company_id': self.company.id, 'procedure': '1'})
+        self._hecho(self._primera(contrato, novedades=[('CO_BONIF_NOSAL', 20000000.0)]))
+        tabla = self.env.ref(PREFIJO + 'rule_parameter_tabla_retencion_art383')
+        for desde, tarifa in ((date(2026, 12, 1), '0.20'), (date(2027, 1, 1), '0.30')):
+            self.env['hr.rule.parameter.value'].create({'rule_parameter_id': tabla.id, 'date_from': desde, 'parameter_value': '[(0, None, %s, 0)]' % tarifa})
+        with freeze_time('2026-12-10'):
+            contrato.action_calculate_retention_procedure2()
+        semestre = self.env['l10n.co.retefuente.procedure2'].search([('employee_id', '=', contrato.employee_id.id), ('semester_start', '=', date(2027, 1, 1))])
+        self.assertAlmostEqual(semestre.fixed_percentage, 20.0, places=2)
+
     def test_la_prima_en_procedimiento_2_usa_el_porcentaje_del_contrato(self):
         contrato = self._contrato(salario=20000000.0)
         self._procedimiento_2(contrato)
