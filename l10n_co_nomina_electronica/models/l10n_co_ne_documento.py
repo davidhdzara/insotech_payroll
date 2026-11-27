@@ -177,7 +177,7 @@ class L10nCoNeDocumento(models.Model):
                 base = '%s (%s)' % (base, doc.segmento)       # H-F3-04: el tramo del mes
             doc.name = ('%s %s' % (_('Ajuste'), base) if doc.is_adjustment else base).strip()
 
-    @api.depends('payslip_ids', 'payslip_ids.state', 'is_adjustment', 'parent_id')
+    @api.depends('payslip_ids', 'payslip_ids.state', 'is_adjustment', 'adjustment_type', 'parent_id')
     def _compute_recibo_xml_ids(self):
         for doc in self:
             doc.recibo_xml_ids = doc._ne_recibos_para_xml()
@@ -395,11 +395,11 @@ class L10nCoNeDocumento(models.Model):
             if previo.is_adjustment and not previo.legacy:
                 # D-M: un recibo adoptado cuya fecha de pago pasó a otro mes sale de la nota abierta; una nota ya
                 # enviada no se toca (``_ne_validar`` deja la alerta persistente ``recibo_otro_mes``).
-                if not previo.state and not previo.is_being_sent:
+                if not previo.state and not previo.is_being_sent and not previo.incierto:
                     previo._ne_componer_adoptados(previo.payslip_ids & previo._ne_recibos_del_segmento())
                 previo._ne_validar()
                 continue
-            if previo.legacy or previo.state:
+            if previo.legacy or previo.state or previo.incierto:
                 continue
             previo._ne_componer(previo._ne_recibos_del_segmento())
             if previo.payslip_ids:
@@ -445,7 +445,7 @@ class L10nCoNeDocumento(models.Model):
             # Solo se recompone un documento SIN estado DIAN: uno con envío fallido (``invoice_sending_failed``) pudo haber
             # llegado a la DIAN, así que se reenvía el MISMO XML y su composición no cambia (solo se valida y alerta);
             # mismo criterio que un envío incierto (doc 53 §28.7, D6).
-            if not doc.state and not doc.is_being_sent:
+            if not doc.state and not doc.is_being_sent and not doc.incierto:
                 anterior = existentes.filtered(lambda d: d.segmento == numero - 1)[:1] if numero > 1 else self.browse()
                 if doc.novedad_de_id != anterior:
                     doc.novedad_de_id = anterior
@@ -865,18 +865,94 @@ class L10nCoNeDocumento(models.Model):
 
         Un original: sus ``payslip_ids``. Una nota de ajuste NO reenlaza recibos: se derivan de la cadena (el
         documento padre y los de arriba, subiendo por ``parent_id``) más los propios, y solo cuentan los PAGADOS (un
-        recibo cancelado del original sale solo). El M2O recibo → documento queda en el original."""
+        recibo cancelado del original sale solo). El M2O recibo → documento queda en el original. «Eliminar» no lleva
+        recibos ni pagos en su XML: si ya no queda ninguno confirmado, toma de la cadena solo los datos generales."""
         self.ensure_one()
         if not self.is_adjustment:
             return self.payslip_ids
-        recibos = self.payslip_ids
-        vistos = {self.id}
-        padre = self.parent_id
-        while padre and padre.id not in vistos:
-            vistos.add(padre.id)
-            recibos |= padre.payslip_ids
+        recibos = self._ne_con_sus_padres().payslip_ids
+        vigentes = recibos.filtered(lambda slip: slip.state in ('done', 'paid'))
+        return recibos if not vigentes and self._ne_es_nota_eliminar() else vigentes
+
+    def _ne_con_sus_padres(self):
+        """Este documento y los de arriba, subiendo por ``parent_id`` (con guarda de ciclos)."""
+        self.ensure_one()
+        documentos = padre = self
+        while padre.parent_id and padre.parent_id not in documentos:
             padre = padre.parent_id
-        return recibos.filtered(lambda slip: slip.state in ('done', 'paid'))
+            documentos |= padre
+        return documentos
+
+    def _ne_es_nota_eliminar(self):
+        self.ensure_one()
+        return bool(self.is_adjustment and self.adjustment_type == '2')
+
+    # ──────────────────────────────────────────────────────────────────
+    # Pagos vigentes (clase A, .335): ningún XML se genera ni se envía con un pago anulado
+    # ──────────────────────────────────────────────────────────────────
+    def _ne_exigir_pagos_vigentes(self, contra_el_xml=False):
+        """La ÚNICA comprobación, usada por «Generar XML» y por las precondiciones de envío (al encolar y en el cron): cada recibo del XML sigue confirmado o pagado y su primera fecha de pago, según la fuente
+        de la compañía, cae en el mes del documento. Con ``contra_el_xml`` (envío), además cada ``FechaPago`` del XML ya generado sigue siendo una fecha de pago de esos recibos. «Eliminar» no lleva pagos."""
+        self.ensure_one()
+        if self._ne_es_nota_eliminar():
+            return
+        recibos = self._ne_recibos_para_xml().sudo().sorted('date_to')
+        problemas, vigentes = [], set()
+        for recibo in recibos:
+            if recibo.state not in ('done', 'paid'):
+                problemas.append(_('El recibo "%s" ya no está confirmado ni pagado.', recibo.display_name))
+                continue
+            try:
+                fechas = recibo._ne_fechas_pago()
+            except UserError as error:
+                problemas.append(str(error))
+                continue
+            if fechas[0].replace(day=1) != self.period:
+                problemas.append(_('El recibo "%(recibo)s" tiene fecha de pago %(fecha)s, fuera del mes %(mes)s.', recibo=recibo.display_name, fecha=fechas[0], mes=self.period.strftime('%Y-%m')))
+            vigentes.update(str(fecha) for fecha in fechas)
+        if contra_el_xml and not problemas:
+            try:
+                en_el_xml = ne_xml_utils.fechas_de_pago_de_xml(base64.b64decode(self.xml_attachment_id.datas))
+            except Exception:      # XML ilegible: no se puede saber qué pagos lleva
+                problemas.append(_('No se pueden leer las fechas de pago del XML generado.'))
+            else:
+                if en_el_xml - vigentes:
+                    problemas.append(_('El XML generado lleva un pago del %(fechas)s que ya no es el de sus recibos (%(recibos)s).',
+                                       fechas=', '.join(sorted(en_el_xml - vigentes)), recibos=', '.join(recibos.mapped('display_name'))))
+        if not problemas:
+            return
+        if self.state == 'invoice_sending_failed':
+            que_hacer = _('Tuvo un envío fallido y su XML pudo haber llegado a la DIAN: no se regenera. Consulte su estado por CUNE; si la DIAN lo aceptó, corríjalo con una nota de ajuste. Solo se reintenta '
+                          'cuando el pago vuelva a estar registrado como viaja en el XML.')
+        elif self.is_adjustment:
+            que_hacer = _('Vuelva a preparar el mes del empleado y genere el XML otra vez. Un recibo que no se pagará en ese mes sale de la nota al cancelarlo.')
+        else:
+            que_hacer = _('Vuelva a preparar el mes del empleado («Enviar y Procesar» desde sus recibos) y genere el XML otra vez.')
+        raise UserError(_('El documento "%(doc)s" no se puede generar ni enviar: %(problemas)s %(que_hacer)s', doc=self.display_name, problemas=' '.join(problemas), que_hacer=que_hacer))
+
+    @api.model
+    def _ne_tras_perder_un_pago(self, recibos):
+        """Los ``recibos`` perdieron un pago. Con el envío en curso el cambio no se permite. Un documento que nunca viajó no puede quedar enviable: sale de la cola (no hay botón para sacarlo a mano) y su XML
+        se descarta. Uno con envío fallido (o incierto) conserva su XML porque pudo haber llegado: si está en la cola, esta consulta primero por CUNE y no lo reenvía con el pago cambiado
+        (``_ne_enviar_uno``). Pendiente o aceptado no se toca (se corrige con una nota de ajuste), ni la nota «Eliminar»."""
+        for recibo in recibos.sudo():
+            propio = recibo.l10n_co_ne_documento_id
+            for doc in propio._ne_cadena():
+                if doc.legacy or doc.eliminado or doc._ne_es_nota_eliminar() or doc.state not in (False, 'invoice_sending_failed') or propio not in doc._ne_con_sus_padres():
+                    continue
+                if (doc.sending_data or {}).get('en_curso'):
+                    raise UserError(_('No se puede cambiar el pago del recibo "%(recibo)s": el documento "%(doc)s" que lo lleva se está enviando a la DIAN en este momento. Espere el resultado e inténtelo otra vez.',
+                                      recibo=recibo.display_name, doc=doc.display_name))
+                if doc.state or doc.incierto:
+                    if doc.is_being_sent:
+                        # Se escribe la fila: si la cola está enviando a la vez, la base detecta el cruce en lugar de que el envío no se entere.
+                        doc.sending_data = dict(doc.sending_data, pago_perdido=fields.Datetime.to_string(fields.Datetime.now()))
+                        doc.message_post(body=_('El recibo "%s" perdió su pago (anulado, en borrador, cancelado o con otra fecha): este envío fallido no se reenvía así. La cola consulta primero por CUNE si la DIAN '
+                                                'ya tiene el documento.', recibo.display_name), message_type='comment', subtype_xmlid='mail.mt_note')
+                elif doc.is_being_sent or doc.xml_attachment_id:
+                    doc.write({'sending_data': False, 'xml_attachment_id': False, 'cune': False, 'etapa': 'draft'})
+                    doc.message_post(body=_('El recibo "%s" perdió su pago (anulado, en borrador, cancelado o con otra fecha): el XML sin enviar se descartó y el documento no está en la cola de envío. Vuelva a '
+                                            'preparar el mes.', recibo.display_name), message_type='comment', subtype_xmlid='mail.mt_note')
 
     def _ne_predecesor(self):
         """Bloque ``predecesor`` de una nota de ajuste: número, CUNE y fecha de emisión del documento padre (NIAE190 y
@@ -944,7 +1020,10 @@ class L10nCoNeDocumento(models.Model):
         if not recibos:
             raise UserError(_('El documento "%s" no tiene recibos.', self.display_name))
         contrato = self.contract_id or recibos[-1].contract_id
-        fechas = sorted({str(f) for slip in recibos for f in slip._ne_fechas_pago()})
+        if self._ne_es_nota_eliminar():
+            fechas = [str(self.period)]          # <Eliminar> no lleva FechasPagos; la fusión solo exige que haya una: un pago anulado no impide eliminar
+        else:
+            fechas = sorted({str(f) for slip in recibos for f in slip._ne_fechas_pago()})
         datos_recibos = [slip._collect_payslip_data() for slip in recibos]
         try:
             datos = documento_merge.fusionar_documento(
@@ -1144,6 +1223,7 @@ class L10nCoNeDocumento(models.Model):
         bloqueos = [a['message'] for a in (self.alertas or []) if a['level'] == 'danger']
         if bloqueos:
             raise UserError(_('El documento tiene bloqueos: %s', ' '.join(bloqueos)))
+        self._ne_exigir_pagos_vigentes()
         company = self.company_id
         prefijo = self._ne_prefijo()
         # Un consecutivo que ya viajó a la DIAN en un intento rechazado NO se reutiliza jamás: la DIAN devuelve el
@@ -1207,7 +1287,7 @@ class L10nCoNeDocumento(models.Model):
                 'envío extemporáneo: marque "Confirmo envío extemporáneo" en Enviar y Procesar (solo el administrador de '
                 'nómina puede confirmarlo).', doc=self.display_name, fecha=self.fecha_limite))
 
-    def _ne_precondiciones_envio(self, confirmado=None, permitir_espera=False):
+    def _ne_precondiciones_envio(self, confirmado=None, permitir_espera=False, comprobar_pagos=True):
         """UserError local, ANTES de tocar la DIAN: sin intento, sin consecutivo gastado. ``confirmado`` (envío
         extemporáneo): al encolar lo trae quien confirma; el cron lo lee de la cola (``sending_data``), así no puede
         saltarse el bloqueo."""
@@ -1244,6 +1324,8 @@ class L10nCoNeDocumento(models.Model):
                 '(toma un consecutivo nuevo): el mismo XML no se reenvía.', self.display_name))
         if self.etapa != 'ready' or not (self.cune and self.consecutive and self.xml_attachment_id):
             raise UserError(_('Genere el XML del documento "%s" antes de enviarlo.', self.display_name))
+        if comprobar_pagos:
+            self._ne_exigir_pagos_vigentes(contra_el_xml=True)
         # .304 (doc 77, A): el número de este documento no pudo haber viajado ya en otro (p. ej. tras restaurar o mover la secuencia).
         self.company_id._ne_exigir_numero_sin_viajar(self.consecutive, self.is_adjustment, documento=self)
         if confirmado is None:
@@ -1274,13 +1356,15 @@ class L10nCoNeDocumento(models.Model):
         no es un rechazo: se concilia por CUNE y, sin veredicto, el documento queda incierto.
 
         Returns:
-            ``l10n.co.ne.documento.intento`` creado (o el anterior, conciliado o aún fallido, cuando no se reenvió).
+            ``l10n.co.ne.documento.intento`` creado (o el anterior, conciliado o aún fallido, cuando no se reenvió); vacío si el reintento se detuvo porque un recibo perdió su pago (sale de la cola).
         """
         self.ensure_one()
-        self._ne_precondiciones_envio()
         company = self.company_id
         previo = self._ultimo_intento()
-        if previo and previo.state == 'invoice_sending_failed' and previo.identifier == self.cune and not company.l10n_co_ne_demo_mode:
+        reintento = bool(previo) and previo.state == 'invoice_sending_failed' and previo.identifier == self.cune and not company.l10n_co_ne_demo_mode
+        # Un reintento consulta antes por CUNE (el envío pudo haber llegado): los pagos se comprueban después, y solo si se va a reenviar.
+        self._ne_precondiciones_envio(comprobar_pagos=not reintento)
+        if reintento:
             consulta = self._ne_reconsultar_por_cune()
             if previo.state != 'invoice_sending_failed':          # la DIAN ya tenía el veredicto
                 self.sending_data = False
@@ -1290,6 +1374,12 @@ class L10nCoNeDocumento(models.Model):
                     'No se reenvió: la consulta por CUNE no permite saber si la DIAN ya tiene este documento (%s). Solo se reenvía cuando la DIAN contesta que no lo conoce.',
                     consulta.mensaje or consulta.veredicto), 'No se reenvió: la consulta por CUNE')
                 return previo
+            try:
+                self._ne_exigir_pagos_vigentes(contra_el_xml=True)
+            except UserError as error:          # sin lanzar: la evidencia de la consulta se conserva
+                self.sending_data = False
+                self.message_post(body=_('La DIAN contestó que no conoce el CUNE y no se reenvió: %s', error), message_type='comment', subtype_xmlid='mail.mt_note')
+                return previo.browse()
         xml = base64.b64decode(self.xml_attachment_id.datas)
         nit = (company.vat or 'SIN_NIT').replace('-', '').strip()
         filename = 'ne_%s_%s.xml' % (nit, self.consecutive)
@@ -1588,6 +1678,8 @@ class L10nCoNeDocumento(models.Model):
                     'SELECT id FROM l10n_co_ne_documento WHERE id IN %s FOR UPDATE SKIP LOCKED', (tuple(vencidos.ids),))
                 vencidos = vencidos.browse([row[0] for row in self.env.cr.fetchall()])
             for doc in vencidos:
+                if not doc.sending_data:
+                    continue      # salió de la cola mientras se procesaba el lote (un recibo suyo perdió su pago)
                 datos = dict(doc.sending_data)
                 resumen = resultados.setdefault(datos.get('author_partner_id') or 0, {})
                 # H-F3-04 (Q5 y Q7 del TL): el segmento 2 en adelante espera, sin error, a que el anterior sea aceptado; se reintenta solo (es un documento con plazo de 10 días hábiles). Un problema que el
@@ -1629,7 +1721,9 @@ class L10nCoNeDocumento(models.Model):
                                      message_type='comment', subtype_xmlid='mail.mt_note')
                     contar('incierto')
                 else:
-                    if intento.state == 'invoice_sending_failed':
+                    if not intento:        # reintento detenido: un recibo perdió su pago; ya salió de la cola, con nota
+                        contar('fallido')
+                    elif intento.state == 'invoice_sending_failed':
                         intentos = int(datos.get('intentos') or 0) + 1
                         maximo = company._ne_config_int_param('l10n_co_nomina_electronica.send_max_retries', 5)
                         if intentos <= maximo:

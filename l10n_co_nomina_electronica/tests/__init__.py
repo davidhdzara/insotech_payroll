@@ -202,3 +202,4 @@ from . import test_contrato_del_recibo             # Q-15 (.332)
 from . import test_lote_volver_a_borrador       # .333
 from . import test_retefuente_fecha_del_mes       # F2 (.334)
 from . import test_pago_anulado       # .335 clase A
+from . import test_pago_anulado_documento     # .335 clase A (QA P5, P9, N4 y N5)
