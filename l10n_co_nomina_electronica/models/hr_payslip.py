@@ -1035,13 +1035,17 @@ class HrPayslip(models.Model):
         self._ne_guardar_reparto('CO_LIQ_LIBRANZAS', filas)
         return sum(f['amount'] for f in filas)
 
+    def _ne_filas_de_libranza(self, aplicadas):
+        """Cuotas de libranza de estos recibos (filas por tercero), ya aplicadas a la asignacion salarial o todavia no."""
+        return self.env['l10n.co.payslip.tercero'].sudo().search([
+            ('slip_id', 'in', self.ids),
+            ('rule_code', 'in', ('CO_LIBRANZAS', 'CO_LIQ_LIBRANZAS')),
+            ('applied', '=', aplicadas)])
+
     def _ne_aplicar_libranzas(self, revertir=False):
         """Refleja (o revierte) lo descontado en pagado y saldo pendiente."""
         signo = -1 if revertir else 1
-        for row in self.env['l10n.co.payslip.tercero'].sudo().search([
-                ('slip_id', 'in', self.ids),
-                ('rule_code', 'in', ('CO_LIBRANZAS', 'CO_LIQ_LIBRANZAS')),
-                ('applied', '=', revertir)]):
+        for row in self._ne_filas_de_libranza(aplicadas=revertir):
             att = row.attachment_id
             att.write({
                 'paid_amount': att.paid_amount + signo * row.amount,
