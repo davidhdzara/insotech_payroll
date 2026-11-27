@@ -5048,6 +5048,11 @@ class HrPayslip(models.Model):
         colombia._ne_refrescar_ibc_mensual()
         return res
 
+    def action_payslip_unpaid(self):
+        res = super().action_payslip_unpaid()          # también la vía «Unpaid» del lote, que llama a este método
+        self._ne_solo_colombia().filtered('l10n_co_ne_fecha_pago_registrada').l10n_co_ne_fecha_pago_registrada = False     # CC-08: sin pago no hay fecha registrada
+        return res
+
     def action_payslip_cancel(self):
         colombia = self._ne_solo_colombia()
         colombia._ne_aplicar_libranzas(revertir=True)
