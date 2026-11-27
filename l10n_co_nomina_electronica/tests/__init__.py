@@ -201,3 +201,4 @@ from . import test_fecha_pago_neto_cero     # CC-08 (.332)
 from . import test_tipo_trabajador_del_contrato   # H-F3-04 (.332)
 from . import test_dias_prima_vacaciones          # Q-19 (.332)
 from . import test_contrato_del_recibo             # Q-15 (.332)
+from . import test_lote_volver_a_borrador       # .333
