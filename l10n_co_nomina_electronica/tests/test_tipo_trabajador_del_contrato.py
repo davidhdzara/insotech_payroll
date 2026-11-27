@@ -44,7 +44,8 @@ class TestTipoTrabajadorDelContrato(TransactionCase):
         self.assertEqual(sorted(tipos), ['01', '02', '04', '12', '18', '19', '21', '22', '23', '30', '31', '47', '51', '54', '56', '58'])
         self.assertEqual(tipos['23'], '23 - Estudiantes aportes solo riesgos laborales')
         self.assertEqual(tipos['30'], '30 - Dependiente entidades o universidades públicas con régimen especial en salud')
-        self.assertEqual([codigo for codigo, _etiqueta in campos['l10n_co_ne_worker_subtype'].selection], ['00', '01'])
+        self.assertEqual([codigo for codigo, _etiqueta in campos['l10n_co_ne_worker_subtype'].selection], ['00', '01', '02'])
+        self.assertEqual(sorted(self.env['hr.payslip']._NE_SUBTIPOS_TRABAJADOR_DIAN), ['00', '01'])          # el 02 se conserva en la ficha; el XML no lo admite
 
     def test_el_xml_toma_el_contrato_aunque_la_ficha_diga_otra_cosa(self):
         recibo = self._recibo(self._contrato(l10n_co_pila_tipo_cotizante='51'))

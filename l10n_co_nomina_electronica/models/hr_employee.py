@@ -35,7 +35,7 @@ NE_EMPLEADO_GRUPO_AFILIACION = _lt('PILA - Administradoras')
 NE_UBICACION_AJUSTES_PILA = _lt('Nómina > Configuración > Ajustes, bloque PILA')
 
 
-# Anexo Técnico de nómina electrónica V1.0 (Res. DIAN 000013/2021), tablas 5.5.3 y 5.5.4: los únicos códigos de la ficha y los que admite el XML.
+# Anexo Técnico de nómina electrónica V1.0 (Res. DIAN 000013/2021), tablas 5.5.3 y 5.5.4: los códigos que admite el XML.
 NE_TIPOS_TRABAJADOR_DIAN = [
     ('01', '01 - Dependiente'),
     ('02', '02 - Servicio doméstico'),
@@ -55,6 +55,8 @@ NE_TIPOS_TRABAJADOR_DIAN = [
     ('58', '58 - Estudiantes de prácticas laborales en el sector público'),
 ]
 NE_SUBTIPOS_TRABAJADOR_DIAN = [('00', '00 - No aplica'), ('01', '01 - Dependiente pensionado por vejez activo')]
+# La ficha conserva ademas el 02 (no esta en la tabla 5.5.4 y el XML no lo admite): no se retira mientras no este verificado que hace una actualizacion con el valor ya guardado.
+NE_SUBTIPOS_DE_LA_FICHA = NE_SUBTIPOS_TRABAJADOR_DIAN + [('02', '02 - Dependiente Pensionado por Vejez – Alto Riesgo (no lo admite la DIAN)')]
 
 
 class HrEmployee(models.Model):
@@ -406,7 +408,7 @@ class HrEmployee(models.Model):
              'recibo (Tipo Cotizante); si difieren, el recibo lo avisa.',
     )
     l10n_co_ne_worker_subtype = fields.Selection(
-        selection=NE_SUBTIPOS_TRABAJADOR_DIAN,
+        selection=NE_SUBTIPOS_DE_LA_FICHA,
         string='Subtipo Trabajador',
         help='Subtipo del trabajador. El XML lo toma del contrato del '
              'recibo (Subtipo Cotizante); si difieren, el recibo lo avisa.',
@@ -606,12 +608,12 @@ class HrEmployee(models.Model):
         """Valida coherencia entre tipo y subtipo de trabajador."""
         for employee in self:
             if (
-                employee.l10n_co_ne_worker_subtype == '01'
+                employee.l10n_co_ne_worker_subtype in ('01', '02')
                 and employee.l10n_co_ne_worker_type != '01'
             ):
                 raise ValidationError(_(
-                    'El subtipo de trabajador "01 - Dependiente pensionado por vejez activo" solo '
-                    'aplica para el tipo de trabajador "01 - Dependiente". '
+                    'Los subtipos de trabajador "Pensionado por Vejez" solo '
+                    'aplican para el tipo de trabajador "01 - Dependiente". '
                     'Empleado: %s',
                     employee.name,
                 ))
