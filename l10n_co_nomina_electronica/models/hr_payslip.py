@@ -4753,17 +4753,23 @@ class HrPayslip(models.Model):
 
 
 
+    def _ne_olvidar_pago(self):
+        """Al anular el pago o volver a borrador (recibos colombianos): se borra la fecha registrada de un neto 0 (CC-08) y, con la fuente «Fecha de pago del recibo», también la fecha de pago del
+        recibo: esa fecha decide el mes del documento de nómina electrónica y no puede sobrevivir a un pago anulado (clase A)."""
+        self.filtered('l10n_co_ne_fecha_pago_registrada').l10n_co_ne_fecha_pago_registrada = False
+        self.filtered(lambda r: r.paid_date and r.company_id.l10n_co_ne_fuente_fecha_pago == 'recibo').paid_date = False
+
     def action_payslip_draft(self):
         colombia = self._ne_solo_colombia()
         colombia._ne_aplicar_libranzas(revertir=True)
         res = super().action_payslip_draft()
-        colombia.filtered('l10n_co_ne_fecha_pago_registrada').l10n_co_ne_fecha_pago_registrada = False     # CC-08: el recibo se recalcula; la fecha se registra de nuevo
+        colombia._ne_olvidar_pago()
         colombia._ne_refrescar_ibc_mensual()
         return res
 
     def action_payslip_unpaid(self):
         res = super().action_payslip_unpaid()          # tambien la via «Unpaid» del lote, que llama a este metodo
-        self._ne_solo_colombia().filtered('l10n_co_ne_fecha_pago_registrada').l10n_co_ne_fecha_pago_registrada = False     # CC-08: sin pago no hay fecha registrada
+        self._ne_solo_colombia()._ne_olvidar_pago()
         return res
 
     def action_payslip_cancel(self):

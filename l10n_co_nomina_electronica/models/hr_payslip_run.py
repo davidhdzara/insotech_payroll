@@ -23,7 +23,7 @@ class HrPayslipRun(models.Model):
         self._ne_validar_volver_a_borrador()
         colombia = self.slip_ids._ne_solo_colombia()
         res = super().action_draft()
-        colombia.filtered('l10n_co_ne_fecha_pago_registrada').l10n_co_ne_fecha_pago_registrada = False     # CC-08: el lote no pasa por ``action_payslip_draft``
+        colombia._ne_olvidar_pago()          # el lote no pasa por ``action_payslip_draft``
         return res
 
     def _ne_validar_volver_a_borrador(self):
