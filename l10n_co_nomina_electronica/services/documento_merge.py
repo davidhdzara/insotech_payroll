@@ -42,6 +42,8 @@ LISTAS_DEVENGADOS = (
     'Auxilios', 'HuelgasLegales', 'OtrosConceptos', 'Compensaciones', 'BonoEPCTVs', 'Comisiones',
     'PagosTerceros', 'Anticipos')
 LISTAS_DEDUCCIONES = ('Sindicatos', 'Sanciones', 'Libranzas', 'PagosTerceros', 'Anticipos', 'OtrasDeducciones')
+# Listas de importes sueltos (texto): el constructor del XML escribe un elemento por valor (``<Comision>100.00</Comision>``). Las demás listas son de diccionarios.
+LISTAS_DE_VALORES = frozenset({'Comisiones', 'PagosTerceros', 'Anticipos', 'OtrasDeducciones'})
 UNICOS_DEVENGADOS = ('Basico', 'Primas', 'Cesantias')
 UNICOS_DEDUCCIONES = ('Salud', 'FondoPension', 'FondoSP')
 ESCALARES_DEVENGADOS = ('Dotacion', 'ApoyoSost', 'Teletrabajo', 'BonifRetiro', 'Indemnizacion', 'Reintegro')
@@ -101,6 +103,12 @@ def _sumar_nodo(nombre, acumulado, nuevo):
     return resultado
 
 
+def _concatenar(recibos, seccion, nombre):
+    """Elementos de la lista ``nombre`` de todos los recibos, en orden: copias de los diccionarios; los importes sueltos pasan como están."""
+    items = [item for datos in recibos for item in (datos.get(seccion, {}).get(nombre) or [])]
+    return items if nombre in LISTAS_DE_VALORES else [dict(item) for item in items]
+
+
 def _sumar_escalar(acumulado, nuevo):
     if nuevo is None:
         return acumulado
@@ -153,7 +161,7 @@ def fusionar_devengados(recibos):
     if transporte:
         salida['Transporte'] = transporte
     for nombre in LISTAS_DEVENGADOS:
-        items = [dict(i) for d in recibos for i in (d.get('devengados', {}).get(nombre) or [])]
+        items = _concatenar(recibos, 'devengados', nombre)
         if items:
             salida[nombre] = items
     vacaciones = _fusionar_grupos(recibos, 'devengados', 'Vacaciones', GRUPOS_VACACIONES)
@@ -209,7 +217,7 @@ def fusionar_deducciones(recibos):
         if acum is not None:
             salida[nombre] = acum
     for nombre in LISTAS_DEDUCCIONES:
-        items = [dict(i) for d in recibos for i in (d.get('deducciones', {}).get(nombre) or [])]
+        items = _concatenar(recibos, 'deducciones', nombre)
         if items:
             salida[nombre] = items
     for nombre in ESCALARES_DEDUCCIONES:
@@ -291,7 +299,7 @@ def fusionar_documento(recibos, fechas_pagos, periodo, periodo_nomina='5'):
 CLAVES_DINERO_DEVENGADOS = frozenset({
     'SueldoTrabajado', 'AuxilioTransporte', 'ViaticoManuAlojS', 'ViaticoManuAlojNS', 'Pago', 'PagoNS', 'PagoS',
     'PagoIntereses', 'PagoAlimentacionS', 'PagoAlimentacionNS', 'BonificacionS', 'BonificacionNS', 'AuxilioS',
-    'AuxilioNS', 'ConceptoS', 'ConceptoNS', 'Comision', 'PagoTercero', 'Anticipo', 'Dotacion', 'ApoyoSost',
+    'AuxilioNS', 'ConceptoS', 'ConceptoNS', 'CompensacionO', 'CompensacionE', 'Comision', 'PagoTercero', 'Anticipo', 'Dotacion', 'ApoyoSost',
     'Teletrabajo', 'BonifRetiro', 'Indemnizacion', 'Reintegro'})
 CLAVES_DINERO_DEDUCCIONES = frozenset({
     'Deduccion', 'DeduccionSP', 'DeduccionSub', 'OtraDeduccion', 'PagoTercero', 'Anticipo', 'SancionPublic',
@@ -304,7 +312,9 @@ def suma_dinero(nodo, claves):
     total = CERO
     if isinstance(nodo, dict):
         for clave, valor in nodo.items():
-            if isinstance(valor, (dict, list)):
+            if clave in LISTAS_DE_VALORES and isinstance(valor, list):
+                total += sum((_dec(importe) for importe in valor), CERO)
+            elif isinstance(valor, (dict, list)):
                 total += suma_dinero(valor, claves)
             elif clave in claves and valor not in (None, ''):
                 total += _dec(valor)
