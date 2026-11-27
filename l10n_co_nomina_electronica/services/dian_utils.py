@@ -220,55 +220,6 @@ def parse_positive_int(raw_value, default: int, param_name: str = '') -> int:
 
 
 # =====================================================================
-# Período de Nómina DIAN
-# =====================================================================
-
-def get_periodo_nomina(date_from, date_to) -> str:
-    """Determina el código de período de nómina según la DIAN.
-
-    Los códigos de período están definidos en el Anexo Técnico:
-        1 = Semanal   (≤ 7 días)
-        2 = Decenal   (≤ 10 días)
-        3 = Catorcenal (≤ 14 días)
-        4 = Quincenal  (15–16 días)
-        5 = Mensual    (28–31 días)
-        6 = Otro
-
-    Args:
-        date_from: Fecha inicio del período (date o str 'YYYY-MM-DD').
-        date_to:   Fecha fin del período (date o str 'YYYY-MM-DD').
-
-    Returns:
-        Código de período como string ('1' a '6').
-
-    Examples:
-        >>> from datetime import date
-        >>> get_periodo_nomina(date(2024, 1, 1), date(2024, 1, 7))
-        '1'
-        >>> get_periodo_nomina('2024-01-01', '2024-01-31')
-        '5'
-    """
-    if isinstance(date_from, str):
-        date_from = _date_type.fromisoformat(date_from)
-    if isinstance(date_to, str):
-        date_to = _date_type.fromisoformat(date_to)
-
-    delta_days = (date_to - date_from).days + 1  # inclusivo
-
-    if delta_days <= 7:
-        return '1'   # Semanal
-    if delta_days <= 10:
-        return '2'   # Decenal
-    if delta_days <= 14:
-        return '3'   # Catorcenal
-    if delta_days <= 16:
-        return '4'   # Quincenal
-    if 28 <= delta_days <= 31:
-        return '5'   # Mensual
-    return '6'        # Otro
-
-
-# =====================================================================
 # Códigos geográficos DANE
 # =====================================================================
 

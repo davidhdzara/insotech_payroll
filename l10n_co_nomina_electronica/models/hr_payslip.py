@@ -1806,9 +1806,6 @@ class HrPayslip(models.Model):
                 'TipoXML': '103' if self.l10n_co_ne_is_adjustment else '102',
                 'FechaGen': now.strftime('%Y-%m-%d'),
                 'HoraGen': now.strftime('%H:%M:%S-05:00'),
-                'PeriodoNomina': dian_utils.get_periodo_nomina(
-                    self.date_from, self.date_to
-                ),
                 'TipoMoneda': nomina_xml_builder.NE_TIPO_MONEDA,
                 'TRM': '0',
             },
@@ -1846,6 +1843,10 @@ class HrPayslip(models.Model):
             },
 
         }
+        # Q-17: sin calendario no se escribe. El XML por recibo lo exige antes (_validate_ne_prerequisites) y el documento mensual envía el suyo.
+        periodo_nomina = self._ne_periodo_nomina()
+        if periodo_nomina:
+            data['informacion_general']['PeriodoNomina'] = periodo_nomina
         data['trabajador'] = self._ne_trabajador()
         data['pago'] = self._ne_pago()
         data['periodo'] = {
@@ -2451,6 +2452,17 @@ class HrPayslip(models.Model):
         self.ensure_one()
         contrato = self.contract_id
         return (contrato.schedule_pay or contrato.structure_type_id.default_schedule_pay) == 'weekly'
+
+    # Anexo Técnico V1.0, tabla 5.5.1 «Periodo de Nómina»: 1 semanal, 2 decenal, 3 catorcenal, 4 quincenal, 5 mensual, 6 otro. El calendario de Odoo no tiene decenal.
+    _NE_PERIODO_NOMINA_POR_CALENDARIO = {'weekly': '1', 'bi-weekly': '3', 'semi-monthly': '4', 'monthly': '5'}
+
+    def _ne_periodo_nomina(self):
+        """«PeriodoNomina» del XML (Q-17, .332): sale del calendario de pago del contrato (o, sin él, del de su tipo de estructura), no de los días del recibo:
+        un ingreso a mitad de mes o la segunda quincena de febrero no cambian la periodicidad. Cualquier otro calendario es «Otro». False si no hay ninguno."""
+        self.ensure_one()
+        contrato = self.contract_id
+        calendario = contrato.schedule_pay or contrato.structure_type_id.default_schedule_pay
+        return bool(calendario) and self._NE_PERIODO_NOMINA_POR_CALENDARIO.get(calendario, '6')
 
     def _ne_contar_dias(self, ini, fin):
         """Dias de [ini, fin] segun la periodicidad: SEMANAL = dias calendario (7 por semana; David 2026-11-14, valor del dia =
