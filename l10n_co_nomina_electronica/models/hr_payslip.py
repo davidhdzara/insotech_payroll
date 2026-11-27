@@ -1138,6 +1138,10 @@ class HrPayslip(models.Model):
         res = True
         con_huella._ne_liq_validar_nomina_posterior()   # P0: una nómina no vuelve a pagar días que una liquidación confirmada cerró
         con_huella._ne_liq_validar_mes()                # P0: la liquidación sabe qué días del mes están pagados, o no se calcula
+        operacion = tuple(con_huella.ids)               # R-2, opción A: los recibos que se calculan juntos (el cierre suma los anteriores del mismo mes)
+        con_huella._ne_rete_validar_secuencias()        # R-2: nada de la base puede calcularse después de la retención
+        con_huella.with_context(ne_rete_operacion=operacion)._ne_rete_validar_pendientes()        # R-2: lo que suma antes del que retiene va confirmado o en este cálculo
+        cifras_retencion = {}
         for company in self.company_id:
             recibos = self.filtered(lambda s, c=company: s.company_id == c).with_company(company)
             # E11 pieza 2b (.288): el gancho de ``hr.salary.rule._compute_rule`` anota en este diccionario lo que SUGIRIÓ cada regla ajustada;
@@ -1152,11 +1156,13 @@ class HrPayslip(models.Model):
             # gancho de ``_compute_rule`` escribía lo sugerido allí y ``_ne_registrar_ajustes`` leía este ``sugeridos`` (vacío), así que el ajuste
             # quedaba «sin línea» aunque sí se aplicaba (N2 «co» de .289: test_02 y test_03). Con el token el contexto nunca coincide con el de otro
             # cálculo y el diccionario que lee el gancho es siempre este.
-            res = super(HrPayslip, recibos.with_context(ne_sugeridos=sugeridos, ne_calculo=uuid.uuid4().hex)).compute_sheet()
+            res = super(HrPayslip, recibos.with_context(
+                ne_sugeridos=sugeridos, ne_retencion=cifras_retencion, ne_rete_operacion=operacion, ne_calculo=uuid.uuid4().hex)).compute_sheet()
             recibos._ne_registrar_ajustes(sugeridos)
             recibos._ne_regenerar_conceptos()
         colombia._ne_validar_terceros_deducciones()
         con_huella._ne_liq_guardar_pagados()            # P0: los recibos del mes cuyos días resta la liquidación
+        con_huella.with_context(ne_rete_operacion=operacion)._ne_rete_guardar_cifras(cifras_retencion)          # R-2: antes de la huella, que lee lo sumado
         con_huella._ne_guardar_huella()                 # solo si TODO el calculo termino: un error antes de aqui deja la huella anterior
         return res
 
@@ -1364,8 +1370,10 @@ class HrPayslip(models.Model):
             self._ne_rechazar_huella_externa()
         if 'l10n_co_ne_liq_pagados_ids' in vals:
             self._ne_rechazar_pagados_externos()
-        if vals.get('state') in ('draft', 'cancel'):          # P0: se mira antes de escribir, mientras el estado es el confirmado
-            self._ne_solo_colombia().filtered(lambda r: r.state in ('validated', 'paid'))._ne_liq_validar_anulacion()
+        if vals.get('state') in ('draft', 'cancel'):          # P0 y R-2: se mira antes de escribir, mientras el estado es el confirmado
+            confirmados = self._ne_solo_colombia().filtered(lambda r: r.state in ('validated', 'paid'))
+            confirmados._ne_liq_validar_anulacion()
+            self._ne_rete_validar_anulacion(confirmados)          # R-2: lo que sumó la retención de un cierre confirmado no sale del mes
         res = super().write(vals)
         if ('input_line_ids' in vals and self._ne_comandos_cambian_novedades(vals['input_line_ids'])) or (
                 'l10n_co_concepto_ids' in vals and self._ne_comandos_cambian_conceptos(vals['l10n_co_concepto_ids'])):
@@ -1594,8 +1602,9 @@ class HrPayslip(models.Model):
     def _ne_huella_calculo(self):
         """La huella de los datos ACTUALES del recibo (``services.huella_calculo``). Datos propios del recibo que el cálculo lee: cabecera (con su versión), salario del contrato (D1), tramo
         pagable (solo v19: ``_ne_rango_activo``; una versión nueva o un cambio de fechas del contrato no recalcula el borrador y H-F1-10 corta por versión), novedades, días trabajados (las
-        reglas de básico y de ausencias los leen), ajustes de la empresa y las ausencias VALIDADAS del empleado que se cruzan con el periodo (D2; la cadena de prórrogas anterior al periodo no
-        entra). Fuera: parámetros, reglas, datos del empleado, el resto de la versión y recibos anteriores (se resuelven con «Calcular hoja»)."""
+        reglas de básico y de ausencias los leen), ajustes de la empresa, lo que la retención lee del mes (R-2: si cierra y los recibos que suma) y las ausencias VALIDADAS del empleado que se
+        cruzan con el periodo (D2; la cadena de prórrogas anterior al periodo no entra). Fuera: parámetros, reglas, datos del empleado, el resto de la versión y los demás recibos anteriores (se
+        resuelven con «Calcular hoja»)."""
         self.ensure_one()
         recibo = self.sudo()                 # solo se resumen valores: no depende de las reglas de acceso del usuario que calcula o confirma
         ausencias = self.env['hr.leave'].sudo().search([
@@ -1608,7 +1617,8 @@ class HrPayslip(models.Model):
             entradas=[(e.input_type_id.id, e.amount) for e in recibo.input_line_ids],
             dias=[(d.work_entry_type_id.id, d.number_of_days, d.number_of_hours) for d in recibo.worked_days_line_ids],
             ajustes=[(a.salary_rule_id.id, a.quantity, a.rate, a.amount) for a in recibo.l10n_co_ajuste_ids],
-            ausencias=[(a.id, a.request_date_from, a.request_date_to, a.holiday_status_id.id) for a in ausencias])
+            ausencias=[(a.id, a.request_date_from, a.request_date_to, a.holiday_status_id.id) for a in ausencias],
+            mes=recibo._ne_rete_huella())
 
     def _ne_guardar_huella(self):
         """Guarda la huella de cada recibo. Escribe por debajo de ``HrPayslip.write`` (``super``): así la guarda que rechaza escrituras externas no depende de un contexto que un cliente RPC
@@ -1650,6 +1660,10 @@ class HrPayslip(models.Model):
         por_confirmar._ne_liq_validar_pagados_vigentes()          # P0: los recibos que restó siguen siendo los de hoy
         por_confirmar._ne_liq_validar_reembolso()                 # P0: no se reembolsa un recibo que una liquidación confirmada restó
         colombia._ne_validar_hoja_al_dia()        # C-24: despues de las anteriores y antes de crear el asiento o cambiar el estado
+        colombia._ne_validar_retencion_conjunto()  # R-2: lo que sumó cada retención del mes va confirmado o en la operación
+        colombia._ne_validar_retencion_incompleta()
+        colombia._ne_validar_neto_no_negativo()
+        colombia._ne_validar_retencion_reembolso()
         res = super(HrPayslip, self).action_payslip_done()
         colombia._ne_aplicar_libranzas()
         colombia._ne_refrescar_ibc_mensual()
@@ -2640,20 +2654,6 @@ class HrPayslip(models.Model):
         return (meses * dias_mes + self._ne_dia_comercial(fecha_fin, dias_mes)
                 - self._ne_dia_comercial(fecha_ini, dias_mes) + 1)
 
-    def _ne_resultado_retefuente(self, categories):
-        """Resultado de la depuracion de la retencion en la fuente de la NOMINA GENERAL (el dict de ``l10n.co.retefuente.uvt.compute_retefuente``): UN solo lugar que arma las entradas -- ingreso bruto
-        (categoria GROSS o el sueldo), IBC de pension y salud (DEV_SAL, o el sueldo por el factor del integral) -- y llama a la depuracion. Lo usan las reglas CO_RETEFUENTE, CO_EXENTO_PENSION_AFC y
-        CO_RETEFUENTE_EXCESO_LIMITE (antes cada una copiaba las entradas: H-F1-02). Sin configuracion de retencion del anio, el error de ``_ne_retefuente_config``."""
-        self.ensure_one()
-        contract = self.version_id                    # v19: la version del recibo (v18: self.contract_id); el sueldo se lee con ``_ne_salario`` (unico punto de lectura)
-        sueldo = self._ne_salario(contract)
-        gross = categories['GROSS'] if categories.get('GROSS') else sueldo
-        ibc = categories.get('DEV_SAL', sueldo)
-        if contract.l10n_co_ne_integral_salary:
-            ibc = sueldo * self._rule_parameter('l10n_co_factor_integral_salary', self.date_from)
-        return self._ne_retefuente_config().compute_retefuente(
-            self.employee_id, gross, ibc, ibc, self.employee_id.company_id, contract=contract, payslip=self)
-
     def _ne_retefuente_config(self):
         """Configuracion de retencion en la fuente (l10n.co.retefuente.uvt) del anio de la
         nomina (anio de _ne_fecha_parametros: la fecha de retiro en la liquidacion). Primero la de
@@ -2963,7 +2963,9 @@ class HrPayslip(models.Model):
         self._ne_liq_validar_reembolso_de(reembolsos.origin_payslip_id)
 
     def _action_refund_payslips(self):
-        self._ne_liq_validar_reembolso_de(self._ne_solo_colombia())       # cubre «Reembolsar» y «Corregir» nativos
+        colombia = self._ne_solo_colombia()
+        self._ne_liq_validar_reembolso_de(colombia)       # cubre «Reembolsar» y «Corregir» nativos
+        self._ne_rete_validar_anulacion(colombia)         # R-2: igual para lo que sumó la retención de un cierre confirmado
         return super()._action_refund_payslips()
 
     def _ne_liq_validar_anulacion(self):

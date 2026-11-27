@@ -9,7 +9,7 @@ from unittest.mock import patch
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
-from .common_version import crear_empleado_con_contrato
+from .common_version import confirmar_a_mano, crear_empleado_con_contrato
 
 MES = (date(2026, 9, 1), date(2026, 9, 30))
 CAMBIO = date(2026, 9, 10)
@@ -205,7 +205,8 @@ class TestDiasDelMesPartido(MontajeLotePorTramo):
             self.assertEqual(b._ne_dias_pagables(), 0)
 
     def test_el_recorte_a_cero_dias_se_muestra_en_el_recibo_con_empleado_y_dias(self):
-        _a, b = self._partido(date(2026, 8, 31))      # 31-ago-2026 es lunes: un 31 en fin de semana no deja líneas de días trabajados
+        a, b = self._partido(date(2026, 8, 31))      # 31-ago-2026 es lunes: un 31 en fin de semana no deja líneas de días trabajados
+        confirmar_a_mano(a)      # R-2: el recibo del día 31 cierra el mes y exige confirmado el anterior
         b.version_id.generate_work_entries(date(2026, 8, 1), date(2026, 8, 31))
         b.compute_sheet()
         self.assertTrue(b.worked_days_line_ids, 'Premisa: el recibo trae dias trabajados')

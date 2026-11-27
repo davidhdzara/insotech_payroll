@@ -11,7 +11,7 @@ from decimal import Decimal
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import documento_merge as dm
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 _logger = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ class TestDocumentoFusionReal(TransactionCase):
                 'company_id': self.company.id, 'struct_id': self.est.id,
                 'date_from': date(2026, mes, ini), 'date_to': date(2026, mes, fin)})
             recibo.compute_sheet()
+            confirmar_a_mano(recibo)      # R-2: el recibo que cierra el mes exige confirmado el anterior
             recibos |= recibo
         return recibos
 

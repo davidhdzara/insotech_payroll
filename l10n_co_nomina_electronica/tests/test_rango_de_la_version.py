@@ -109,8 +109,7 @@ class TestRangoDeLaVersion(TransactionCase):
         self.assertEqual(a._ne_rango_activo(), (date(2026, 9, 1), date(2026, 9, 15)), 'A: hasta el día anterior al aumento')
         self.assertEqual(b._ne_rango_activo(), (date(2026, 9, 16), date(2026, 9, 30)), 'B: desde el aumento')
         self.assertEqual((a._ne_dias_bajo_contrato(), b._ne_dias_bajo_contrato()), (15, 15))
-        a.compute_sheet()
-        b.compute_sheet()
+        (a | b).compute_sheet()      # R-2: el segundo cierra el mes; se calcula junto con el anterior
         self.assertEqual(a._ne_dias_pagables() + b._ne_dias_pagables(), 30, 'Sin pagar de más ni de menos: los 30 días comerciales del periodo')
         self.assertAlmostEqual(self._cantidad(a, 'CO_BASICO'), 15.0, places=4)
         self.assertAlmostEqual(self._cantidad(b, 'CO_BASICO'), 15.0, places=4)
