@@ -44,7 +44,7 @@ _UNIDAD_REGLAS = {
 _UNIDAD_TIPOS = {
     'CO_HED': 'horas', 'CO_HEN': 'horas', 'CO_HRN': 'horas', 'CO_HEDDF': 'horas', 'CO_HENDF': 'horas', 'CO_HRDDF': 'horas', 'CO_HRNDF': 'horas',
     'CO_INC_COMUN': 'dias', 'CO_INC_LABORAL': 'dias', 'CO_LIC_MAT': 'dias', 'CO_LIC_PAT': 'dias', 'CO_LIC_REM': 'dias', 'CO_LIC_NR': 'dias',
-    'CO_VAC': 'dias',
+    'CO_VAC': 'dias', 'CO_PRIMA_DIAS': 'dias', 'CO_VAC_COMP_DIAS': 'dias',
 }
 
 

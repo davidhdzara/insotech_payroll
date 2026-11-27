@@ -88,6 +88,7 @@ Funcionalidades principales:
         # Views
         'wizard/hr_payslip_send_views.xml',
         'wizard/hr_payslip_registrar_pago_views.xml',
+        'wizard/hr_payslip_dias_prestaciones_views.xml',
         'wizard/l10n_co_ne_certification_wizard_views.xml',
         'views/l10n_co_ne_operation_mode_views.xml',
         # AUD-DIAN-34 (2026-10-04): hr_retefuente_views.xml debe cargar

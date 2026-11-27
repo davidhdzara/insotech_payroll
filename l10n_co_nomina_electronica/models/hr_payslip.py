@@ -1683,6 +1683,7 @@ class HrPayslip(models.Model):
         por_confirmar._ne_liq_validar_pagados_vigentes()          # P0: los recibos que restó siguen siendo los de hoy
         por_confirmar._ne_liq_validar_reembolso()                 # P0: no se reembolsa un recibo que una liquidación confirmada restó
         colombia._ne_validar_hoja_al_dia()        # C-24: despues de las anteriores y antes de crear el asiento o cambiar el estado
+        colombia._ne_validar_dias_de_prestaciones()        # Q-19: prima o vacaciones compensadas en pesos exigen sus dias
         colombia._ne_validar_retencion_conjunto()  # R-2: lo que sumó cada retención del mes va confirmado o en la operación
         colombia._ne_validar_retencion_incompleta()
         colombia._ne_validar_neto_no_negativo()
@@ -1762,6 +1763,111 @@ class HrPayslip(models.Model):
                     raise UserError(_(
                         'Falta el recibo de %(empleado)s para el tramo del %(desde)s al %(hasta)s (cambio en la ficha del empleado): genérelo con el lote o créelo con esas fechas antes de confirmar.',
                         empleado=slip.employee_id.name, desde=desde, hasta=hasta))
+
+    # Q-19 (doc 116): novedad en pesos -> novedad que trae sus días para la nómina electrónica (sin regla: no cambia valores ni asiento).
+    _NE_NOVEDAD_DE_DIAS = {'CO_PRIMA': 'CO_PRIMA_DIAS', 'CO_VAC_COMP': 'CO_VAC_COMP_DIAS'}
+
+    def _ne_dias_registrados(self, codigo_en_pesos):
+        """Días registrados para la novedad en pesos ``codigo_en_pesos`` (``CO_PRIMA`` o ``CO_VAC_COMP``)."""
+        self.ensure_one()
+        codigo = self._NE_NOVEDAD_DE_DIAS[codigo_en_pesos]
+        return sum(self.input_line_ids.filtered(lambda i: i.code == codigo).mapped('amount'))
+
+    def _ne_novedades_que_piden_dias(self):
+        """Códigos de prima y vacaciones compensadas que el recibo paga en pesos: por sus líneas o, aún sin calcular, por sus novedades."""
+        self.ensure_one()
+        con_regla = set(self.struct_id.rule_ids.mapped('code'))
+        return ({l.code for l in self.line_ids if l.code in self._NE_NOVEDAD_DE_DIAS and l.total}
+                | {i.code for i in self.input_line_ids if i.code in self._NE_NOVEDAD_DE_DIAS and i.code in con_regla and i.amount > 0})
+
+    def _ne_exigir_dias(self, codigos):
+        """Error que nombra recibo, empleado y novedad si falta registrar los días de alguna de las novedades en pesos ``codigos``."""
+        self.ensure_one()
+        for codigo in sorted(codigos):
+            if self._ne_dias_registrados(codigo) > 0:
+                continue
+            raise UserError(_(
+                'El recibo "%(recibo)s" de %(empleado)s paga "%(novedad)s" y no tiene registrados sus días, que la nómina electrónica exige. Regístrelos con el botón '
+                '"Días de prima y vacaciones" del recibo.', recibo=self.name or self.display_name, empleado=self.employee_id.name,
+                novedad=self.line_ids.filtered(lambda l: l.code == codigo)[:1].name or codigo))
+
+    def _ne_validar_dias_de_prestaciones(self):
+        """Al CONFIRMAR: prima o vacaciones compensadas en pesos exigen sus días. Un reembolso no se reporta y no se mira."""
+        for recibo in self.filtered(lambda r: not r.credit_note):
+            recibo._ne_exigir_dias({l.code for l in recibo.line_ids if l.code in recibo._NE_NOVEDAD_DE_DIAS and l.total})
+
+    def _ne_cantidad_en_dias(self, lineas):
+        """«Cantidad» (días) del XML de prima y vacaciones compensadas: una línea de novedad en pesos (cantidad 1) toma los días registrados; las demás
+        (liquidación y estructura Prima) ya los llevan en su cantidad."""
+        self.ensure_one()
+        codigos = {l.code for l in lineas if l.code in self._NE_NOVEDAD_DE_DIAS}
+        self._ne_exigir_dias(codigos)
+        return sum(l.quantity for l in lineas if l.code not in codigos) + sum(self._ne_dias_registrados(c) for c in codigos)
+
+    def _ne_ya_reportado(self):
+        """True si el recibo ya viajó (o pudo viajar) a la DIAN: su documento mensual está en cola, enviado, con envío fallido, aceptado o migrado, o su ciclo
+        por recibo se transmitió."""
+        self.ensure_one()
+        documento = self.l10n_co_ne_documento_id.sudo()
+        if documento and (documento.legacy or documento.is_being_sent or documento.incierto
+                          or documento.state in ('invoice_pending', 'invoice_accepted', 'invoice_sending_failed')):
+            return True
+        return self.l10n_co_ne_state in ('sent', 'uncertain', 'accepted', 'eliminated')
+
+    l10n_co_ne_puede_registrar_dias = fields.Boolean(compute='_compute_ne_puede_registrar_dias')
+
+    @api.depends('state', 'credit_note', 'company_id', 'struct_id', 'line_ids.total', 'input_line_ids.amount', 'input_line_ids.input_type_id', 'l10n_co_ne_state',
+                 'l10n_co_ne_documento_id.state')
+    def _compute_ne_puede_registrar_dias(self):
+        for recibo in self:
+            recibo.l10n_co_ne_puede_registrar_dias = bool(
+                recibo.state in ('draft', 'validated', 'paid') and not recibo.credit_note and recibo.company_id and recibo._ne_solo_colombia()
+                and recibo._ne_novedades_que_piden_dias() and not recibo._ne_ya_reportado())
+
+    def action_ne_registrar_dias(self):
+        self.ensure_one()
+        return {'type': 'ir.actions.act_window', 'name': _('Días de prima y vacaciones compensadas'), 'res_model': 'hr.payslip.dias.prestaciones',
+                'view_mode': 'form', 'target': 'new', 'context': {'default_payslip_id': self.id}}
+
+    def _ne_registrar_dias(self, dias_por_codigo):
+        """Guarda los días en la novedad de días de cada novedad en pesos que el recibo paga y lo anota en el chatter. En un recibo confirmado la novedad nueva
+        no recalcula nada (el recálculo solo corre en borrador): líneas, neto y asiento quedan igual. Un XML mensual generado y sin enviar se
+        descarta para que no salga con la cantidad vieja."""
+        self.ensure_one()
+        if not self.l10n_co_ne_puede_registrar_dias:
+            raise UserError(_(
+                'Solo se registran días en un recibo en borrador o confirmado, que pague prima o vacaciones compensadas en pesos y que aún no se haya reportado a '
+                'la DIAN. Recibo "%(recibo)s" de %(empleado)s.', recibo=self.name or self.display_name, empleado=self.employee_id.name))
+        confirmado = self.state in ('validated', 'paid')
+        cambios = []
+        for codigo in sorted(self._ne_novedades_que_piden_dias()):
+            dias = dias_por_codigo.get(codigo) or 0.0
+            tipo = self.env.ref('l10n_co_nomina_electronica.input_%s' % self._NE_NOVEDAD_DE_DIAS[codigo].lower())
+            if dias <= 0:
+                raise UserError(_('Escriba los días, mayores que cero, de "%(novedad)s" en el recibo "%(recibo)s" de %(empleado)s.',
+                                  novedad=tipo.name, recibo=self.name or self.display_name, empleado=self.employee_id.name))
+            anterior = self._ne_dias_registrados(codigo)
+            if anterior == dias:
+                continue
+            entradas = self.input_line_ids.filtered(lambda i: i.input_type_id == tipo)
+            if entradas:
+                entradas[1:].unlink()
+                entradas[0].amount = dias
+            else:
+                self.env['hr.payslip.input'].create({'payslip_id': self.id, 'input_type_id': tipo.id, 'amount': dias, 'name': tipo.name})
+            cambios.append(_('%(novedad)s: %(dias)s (antes: %(anterior)s)', novedad=tipo.name, dias='%g' % dias, anterior='%g' % anterior))
+        if not cambios:
+            return
+        notas = [_('Días registrados para la nómina electrónica. %s.', '; '.join(cambios))]
+        if confirmado:
+            notas.append(_('El recibo está confirmado: no se recalculó la hoja ni cambió el asiento.'))
+        documento = self.l10n_co_ne_documento_id.sudo()
+        if documento and not documento.state and documento.xml_attachment_id:
+            documento.write({'xml_attachment_id': False, 'cune': False, 'etapa': 'draft'})
+            notas.append(_('El XML generado del documento mensual se descartó: genérelo de nuevo.'))
+        if self.l10n_co_ne_state == 'generated':
+            notas.append(_('Regenere el XML de este recibo antes de enviarlo.'))
+        self.message_post(body=' '.join(notas), message_type='notification', subtype_xmlid='mail.mt_note')
 
     def _ne_validar_sin_solape(self):
         """Límite conocido "recibos solapados": dos recibos confirmados del mismo empleado y
@@ -4511,7 +4617,7 @@ class HrPayslip(models.Model):
                     ))
             if vac_compensadas:
                 vacaciones['VacacionesCompensadas'] = [{
-                    'Cantidad': str(self._ne_dias_xml(sum(l.quantity for l in vac_compensadas))),
+                    'Cantidad': str(self._ne_dias_xml(self._ne_cantidad_en_dias(vac_compensadas))),
                     'Pago': '%.2f' % sum(l.total for l in vac_compensadas),
                 }]
             devengados['Vacaciones'] = vacaciones
@@ -4519,9 +4625,7 @@ class HrPayslip(models.Model):
         # Primas
         if 'Primas' in concept_lines:
             devengados['Primas'] = {
-                'Cantidad': str(self._ne_dias_xml(sum(
-                    l.quantity for l in concept_lines['Primas']
-                ))),
+                'Cantidad': str(self._ne_dias_xml(self._ne_cantidad_en_dias(concept_lines['Primas']))),
                 'Pago': '%.2f' % sum(l.total for l in concept_lines['Primas']),
                 'PagoNS': '0.00',
             }

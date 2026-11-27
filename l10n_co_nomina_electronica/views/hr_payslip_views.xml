@@ -13,6 +13,13 @@
 
             <!-- Header buttons -->
             <xpath expr="//header" position="inside">
+                <field name="l10n_co_ne_puede_registrar_dias" invisible="1"/>
+                <button name="action_ne_registrar_dias"
+                        string="Días de prima y vacaciones"
+                        type="object"
+                        class="btn-secondary"
+                        invisible="not l10n_co_ne_puede_registrar_dias"
+                        groups="hr_payroll.group_hr_payroll_user"/>
                 <button name="%(action_hr_payslip_send)d"
                         string="Enviar y Procesar"
                         type="action"
