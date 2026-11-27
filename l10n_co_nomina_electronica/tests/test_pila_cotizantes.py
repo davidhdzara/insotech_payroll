@@ -42,10 +42,13 @@ class TestPilaCotizantesPorEmpleado(TransactionCase):
             'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'name': nombre, 'company_id': self.company.id, 'l10n_co_ne_payment_method': '10',
             'identification_id': documento, 'l10n_co_primer_nombre': nombre, 'l10n_co_primer_apellido': 'Prueba', 'address_id': self.lugar.id,
             'l10n_co_pila_eps_id': self.entidades['eps'].id, 'l10n_co_pila_afp_id': self.entidades['afp'].id, 'l10n_co_pila_ccf_id': self.entidades['ccf'].id})
+        return self._contrato_de(empleado)
+
+    def _contrato_de(self, empleado, salario=SALARIO, desde=date(2024, 1, 1)):
         contrato = self.env['hr.contract'].create({
             'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00', 'l10n_co_pila_centro_trabajo': '1',
-            'name': 'Contrato %s' % nombre, 'employee_id': empleado.id, 'company_id': self.company.id, 'structure_type_id': self.tipo_quincenal.id,
-            'wage': SALARIO, 'date_start': date(2024, 1, 1), 'state': 'open'})
+            'name': 'Contrato %s %s' % (empleado.name, desde), 'employee_id': empleado.id, 'company_id': self.company.id, 'structure_type_id': self.tipo_quincenal.id,
+            'wage': salario, 'date_start': desde, 'state': 'open'})
         contrato.generate_work_entries(date(2026, 9, 1), date(2026, 9, 30))
         return contrato
 
@@ -99,3 +102,28 @@ class TestPilaCotizantesPorEmpleado(TransactionCase):
         for total, campo in (('summary_total_ibc', 'ibc_pension'), ('summary_total_pension', 'cotizacion_pension'), ('summary_total_salud', 'cotizacion_salud')):
             en_el_archivo = sum(float(self._campo(pila_generator_v2._TIPO_02_FIELDS, linea, campo)) for linea in detalle)
             self.assertAlmostEqual(asistente[total], en_el_archivo, delta=2.0, msg=total)
+
+    # ── el recibo del que salen los datos de la línea (H-F1-10) ──────
+    def _con_aumento_en_la_segunda_quincena(self):
+        """Otrosí: el contrato inicial termina el 15 y el nuevo, con 4.000.000, empieza el 16."""
+        anterior = self._contrato('Aumento', '1000000003')
+        anterior.write({'date_end': date(2026, 9, 15), 'state': 'close'})
+        nuevo = self._contrato_de(anterior.employee_id, salario=4000000.0, desde=date(2026, 9, 16))
+        return self._confirmado(anterior, date(2026, 9, 1), date(2026, 9, 15)) | self._confirmado(nuevo, date(2026, 9, 16), date(2026, 9, 30))
+
+    def test_el_recibo_mas_reciente_no_depende_del_orden_en_que_llegan(self):
+        recibos = self._con_aumento_en_la_segunda_quincena()
+        segundo = recibos.filtered(lambda recibo: recibo.date_from == date(2026, 9, 16))
+        asistente = self.env['l10n.co.hr.pila.wizard.v2']
+        for entrada in (recibos, recibos.sorted('date_from'), recibos.sorted('date_from', reverse=True)):
+            self.assertEqual(asistente._ne_recibo_mas_reciente(entrada), segundo)
+
+    def test_la_linea_lleva_los_datos_del_recibo_mas_reciente(self):
+        self._con_aumento_en_la_segunda_quincena()
+        asistente = self.env['l10n.co.hr.pila.wizard.v2'].create({'company_id': self.company.id, 'year': '2026', 'month': '09', 'tipo_planilla': 'E'})
+        asistente.action_validate()
+        self.assertTrue(asistente.validation_ok, asistente.validation_errors)
+        _encabezado, detalle = self._archivo(asistente)
+        self.assertEqual(len(detalle), 1)
+        self.assertEqual(self._campo(pila_generator_v2._TIPO_02_FIELDS, detalle[0], 'salario_basico'), '4000000')
+

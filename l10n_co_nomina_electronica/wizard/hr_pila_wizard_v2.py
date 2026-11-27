@@ -662,8 +662,13 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         cotizantes = []
         for secuencia, employee in enumerate(payslips.mapped('employee_id'), start=1):
             slips = payslips.filtered(lambda s: s.employee_id == employee)
-            cotizantes.append(self._build_cotizante_data(slips[-1], secuencia, slips))
+            cotizantes.append(self._build_cotizante_data(self._ne_recibo_mas_reciente(slips), secuencia, slips))
         return cotizantes
+
+    @api.model
+    def _ne_recibo_mas_reciente(self, recibos):
+        """H-F1-10: la línea PILA toma los datos del cotizante del recibo MÁS RECIENTE del mes (el orden nativo de ``hr.payslip`` es ``date_to desc``: ``[-1]`` daba el más antiguo). Igual que v19."""
+        return recibos.sorted(lambda slip: (slip.date_to, slip.date_from, slip.id))[-1]
 
     # ──────────────────────────────────────────────────────────────────
     # Builder: Datos de cotizante (Tipo 02)
@@ -750,7 +755,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
 
         def _p(code):
             return RuleParameter._get_parameter_from_code(
-                code, payslip.date_from)
+                code, payslip._ne_fecha_parametros())          # en la liquidación «Desde» es el inicio del contrato
 
         # Datos del contrato
         salario = contract.wage or 0
@@ -802,7 +807,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         dias_sln = min(consolidado.dias_sln, dias_sp)
         # La base SLN no es remuneracion devengada: no cuenta para el umbral de exoneracion.
         exonerado = 'S' if self.company_id._is_exonerado_parafiscales(
-            ibc_sp - ibc_sln, payslip.date_from) else 'N'
+            ibc_sp - ibc_sln, payslip._ne_fecha_parametros()) else 'N'
 
         # Cálculos de aportes
         # Sobre el IBC consolidado (lo que realmente se paga en la planilla). Las lineas de
@@ -955,7 +960,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
 
             # Campos finales
             'ibc_otros_parafiscales': ibc_paraf,
-            'horas_laboradas': contract._ne_horas_laboradas_pila(dias_paraf, payslip.date_from),      # H-F2-02: del horario del contrato; vacio si no hay (opcional)
+            'horas_laboradas': contract._ne_horas_laboradas_pila(dias_paraf, payslip._ne_fecha_parametros()),      # H-F2-02: del horario del contrato; vacio si no hay (opcional)
             'fecha_radicacion_exterior': str(
                 getattr(employee, 'l10n_co_pila_fecha_radicacion_ext', '')
                 or '') if getattr(
