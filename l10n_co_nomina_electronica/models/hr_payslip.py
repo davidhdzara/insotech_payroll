@@ -130,6 +130,11 @@ class HrPayslip(models.Model):
         related='l10n_co_ne_documento_id.state', string='Estado DIAN del documento', store=True)
     l10n_co_ne_documento_message = fields.Html(
         related='l10n_co_ne_documento_id.message', string='Motivo DIAN', readonly=True)
+    # CC-08 (.332): ``paid_date`` no sirve como prueba de una fecha elegida (el nativo la llena solo), por eso la fecha manual va aparte.
+    l10n_co_ne_fecha_pago_registrada = fields.Date(
+        string='Fecha de pago registrada (neto 0)', copy=False, readonly=True, tracking=True,
+        help='Solo para un recibo con neto 0 cuando la fecha de pago sale de «Pagos de Contabilidad»: no hay pago que conciliar y la fecha se registra con '
+             '«Registrar fecha de pago». Nunca se llena sola.')
 
     def _ne_historia_solo_habilitacion(self):
         """True si lo que el recibo transmitió fue SOLO del proceso de habilitación (set de pruebas), no un reporte real.
@@ -2539,7 +2544,7 @@ class HrPayslip(models.Model):
 
         La fuente es un ajuste de la COMPAÑÍA, nunca por registro (Ajustes > Nómina, sin valor por defecto):
         'recibo' -> la fecha de pago del recibo (acción Registrar fecha de pago); 'contabilidad' -> las fechas de los pagos
-        conciliados del asiento del recibo. Sin fecha no se supone ninguna: error claro."""
+        conciliados del asiento del recibo (con neto 0 no hay pago: la registrada a mano, CC-08). Sin fecha no se supone ninguna: error claro."""
         self.ensure_one()
         fuente = self.company_id.l10n_co_ne_fuente_fecha_pago
         if not fuente:
@@ -2552,7 +2557,11 @@ class HrPayslip(models.Model):
                     'El recibo "%(recibo)s" (%(empleado)s) no tiene fecha de pago. Regístrela con la acción '
                     '"Registrar fecha de pago".', recibo=self.display_name, empleado=self.employee_id.display_name))
             return [fields.Date.to_date(self.paid_date)]
-        fechas = self._ne_fechas_pagos_contables()
+        fechas = self._ne_fechas_segun_contabilidad()
+        if not fechas and self._ne_neto_en_cero():
+            raise UserError(_(
+                'El recibo "%(recibo)s" (%(empleado)s) tiene neto 0: en Contabilidad no hay un pago del que tomar su fecha. Regístrela con la acción '
+                '"Registrar fecha de pago".', recibo=self.display_name, empleado=self.employee_id.display_name))
         if not fechas:
             raise UserError(_(
                 'El recibo "%(recibo)s" (%(empleado)s) no tiene pagos conciliados en Contabilidad: no se puede '
@@ -2563,6 +2572,26 @@ class HrPayslip(models.Model):
     def _ne_fecha_pago(self):
         """Primera fecha de pago: define el mes del documento (Oficio DIAN 901476: pago o abono, lo primero)."""
         return self._ne_fechas_pago()[0]
+
+    def _ne_neto_en_cero(self):
+        """El recibo tiene línea de neto y vale 0 (las deducciones consumen todo el devengado): Contabilidad no crea línea ni hay pago de 0."""
+        self.ensure_one()
+        neto = self.line_ids.filtered(lambda l: l.code in self._NE_NETO_CODES)
+        return bool(neto) and self.company_id.currency_id.is_zero(sum(neto.mapped('total')))
+
+    def _ne_fecha_se_registra_a_mano(self):
+        """CC-08 (.332): con «Pagos de Contabilidad», solo un recibo de neto 0 registra su fecha de pago a mano."""
+        self.ensure_one()
+        return self.company_id.l10n_co_ne_fuente_fecha_pago == 'contabilidad' and self._ne_neto_en_cero()
+
+    def _ne_fechas_segun_contabilidad(self):
+        """Fechas de pago con «Pagos de Contabilidad»: las de los pagos conciliados del neto y, con neto 0, la registrada con «Registrar fecha de pago» (nunca
+        ``paid_date``, que Odoo llena solo con «Marcar como pagado» o al pagar a terceros). Vacío si no hay ninguna."""
+        self.ensure_one()
+        if self._ne_neto_en_cero():
+            registrada = self.l10n_co_ne_fecha_pago_registrada
+            return [registrada] if registrada else []
+        return self._ne_fechas_pagos_contables()
 
     def _ne_lineas_del_neto(self):
         """Línea(s) del asiento del recibo que son el neto del empleado (E-10, doc 64): las de la cuenta de la regla nativa ``NET`` de
@@ -4552,6 +4581,7 @@ class HrPayslip(models.Model):
         colombia = self._ne_solo_colombia()
         colombia._ne_aplicar_libranzas(revertir=True)
         res = super().action_payslip_draft()
+        colombia.filtered('l10n_co_ne_fecha_pago_registrada').l10n_co_ne_fecha_pago_registrada = False     # CC-08: el recibo se recalcula; la fecha se registra de nuevo
         colombia._ne_refrescar_ibc_mensual()
         return res
 

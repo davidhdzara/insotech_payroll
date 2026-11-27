@@ -821,7 +821,8 @@ class ResCompany(models.Model):
         help='De dónde sale la fecha de pago que decide el mes del documento de nómina electrónica y se reporta '
              'en FechasPagos. "Pagos de Contabilidad": las fechas de los pagos conciliados del asiento del recibo. '
              '"Fecha de pago del recibo": el campo Fecha de pago del recibo, que se llena con la acción Registrar '
-             'pago. Sin valor por defecto: si falta, se pide elegirlo.',
+             'pago. Un recibo con neto 0 no tiene pago en Contabilidad: su fecha se registra con "Registrar fecha de pago". '
+             'Sin valor por defecto: si falta, se pide elegirlo.',
     )
 
     l10n_co_ne_redondeo_dias = fields.Selection(

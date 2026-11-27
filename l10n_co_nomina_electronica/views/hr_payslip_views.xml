@@ -165,6 +165,12 @@
                       invisible="country_code != 'CO'">
                     <!-- Doc 53 §26: una sola pestaña DIAN. Un recibo muestra UN ciclo: el del documento mensual
                          (este grupo) o el del recibo (los grupos siguientes), nunca los dos. -->
+                    <!-- CC-08 (.332): fecha registrada a mano de un recibo de neto 0 con «Pagos de Contabilidad». -->
+                    <group invisible="not l10n_co_ne_fecha_pago_registrada">
+                        <group>
+                            <field name="l10n_co_ne_fecha_pago_registrada"/>
+                        </group>
+                    </group>
                     <group string="Documento DIAN mensual"
                            invisible="not l10n_co_ne_documento_id or l10n_co_ne_state != 'draft'">
                         <field name="l10n_co_ne_documento_id" readonly="1"/>
