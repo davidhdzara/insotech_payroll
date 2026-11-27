@@ -262,6 +262,8 @@ class TestPilaCotizantesPorEmpleado(TransactionCase):
 
     # ── un reembolso resta (.331) ────────────────────────────────────
     def _con_aporte_voluntario(self, contrato):
+        if not contrato.l10n_co_ne_pension_voluntaria_partner_id:          # la deducción calculada exige el contacto del fondo
+            contrato.l10n_co_ne_pension_voluntaria_partner_id = self.env['res.partner'].create({'name': 'Fondo Voluntario Cotizantes', 'l10n_co_entity_type': 'other'})
         recibo = self.env['hr.payslip'].create({
             'name': 'Recibo %s con aporte' % contrato.employee_id.name, 'employee_id': contrato.employee_id.id, 'version_id': contrato.id, 'company_id': self.company.id,
             'struct_id': self.nomina.id, 'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 15),
