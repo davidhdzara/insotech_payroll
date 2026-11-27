@@ -742,9 +742,9 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
 
         # Función auxiliar para obtener valor de línea de nómina
         def get_line(code):
-            """Obtiene el valor absoluto de una línea de nómina por código."""
+            """Valor del concepto en el mes, en positivo: las líneas de todos los recibos se suman CON su signo (un reembolso resta lo del recibo que anula)."""
             lines = payslips.line_ids.filtered(lambda l: l.code == code)
-            return sum(abs(l.total) for l in lines)
+            return abs(sum(lines.mapped('total')))
 
         RuleParameter = self.env['hr.rule.parameter']
 
@@ -1053,8 +1053,9 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         if dias_irl:
             nov['irl'] = int(min(dias_irl, payslip._rule_parameter('l10n_co_dias_mes_comercial', payslip._ne_fecha_parametros())))
 
-        # Aporte voluntario a pensión, en cualquier recibo del mes
-        if any(linea.total for linea in recibos.line_ids if linea.code == 'CO_PENSION_VOL'):
+        # Aporte voluntario a pensión: lo que queda en el mes sumando los recibos con su signo (un aporte reembolsado no se marca)
+        aporte_voluntario = sum(recibos.line_ids.filtered(lambda l: l.code == 'CO_PENSION_VOL').mapped('total'))
+        if not payslip.company_id.currency_id.is_zero(aporte_voluntario):
             nov['avp'] = 'X'
 
         return nov
