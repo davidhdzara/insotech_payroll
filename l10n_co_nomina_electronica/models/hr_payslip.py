@@ -1136,6 +1136,12 @@ class HrPayslip(models.Model):
         # Cada recibo se calcula en el contexto de SU compania: los parametros (hr.rule.parameter,
         # por pais) y env.company salen de la compania del recibo, no de la activa en el selector.
         res = True
+        con_huella._ne_liq_validar_nomina_posterior()   # P0: una nómina no vuelve a pagar días que una liquidación confirmada cerró
+        con_huella._ne_liq_validar_mes()                # P0: la liquidación sabe qué días del mes están pagados, o no se calcula
+        operacion = tuple(con_huella.ids)               # R-2, opción A: los recibos que se calculan juntos (el cierre suma los anteriores del mismo mes)
+        con_huella._ne_rete_validar_secuencias()        # R-2: nada de la base puede calcularse después de la retención
+        con_huella.with_context(ne_rete_operacion=operacion)._ne_rete_validar_pendientes()        # R-2: lo que suma antes del que retiene va confirmado o en este cálculo
+        cifras_retencion = {}
         for company in self.company_id:
             recibos = self.filtered(lambda s, c=company: s.company_id == c).with_company(company)
             # E11 pieza 2b (.288): el gancho de ``hr.salary.rule._compute_rule`` anota en este diccionario lo que SUGIRIÓ cada regla ajustada;
@@ -1150,10 +1156,13 @@ class HrPayslip(models.Model):
             # gancho de ``_compute_rule`` escribía lo sugerido allí y ``_ne_registrar_ajustes`` leía este ``sugeridos`` (vacío), así que el ajuste
             # quedaba «sin línea» aunque sí se aplicaba (N2 «co» de .289: test_02 y test_03). Con el token el contexto nunca coincide con el de otro
             # cálculo y el diccionario que lee el gancho es siempre este.
-            res = super(HrPayslip, recibos.with_context(ne_sugeridos=sugeridos, ne_calculo=uuid.uuid4().hex)).compute_sheet()
+            res = super(HrPayslip, recibos.with_context(
+                ne_sugeridos=sugeridos, ne_retencion=cifras_retencion, ne_rete_operacion=operacion, ne_calculo=uuid.uuid4().hex)).compute_sheet()
             recibos._ne_registrar_ajustes(sugeridos)
             recibos._ne_regenerar_conceptos()
         colombia._ne_validar_terceros_deducciones()
+        con_huella._ne_liq_guardar_pagados()            # P0: los recibos del mes cuyos días resta la liquidación
+        con_huella.with_context(ne_rete_operacion=operacion)._ne_rete_guardar_cifras(cifras_retencion)          # R-2: antes de la huella, que lee lo sumado
         con_huella._ne_guardar_huella()                 # solo si TODO el calculo termino: un error antes de aqui deja la huella anterior
         return res
 
@@ -1169,6 +1178,17 @@ class HrPayslip(models.Model):
         help='Vista de lo calculado: se regenera al final de cada cálculo. Editar una fila cambia su fuente (ajuste o novedad).')
     l10n_co_ne_usa_conceptos = fields.Boolean(
         related='struct_id.l10n_co_ne_conceptos_de_pago', string='La estructura usa «Conceptos de pago»', readonly=True)
+    l10n_co_ne_oculta_pagina_novedades = fields.Boolean(compute='_compute_ne_oculta_pagina_novedades', string='Oculta las pestañas nativas de días y novedades')
+
+    @api.depends('struct_id', 'struct_id.l10n_co_ne_conceptos_de_pago')
+    def _compute_ne_oculta_pagina_novedades(self):
+        """«Conceptos de pago» reemplaza las pestañas nativas de días trabajados y de novedades, salvo en prima y liquidación: allí hay novedades cuyo código no es el de ninguna regla
+        (CO_LIQ_INDEMNIZ, CO_VAC, CO_LIC_REM) y «Conceptos de pago» no las puede agregar."""
+        conservan = self.env['hr.payroll.structure']
+        for xmlid in ('hr_payroll_structure_co_prima', 'hr_payroll_structure_co_liquidacion'):
+            conservan |= self.env.ref('l10n_co_nomina_electronica.%s' % xmlid, raise_if_not_found=False) or conservan
+        for slip in self:
+            slip.l10n_co_ne_oculta_pagina_novedades = slip.l10n_co_ne_usa_conceptos and slip.struct_id not in conservan
     # E11 pieza 4a (.294, doc 74 §3): «Cálculo del salario» por secciones, de SOLO LECTURA (soporte de auditoría); se regenera junto a los conceptos.
     l10n_co_calculo_ids = fields.One2many(
         'l10n.co.payslip.calculo', 'slip_id', string='Cálculo del salario', copy=False,
@@ -1348,6 +1368,12 @@ class HrPayslip(models.Model):
         C-24: la huella del cálculo la escribe solo el cálculo (``_ne_guardar_huella``, que pasa por debajo de este método): cualquier otro ``write`` que la traiga se rechaza."""
         if 'l10n_co_ne_huella_calculo' in vals:
             self._ne_rechazar_huella_externa()
+        if 'l10n_co_ne_liq_pagados_ids' in vals:
+            self._ne_rechazar_pagados_externos()
+        if vals.get('state') in ('draft', 'cancel'):          # P0 y R-2: se mira antes de escribir, mientras el estado es el confirmado
+            confirmados = self._ne_solo_colombia().filtered(lambda r: r.state in ('validated', 'paid'))
+            confirmados._ne_liq_validar_anulacion()
+            self._ne_rete_validar_anulacion(confirmados)          # R-2: lo que sumó la retención de un cierre confirmado no sale del mes
         res = super().write(vals)
         if ('input_line_ids' in vals and self._ne_comandos_cambian_novedades(vals['input_line_ids'])) or (
                 'l10n_co_concepto_ids' in vals and self._ne_comandos_cambian_conceptos(vals['l10n_co_concepto_ids'])):
@@ -1537,10 +1563,15 @@ class HrPayslip(models.Model):
     def _ne_rechazar_huella_externa(self):
         raise UserError(_('La huella del cálculo la escribe solo «Calcular hoja»: no se puede crear ni modificar a mano.'))
 
+    def _ne_rechazar_pagados_externos(self):
+        raise UserError(_('Los recibos ya pagados de una liquidación los escribe solo «Calcular hoja».'))
+
     @api.model_create_multi
     def create(self, vals_list):
         if any('l10n_co_ne_huella_calculo' in vals for vals in vals_list):
             self._ne_rechazar_huella_externa()
+        if any('l10n_co_ne_liq_pagados_ids' in vals for vals in vals_list):
+            self._ne_rechazar_pagados_externos()
         if self.env.context.get('ne_lote_por_tramo'):
             vals_list = self._ne_fechas_por_tramo(vals_list)
         recibos = super().create(vals_list)
@@ -1571,8 +1602,9 @@ class HrPayslip(models.Model):
     def _ne_huella_calculo(self):
         """La huella de los datos ACTUALES del recibo (``services.huella_calculo``). Datos propios del recibo que el cálculo lee: cabecera (con su versión), salario del contrato (D1), tramo
         pagable (solo v19: ``_ne_rango_activo``; una versión nueva o un cambio de fechas del contrato no recalcula el borrador y H-F1-10 corta por versión), novedades, días trabajados (las
-        reglas de básico y de ausencias los leen), ajustes de la empresa y las ausencias VALIDADAS del empleado que se cruzan con el periodo (D2; la cadena de prórrogas anterior al periodo no
-        entra). Fuera: parámetros, reglas, datos del empleado, el resto de la versión y recibos anteriores (se resuelven con «Calcular hoja»)."""
+        reglas de básico y de ausencias los leen), ajustes de la empresa, lo que la retención lee del mes (R-2: si cierra y los recibos que suma) y las ausencias VALIDADAS del empleado que se
+        cruzan con el periodo (D2; la cadena de prórrogas anterior al periodo no entra). Fuera: parámetros, reglas, datos del empleado, el resto de la versión y los demás recibos anteriores (se
+        resuelven con «Calcular hoja»)."""
         self.ensure_one()
         recibo = self.sudo()                 # solo se resumen valores: no depende de las reglas de acceso del usuario que calcula o confirma
         ausencias = self.env['hr.leave'].sudo().search([
@@ -1585,7 +1617,8 @@ class HrPayslip(models.Model):
             entradas=[(e.input_type_id.id, e.amount) for e in recibo.input_line_ids],
             dias=[(d.work_entry_type_id.id, d.number_of_days, d.number_of_hours) for d in recibo.worked_days_line_ids],
             ajustes=[(a.salary_rule_id.id, a.quantity, a.rate, a.amount) for a in recibo.l10n_co_ajuste_ids],
-            ausencias=[(a.id, a.request_date_from, a.request_date_to, a.holiday_status_id.id) for a in ausencias])
+            ausencias=[(a.id, a.request_date_from, a.request_date_to, a.holiday_status_id.id) for a in ausencias],
+            mes=recibo._ne_rete_huella())
 
     def _ne_guardar_huella(self):
         """Guarda la huella de cada recibo. Escribe por debajo de ``HrPayslip.write`` (``super``): así la guarda que rechaza escrituras externas no depende de un contexto que un cliente RPC
@@ -1621,7 +1654,16 @@ class HrPayslip(models.Model):
         colombia._ne_validar_cuenta_neto()
         colombia._ne_validar_pacto_no_salarial()
         colombia._ne_validar_afiliaciones()       # H-F1-06: la afiliación completa, aun sin cuenta contable en las reglas
+        por_confirmar = colombia.filtered(lambda r: r.state == 'draft')
+        por_confirmar._ne_liq_validar_nomina_posterior()          # P0: no se paga dos veces lo que una liquidación confirmada cerró
+        por_confirmar._ne_liq_validar_mes()                       # P0: la liquidación se comprueba otra vez al confirmar
+        por_confirmar._ne_liq_validar_pagados_vigentes()          # P0: los recibos que restó siguen siendo los de hoy
+        por_confirmar._ne_liq_validar_reembolso()                 # P0: no se reembolsa un recibo que una liquidación confirmada restó
         colombia._ne_validar_hoja_al_dia()        # C-24: despues de las anteriores y antes de crear el asiento o cambiar el estado
+        colombia._ne_validar_retencion_conjunto()  # R-2: lo que sumó cada retención del mes va confirmado o en la operación
+        colombia._ne_validar_retencion_incompleta()
+        colombia._ne_validar_neto_no_negativo()
+        colombia._ne_validar_retencion_reembolso()
         res = super(HrPayslip, self).action_payslip_done()
         colombia._ne_aplicar_libranzas()
         colombia._ne_refrescar_ibc_mensual()
@@ -2612,20 +2654,6 @@ class HrPayslip(models.Model):
         return (meses * dias_mes + self._ne_dia_comercial(fecha_fin, dias_mes)
                 - self._ne_dia_comercial(fecha_ini, dias_mes) + 1)
 
-    def _ne_resultado_retefuente(self, categories):
-        """Resultado de la depuracion de la retencion en la fuente de la NOMINA GENERAL (el dict de ``l10n.co.retefuente.uvt.compute_retefuente``): UN solo lugar que arma las entradas -- ingreso bruto
-        (categoria GROSS o el sueldo), IBC de pension y salud (DEV_SAL, o el sueldo por el factor del integral) -- y llama a la depuracion. Lo usan las reglas CO_RETEFUENTE, CO_EXENTO_PENSION_AFC y
-        CO_RETEFUENTE_EXCESO_LIMITE (antes cada una copiaba las entradas: H-F1-02). Sin configuracion de retencion del anio, el error de ``_ne_retefuente_config``."""
-        self.ensure_one()
-        contract = self.version_id                    # v19: la version del recibo (v18: self.contract_id); el sueldo se lee con ``_ne_salario`` (unico punto de lectura)
-        sueldo = self._ne_salario(contract)
-        gross = categories['GROSS'] if categories.get('GROSS') else sueldo
-        ibc = categories.get('DEV_SAL', sueldo)
-        if contract.l10n_co_ne_integral_salary:
-            ibc = sueldo * self._rule_parameter('l10n_co_factor_integral_salary', self.date_from)
-        return self._ne_retefuente_config().compute_retefuente(
-            self.employee_id, gross, ibc, ibc, self.employee_id.company_id, contract=contract, payslip=self)
-
     def _ne_retefuente_config(self):
         """Configuracion de retencion en la fuente (l10n.co.retefuente.uvt) del anio de la
         nomina (anio de _ne_fecha_parametros: la fecha de retiro en la liquidacion). Primero la de
@@ -2796,15 +2824,185 @@ class HrPayslip(models.Model):
         dentro de un mismo mes (el caso normal mensual) el resultado es el período completo
         tal cual. Compartido por _ne_dias_pagables() y _ne_ausencia_calendario() (H-014) --
         ambos deben recortar al mismo tramo para no descontar/pagar fuera de él.
+
+        P0 (doc 111 §1): la liquidación empieza además después del último «Hasta» que la nómina del mes ya pagó (``_ne_liq_pagado_hasta``); sin días por pagar el tramo queda vacío.
         """
         self._ne_validar_inicio_liquidacion()
         periodo_ini = self.date_from
         periodo_fin = self.date_to
         # M1-1 (doc 61): el recorte al mes de date_to es SOLO de la liquidacion (los meses anteriores ya se pagaron en
         # nominas regulares). Un periodo regular que cruza de mes (pagos los 5 y 20, semana que cruza) se paga completo.
-        if self._ne_es_liquidacion() and (periodo_fin.year, periodo_fin.month) != (periodo_ini.year, periodo_ini.month):
-            periodo_ini = max(periodo_ini, periodo_fin.replace(day=1))
+        if self._ne_es_liquidacion():
+            if (periodo_fin.year, periodo_fin.month) != (periodo_ini.year, periodo_ini.month):
+                periodo_ini = max(periodo_ini, periodo_fin.replace(day=1))
+            pagado = self._ne_liq_pagado_hasta()
+            if pagado:
+                periodo_ini = max(periodo_ini, pagado + timedelta(days=1)) if self._ne_liq_dias_pendientes(periodo_fin, pagado) else periodo_fin + timedelta(days=1)
         return periodo_ini, periodo_fin
+
+    # ── P0 (doc 111 §1): la liquidación no vuelve a pagar los días que la nómina del mes ya pagó ─────────
+    # v19: no hay ``contract_id``; el contrato son las versiones del empleado con el mismo ``contract_date_start``. Se lee con ``sudo()``: ese campo es de ``hr.group_hr_manager``.
+    l10n_co_ne_liq_pagados_ids = fields.Many2many(
+        'hr.payslip', 'l10n_co_ne_liq_pagado_rel', 'liquidacion_id', 'pagado_id', string='Recibos del mes ya pagados', readonly=True, copy=False, check_company=True,
+        help='Técnico: los recibos de nómina del mes del retiro cuyos días no volvió a pagar esta liquidación. Mientras la liquidación esté confirmada no se cancelan, no vuelven a borrador ni se reembolsan. '
+             'Solo la escribe el cálculo.')
+
+    def _ne_liq_reembolsado(self, en_operacion=None):
+        """¿Tiene un reembolso confirmado (o que se confirma en ``en_operacion``)? No se usa ``is_refunded``: el nativo lo marca al crear el reembolso, todavía en borrador."""
+        self.ensure_one()
+        ids = set(en_operacion.ids) if en_operacion else set()
+        return any(r.credit_note and (r.state in ('validated', 'paid') or r.id in ids) for r in self.sudo().related_payslip_ids)
+
+    @api.model
+    def _ne_liq_recibos_del_mes(self, version, retiro):
+        """``(sin_confirmar, pagados)``: los recibos de nómina general del contrato de ``version`` que tocan el mes de ``retiro`` o pagan después de él. Pagados = confirmados netos de reembolsos
+        confirmados, por fecha."""
+        version = version.sudo()
+        inicio = version.contract_date_start
+        if not inicio:
+            return self.browse(), self.browse()
+        general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
+        recibos = self.sudo().search([
+            ('employee_id', '=', version.employee_id.id), ('version_id.contract_date_start', '=', inicio), ('company_id', '=', version.company_id.id), ('struct_id', '=', general.id),
+            ('state', '!=', 'cancel'), ('l10n_co_ne_is_adjustment', '=', False), ('date_to', '>=', max(retiro.replace(day=1), inicio))])
+        fin_mes = retiro.replace(day=self._ne_dias_en_mes_calendario(retiro.year, retiro.month))
+        sin_confirmar = recibos.filtered(lambda r: r.state == 'draft' and r.date_from <= fin_mes)
+        pagados = recibos.filtered(lambda r: r.state in ('validated', 'paid') and not r.credit_note and not r._ne_liq_reembolsado())
+        return sin_confirmar, pagados.sorted(lambda r: (r.date_from, r.date_to))
+
+    def _ne_liq_pagados(self):
+        """Los recibos cuyos días resta esta liquidación: en borrador, los pagados de hoy; ya confirmada, los que guardó al calcularse (un recibo posterior no cambia lo que liquidó)."""
+        self.ensure_one()
+        inicio = self.version_id.sudo().contract_date_start if self.version_id else False
+        if not (inicio and self.date_to and self._ne_es_liquidacion()):
+            return self.browse()
+        if self.state == 'draft':
+            return self._ne_liq_recibos_del_mes(self.version_id, self.date_to)[1]
+        general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
+        desde = max(self.date_to.replace(day=1), inicio)
+        return self.sudo().l10n_co_ne_liq_pagados_ids.filtered(
+            lambda r: r.struct_id == general and r.version_id.contract_date_start == inicio and not r.credit_note and r.date_to >= desde)
+
+    def _ne_liq_pagado_hasta(self):
+        """El último «Hasta» que la liquidación da por pagado, o ``False``."""
+        self.ensure_one()
+        return max(self._ne_liq_pagados().mapped('date_to'), default=False)
+
+    def _ne_liq_dias_pendientes(self, fin, pagado_hasta):
+        """Días comerciales del mes de ``fin`` que faltan por pagar. Se cuentan por diferencia: el 31 tras pagar hasta el 30 no vale otro día y el 28 de febrero completa el mes."""
+        self.ensure_one()
+        inicio = max(fin.replace(day=1), self.version_id.sudo().contract_date_start)
+        return max(0, self._ne_contar_dias(inicio, fin) - self._ne_contar_dias(inicio, pagado_hasta))
+
+    def _ne_liq_guardar_pagados(self):
+        """Escribe por debajo de ``HrPayslip.write`` (``super``), como la huella: la guarda que rechaza escrituras externas no depende de un contexto."""
+        for liq in self.filtered(lambda r: not r.credit_note and r._ne_es_liquidacion()):
+            super(HrPayslip, liq).write({'l10n_co_ne_liq_pagados_ids': [Command.set(liq._ne_liq_pagados().ids)]})
+
+    def _ne_liq_validar_pagados_vigentes(self):
+        for liq in self.filtered(lambda r: not r.credit_note and r._ne_es_liquidacion()):
+            if set(liq.sudo().l10n_co_ne_liq_pagados_ids.ids) != set(liq._ne_liq_pagados().ids):
+                raise UserError(_('No se puede confirmar «%(liq)s» de %(empleado)s: cambiaron los recibos de nómina ya pagados del mes del retiro. Use «Calcular hoja» y revise la liquidación.',
+                                  liq=liq._ne_referencia(), empleado=liq.employee_id.name))
+
+    def _ne_liq_validar_mes(self):
+        """Antes de calcular o confirmar una liquidación: nada se adivina. Detiene (nombrando recibos y fechas) un recibo del mes sin confirmar, un pago posterior al retiro, un hueco sin pagar antes del
+        último pago o una prima del semestre ya confirmada (la liquidación la calcula desde el inicio del semestre)."""
+        for liq in self.filtered(lambda r: not r.credit_note and r.version_id and r.date_to and r._ne_es_liquidacion()):
+            version, retiro = liq.version_id.sudo(), liq.date_to
+            inicio = version.contract_date_start
+            if not inicio:
+                continue
+            sin_confirmar, pagados = liq._ne_liq_recibos_del_mes(version, retiro)
+            encabezado = _('No se puede liquidar a %(empleado)s con retiro el %(retiro)s: ', empleado=liq.employee_id.name, retiro=retiro)
+            if sin_confirmar:
+                raise UserError(encabezado + _(
+                    'hay recibos de nómina de ese mes sin confirmar: %s. Confírmelos si ya se pagaron, o cancélelos: la liquidación paga solo los días que faltan.', sin_confirmar._ne_liq_nombres()))
+            posteriores = pagados.filtered(lambda r, retiro=retiro: r.date_to > retiro)
+            if posteriores:
+                raise UserError(encabezado + _(
+                    'hay recibos confirmados que pagan días posteriores al retiro: %s. Reembólselos (y confirme el reembolso) o corrija la fecha de retiro.', posteriores._ne_liq_nombres()))
+            siguiente = max(retiro.replace(day=1), inicio)
+            for recibo in pagados:
+                if recibo.date_from > siguiente:
+                    raise UserError(encabezado + _(
+                        'quedan días sin pagar del %(desde)s al %(hasta)s, antes de %(recibo)s. Páguelos en un recibo de nómina o corrija las fechas.',
+                        desde=siguiente, hasta=recibo.date_from - timedelta(days=1), recibo=recibo._ne_liq_nombres()))
+                siguiente = max(siguiente, recibo.date_to + timedelta(days=1))
+            prima = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_prima')
+            inicio_semestre = date(retiro.year, 1 if retiro.month <= 6 else 7, 1)
+            fin_semestre = date(retiro.year, 6, 30) if retiro.month <= 6 else date(retiro.year, 12, 31)
+            primas = self.sudo().search([
+                ('employee_id', '=', liq.employee_id.id), ('version_id.contract_date_start', '=', inicio), ('struct_id', '=', prima.id), ('state', 'in', ('validated', 'paid')), ('credit_note', '=', False),
+                ('date_to', '>=', inicio_semestre), ('date_to', '<=', fin_semestre)]).filtered(lambda r: not r._ne_liq_reembolsado())
+            if primas:
+                raise UserError(encabezado + _(
+                    'ya hay una prima confirmada de ese semestre: %s. La liquidación calcula la prima desde el inicio del semestre y la pagaría otra vez. Reembólsela (y confirme el reembolso) antes de liquidar.',
+                    primas._ne_liq_nombres()))
+
+    def _ne_liq_confirmadas(self, dominio):
+        """Liquidaciones confirmadas y sin reembolso confirmado que cumplen ``dominio``."""
+        liquidacion = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion')
+        return self.sudo().search(dominio + [('struct_id', '=', liquidacion.id), ('state', 'in', ('validated', 'paid')), ('credit_note', '=', False), ('l10n_co_ne_is_adjustment', '=', False)]).filtered(
+            lambda liq: not liq._ne_liq_reembolsado())
+
+    def _ne_liq_bloquear(self, recibo, liq):
+        raise UserError(_(
+            'No se puede cancelar, volver a borrador ni reembolsar «%(recibo)s» de %(empleado)s: la liquidación %(liq)s, ya confirmada, tuvo en cuenta los días que paga. Primero la liquidación: cancélela '
+            '(o reembólsela y confirme ese reembolso) y vuelva a intentarlo.', recibo=recibo._ne_referencia(), empleado=recibo.employee_id.name, liq=liq._ne_liq_nombres()))
+
+    def _ne_liq_validar_reembolso_de(self, originales):
+        """Reembolsar saca del mes lo que pagó el original: no, si una liquidación confirmada (que no va en la operación) lo restó."""
+        for original in originales:
+            for liq in self._ne_liq_confirmadas([('l10n_co_ne_liq_pagados_ids', 'in', original.ids), ('id', 'not in', originales.ids)]):
+                self._ne_liq_bloquear(original, liq)
+
+    def _ne_liq_validar_reembolso(self):
+        """Otra vez al confirmar el reembolso (pudo crearse antes de confirmar la liquidación)."""
+        reembolsos = self.filtered(lambda r: r.credit_note and r.origin_payslip_id)
+        self._ne_liq_validar_reembolso_de(reembolsos.origin_payslip_id)
+
+    def _action_refund_payslips(self):
+        colombia = self._ne_solo_colombia()
+        self._ne_liq_validar_reembolso_de(colombia)       # cubre «Reembolsar» y «Corregir» nativos
+        self._ne_rete_validar_anulacion(colombia)         # R-2: igual para lo que sumó la retención de un cierre confirmado
+        return super()._action_refund_payslips()
+
+    def _ne_liq_validar_anulacion(self):
+        """``self``: recibos confirmados que pasan a borrador o cancelado (por cualquier camino: cancelar, «Set to Draft» de la lista o del lote). Bloquea (1) un recibo que una liquidación confirmada
+        restó y (2) el reembolso confirmado de un recibo del mes del retiro (anularlo revive el original ya considerado). La liquidación que va en la misma operación no bloquea."""
+        general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
+        for recibo in self.sudo():
+            for liq in self._ne_liq_confirmadas([('l10n_co_ne_liq_pagados_ids', 'in', recibo.ids), ('id', 'not in', self.ids)]):
+                self._ne_liq_bloquear(recibo, liq)
+            original = recibo.origin_payslip_id
+            inicio = original.version_id.contract_date_start if original else False
+            if recibo.credit_note and original.struct_id == general and inicio:
+                for liq in self._ne_liq_confirmadas([('employee_id', '=', original.employee_id.id), ('version_id.contract_date_start', '=', inicio), ('id', 'not in', self.ids),
+                                                     ('date_to', '>=', original.date_from)]):
+                    if original.date_to >= max(liq.date_to.replace(day=1), inicio):
+                        self._ne_liq_bloquear(recibo, liq)
+    def _ne_liq_validar_nomina_posterior(self):
+        """El sentido inverso (P0): con una liquidación confirmada, una nómina general del mismo contrato no se calcula ni se confirma si paga días del mes del retiro hasta la fecha de retiro: ya los pagó
+        la liquidación o un recibo que ella restó."""
+        general = self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
+        for recibo in self.filtered(lambda r: r.struct_id == general and r.version_id and r.date_to and not r.credit_note and not r.l10n_co_ne_is_adjustment):
+            inicio = recibo.version_id.sudo().contract_date_start
+            if not inicio:
+                continue
+            for liq in self._ne_liq_confirmadas([('employee_id', '=', recibo.employee_id.id), ('version_id.contract_date_start', '=', inicio), ('company_id', '=', recibo.company_id.id),
+                                                 ('date_to', '>=', recibo.date_from)]):
+                desde = max(liq.date_to.replace(day=1), inicio)
+                if recibo.date_to >= desde:
+                    raise UserError(_(
+                        'No se puede calcular ni confirmar «%(recibo)s» de %(empleado)s: la liquidación %(liquidacion)s, ya confirmada, cerró los días del %(desde)s al %(hasta)s de ese contrato (los pagó '
+                        'ella o los recibos que restó) y se pagarían dos veces. Primero la liquidación: saque este recibo (o al empleado, si es un lote) o, si hay que corregir, cancele la liquidación '
+                        '(o reembólsela y confirme ese reembolso).',
+                        recibo=recibo._ne_referencia(), empleado=recibo.employee_id.name, liquidacion=liq._ne_liq_nombres(), desde=desde, hasta=liq.date_to))
+
+
+    def _ne_liq_nombres(self):
+        return ', '.join(_('«%(recibo)s» (%(desde)s a %(hasta)s)', recibo=r._ne_referencia(), desde=r.date_from, hasta=r.date_to) for r in self)
 
     def _ne_dias_corridos_en_tramo(self, fecha_ini, fecha_fin, tramo_ini, tramo_fin, dias_mes):
         """Días CALENDARIO corridos (lunes a domingo) de [fecha_ini, fecha_fin] que caen
@@ -2890,6 +3088,9 @@ class HrPayslip(models.Model):
         activo_ini, activo_fin = self._ne_rango_activo()
         if activo_ini > activo_fin:
             return 0
+        pagado = self._ne_liq_pagado_hasta()
+        if pagado:
+            return self._ne_liq_dias_pendientes(activo_fin, pagado)
         return self._ne_contar_dias(activo_ini, activo_fin) + self._ne_ajuste_cambio_en_ultimo_dia(activo_ini)
 
     def _ne_codigos_tipos_no_remunerados(self):
@@ -4049,6 +4250,8 @@ class HrPayslip(models.Model):
         # SueldoTrabajado 0.00. Solo en los recibos que pagan sueldo (nómina y liquidación): un recibo de prima no suma días.
         apoyo = (not sueldo_lines and self.line_ids.filtered(lambda l: l.code in self._NE_BASICO_CODES)
                  and self._ne_regimen_cotizante()['es_aprendiz'])
+        if apoyo and self._ne_liq_pagado_hasta() and self._ne_dias_pagables() <= 0:
+            apoyo = False          # P0: liquidación sin días por pagar (la nómina del mes ya los pagó): sus días van en esos recibos
         if sueldo_lines or apoyo:
             dias_pagables = self._ne_dias_pagables()
             if dias_pagables <= 0:

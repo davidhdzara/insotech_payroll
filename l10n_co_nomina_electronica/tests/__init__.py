@@ -145,6 +145,7 @@ from . import test_envio_ya_procesado
 from . import test_envio_por_recibo_incierto
 from . import test_codigos_dane_xml
 from . import test_habilitacion_set_aceptado
+from . import test_liquidacion_retiro_con_quincena
 from . import test_nota_ajuste
 from . import test_nota_ajuste_crear
 from . import test_nota_ajuste_enviar
@@ -191,3 +192,5 @@ from . import test_aprendiz_prestaciones
 from . import test_aprendiz_apoyo
 from . import test_firma_certificado
 from . import test_lote_por_tramo
+from . import test_liquidacion_aux_y_prestaciones_ajustables   # .328 (porte de v18 6a2e383)
+from . import test_retefuente_mes             # R-2 (doc 108)

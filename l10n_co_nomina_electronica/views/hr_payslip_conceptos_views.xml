@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <!-- E11 pieza 3 (.289, doc 71c §5): pestaña «Conceptos de pago» del recibo. Solo para las estructuras con el interruptor
-         l10n_co_ne_conceptos_de_pago; en las demás las pestañas nativas quedan igual. v19 (decisión 3 de TL, 2026-11-21): v18 ocultaba UNA página
+         l10n_co_ne_conceptos_de_pago; en las demás (y en prima y liquidación, .328) las pestañas nativas quedan igual. v19 (decisión 3 de TL, 2026-11-21): v18 ocultaba UNA página
          `worked_days_input`; v19 trae dos (hr_payroll/views/hr_payslip_views.xml:176 `worked_days`, con name y con su propio `invisible`, y :193 «Salary Inputs»,
          sin name): se ocultan por `//page[@name='worked_days']` (conservando la condición nativa `not use_worked_day_lines`) y por
          `//field[@name='input_line_ids']/ancestor::page`, y la pestaña nueva va después de la de novedades. Selectores por @name o por el campo que
@@ -18,14 +18,15 @@
         <field name="priority">100</field>
         <field name="arch" type="xml">
             <xpath expr="//page[@name='worked_days']" position="attributes">
-                <attribute name="invisible">not use_worked_day_lines or l10n_co_ne_usa_conceptos</attribute>
+                <attribute name="invisible">not use_worked_day_lines or l10n_co_ne_oculta_pagina_novedades</attribute>
             </xpath>
             <xpath expr="//field[@name='input_line_ids']/ancestor::page" position="attributes">
-                <attribute name="invisible">l10n_co_ne_usa_conceptos</attribute>
+                <attribute name="invisible">l10n_co_ne_oculta_pagina_novedades</attribute>
             </xpath>
             <xpath expr="//field[@name='input_line_ids']/ancestor::page" position="after">
                 <page string="Conceptos de pago" name="conceptos_de_pago" invisible="not l10n_co_ne_usa_conceptos">
                     <field name="l10n_co_ne_usa_conceptos" invisible="1"/>
+                    <field name="l10n_co_ne_oculta_pagina_novedades" invisible="1"/>
                     <div class="alert alert-warning mb-2" role="alert" invisible="not l10n_co_ne_aviso_dias">
                         <strong>Revise las entradas de trabajo</strong><br/>
                         <field name="l10n_co_ne_aviso_dias" readonly="1" nolabel="1"/>

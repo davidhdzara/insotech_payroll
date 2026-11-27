@@ -224,7 +224,8 @@ class L10nCoRetefuenteUvt(models.Model):
     # ══════════════════════════════════════════════════════════════════
     def compute_retefuente(self, employee, gross_salary, ibc_pension,
                            ibc_salud, company=None, contract=None,
-                           payslip=None, force_procedure=None):
+                           payslip=None, force_procedure=None, fecha_mes=None,
+                           sin_aportes_voluntarios=False, aporte_salud=None, aporte_pension=None):
         """Calcula la retención en la fuente mensual para un empleado.
 
         Ejecuta la depuración de la base gravable según la normatividad
@@ -255,6 +256,14 @@ class L10nCoRetefuenteUvt(models.Model):
             aplicar SIEMPRE la tabla marginal Art. 383 (fuerza '1') sobre
             el ingreso PROMEDIO al derivar el % fijo semestral, sin
             importar qué procedimiento tenga configurado el año en curso.
+        :param fecha_mes: date (opcional, R-2). Cualquier día del MES al que se asigna la retención (el del
+            «Hasta» del recibo). Con ella el acumulado del techo anual de exentos llega hasta el mes anterior (la
+            retención del mes recalcula el mes completo) y el semestre del Procedimiento 2 se elige con esta fecha.
+        :param sin_aportes_voluntarios: bool (opcional, R-2, prima). Con ``contract`` toma su procedimiento y su
+            porcentaje, sin descontar pensión voluntaria ni AFC (son aportes sobre el salario del mes).
+        :param aporte_salud: float (opcional, R-2). Salud del trabajador EFECTIVAMENTE descontada en los recibos que
+            suman; si se pasa, la depuración resta ese valor y no el calculado sobre ``ibc_salud``.
+        :param aporte_pension: float (opcional, R-2). Igual para la pensión obligatoria del trabajador.
         :returns: dict con el detalle de la depuración y el valor final
             de retención en pesos, con la siguiente estructura::
 
@@ -298,12 +307,14 @@ class L10nCoRetefuenteUvt(models.Model):
         ingreso_bruto = gross_salary
 
         # ── 2. Aportes obligatorios salud empleado ────────────────────
-        aporte_salud = round(
-            ibc_salud * _p('l10n_co_pct_salud_empleado') / 100, 2)
+        if aporte_salud is None:
+            aporte_salud = ibc_salud * _p('l10n_co_pct_salud_empleado') / 100
+        aporte_salud = round(aporte_salud, 2)
 
         # ── 3. Aportes obligatorios pensión empleado ──────────────────
-        aporte_pension = round(
-            ibc_pension * _p('l10n_co_pct_pension_empleado') / 100, 2)
+        if aporte_pension is None:
+            aporte_pension = ibc_pension * _p('l10n_co_pct_pension_empleado') / 100
+        aporte_pension = round(aporte_pension, 2)
 
         # ── 4/5. Pensión voluntaria + AFC — tope COMBINADO del 30%% ──
         #     AUD-05/doc 32: Art. 126-1 ET (mod. Ley 1819/2016) + Art.
@@ -315,8 +326,9 @@ class L10nCoRetefuenteUvt(models.Model):
         #     l10n_co_ne_afc -- la misma fuente que alimenta la deduccion
         #     real del payslip (reglas CO_PENSION_VOL/CO_AFC), no un campo
         #     de empleado desconectado (el que existia antes se eliminó).
-        raw_vol_pension = (contract.l10n_co_ne_pension_voluntaria or 0.0) if contract else 0.0
-        raw_afc = (contract.l10n_co_ne_afc or 0.0) if contract else 0.0
+        con_voluntarios = bool(contract) and not sin_aportes_voluntarios
+        raw_vol_pension = (contract.l10n_co_ne_pension_voluntaria or 0.0) if con_voluntarios else 0.0
+        raw_afc = (contract.l10n_co_ne_afc or 0.0) if con_voluntarios else 0.0
         total_raw_vol_afc = raw_vol_pension + raw_afc
 
         max_combinado_pct = _p('l10n_co_max_vol_pension_afc_combinado_pct')
@@ -342,8 +354,9 @@ class L10nCoRetefuenteUvt(models.Model):
         #     ejemplo/demo), se omite el techo anual.
         if payslip is not None:
             techo_anual = _p('l10n_co_max_vol_pension_afc_anual_uvt') * uvt
-            _year_start = payslip.date_from.replace(month=1, day=1)
-            _dia_anterior = payslip.date_from - timedelta(days=1)
+            _corte = fecha_mes.replace(day=1) if fecha_mes else payslip.date_from
+            _year_start = _corte.replace(month=1, day=1)
+            _dia_anterior = _corte - timedelta(days=1)
             if _dia_anterior >= _year_start:
                 acumulado_previo = payslip._sum(
                     'CO_EXENTO_PENSION_AFC', _year_start, _dia_anterior,
@@ -441,7 +454,7 @@ class L10nCoRetefuenteUvt(models.Model):
             # no se ha calculado el semestre todavia.
             pct = self.percentage_procedure2
             if contract:
-                _ref = payslip.date_from if payslip else fields.Date.context_today(self)
+                _ref = fecha_mes or (payslip.date_from if payslip else fields.Date.context_today(self))
                 semester_start = _ref.replace(month=1, day=1) if _ref.month <= 6 else _ref.replace(month=7, day=1)
                 proc2 = self.env['l10n.co.retefuente.procedure2'].search([
                     ('employee_id', '=', employee.id),   # v19 (R3): el histórico es por empleado

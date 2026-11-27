@@ -24,12 +24,13 @@ class TestIncapacidadBaseIbc(base.TestIncapacidadTramoProrroga):
     def _julio(self, empleado, contrato, ibc):
         return crear_recibo_previo(self.env, empleado, contrato, self.nomina, date(2026, 7, 1), date(2026, 7, 31), ibc)
 
-    def _recibo_inc(self, empleado, contrato, desde, hasta):
+    def _recibo_inc(self, empleado, contrato, desde, hasta, calcular=True):
         contrato.generate_work_entries(date(2026, 1, 1), date(2026, 9, 30))
         recibo = self.env['hr.payslip'].create({
             'name': 'Recibo %s' % desde, 'employee_id': empleado.id, 'version_id': contrato.id, 'company_id': self.company.id,
             'struct_id': self.nomina.id, 'date_from': desde, 'date_to': hasta})
-        recibo.compute_sheet()
+        if calcular:
+            recibo.compute_sheet()
         return recibo
 
     def _pago_inc(self, recibo):
@@ -88,8 +89,9 @@ class TestIncapacidadBaseIbc(base.TestIncapacidadTramoProrroga):
             version.generate_work_entries(date(2026, 9, 1), date(2026, 9, 30))
         inicial = self._incapacidad(empleado, date(2026, 9, 1), date(2026, 9, 12))
         self._incapacidad(empleado, date(2026, 9, 13), date(2026, 9, 30), prorroga_de=inicial)
-        recibo_a = self._recibo_inc(empleado, version_a, date(2026, 9, 1), date(2026, 9, 15))
-        recibo_b = self._recibo_inc(empleado, version_b, date(2026, 9, 16), date(2026, 9, 30))
+        recibo_a = self._recibo_inc(empleado, version_a, date(2026, 9, 1), date(2026, 9, 15), calcular=False)
+        recibo_b = self._recibo_inc(empleado, version_b, date(2026, 9, 16), date(2026, 9, 30), calcular=False)
+        (recibo_a | recibo_b).compute_sheet()        # R-2, mes partido: el que cierra el mes (B) se calcula junto con el tramo anterior (o con ese ya confirmado)
         self.assertEqual((recibo_a.version_id, recibo_b.version_id), (version_a, version_b))
         return recibo_a, recibo_b
 
