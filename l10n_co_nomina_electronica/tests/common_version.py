@@ -63,7 +63,7 @@ def crear_aumento(env, empleado, version_a, desde, sueldo):
     valores = {campo: valor for campo, valor in VALORES_COLOMBIA.items() if campo in env['hr.version']._fields}
     version_b = env['hr.version'].create(dict(
         valores, employee_id=empleado.id, date_version=desde, contract_date_start=version_a.contract_date_start, wage=sueldo,
-        structure_type_id=version_a.structure_type_id.id))
+        structure_type_id=version_a.structure_type_id.id, company_id=empleado.company_id.id))      # Q-15: la versión es de la compañía del empleado
     assert empleado._get_version(desde - timedelta(days=1)) == version_a, 'Premisa: antes del aumento rige la versión A'
     assert empleado._get_version(desde) == version_b, 'Premisa: desde el aumento rige la versión B'
     return version_b

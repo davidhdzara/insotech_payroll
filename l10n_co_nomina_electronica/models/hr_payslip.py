@@ -698,6 +698,18 @@ class HrPayslip(models.Model):
                     'mensual (acción "Enviar y Procesar" desde el documento), no por recibo. El recibo "%(recibo)s" no '
                     'se transmite por su cuenta.', compania=slip.company_id.name, recibo=slip.display_name))
 
+    @api.constrains('version_id', 'employee_id', 'company_id')
+    def _check_ne_contrato_del_empleado(self):
+        """Q-15 (.332): el nativo solo filtra la versión del contrato en la pantalla; por RPC, importación o código se podía liquidar un recibo colombiano con la versión de otro empleado o de otra
+        compañía (sus reglas leerían ese sueldo)."""
+        for recibo in self._ne_solo_colombia():
+            version = recibo.version_id.sudo()      # la versión ajena puede ser de una compañía que el usuario no ve
+            if version and (version.employee_id != recibo.employee_id or version.company_id != recibo.company_id):
+                raise ValidationError(_(
+                    'El recibo "%(recibo)s" de %(empleado)s (compañía "%(compania)s") no puede usar el registro del contrato de %(titular)s vigente desde el %(desde)s (compañía "%(otra)s"): es de otro '
+                    'empleado o de otra compañía. Elija un registro del contrato de %(empleado)s en esa compañía.', recibo=recibo.name or recibo.display_name, empleado=recibo.employee_id.name,
+                    compania=recibo.company_id.name, titular=version.employee_id.name, desde=version.date_version, otra=version.company_id.name))
+
     @api.constrains('l10n_co_ne_documento_id', 'company_id', 'employee_id', 'credit_note')
     def _check_documento_coherente(self):
         """Un recibo del documento mensual es de la misma compañía y empleado, y no es nota de crédito. Los

@@ -248,7 +248,7 @@ class TestAusenciaPorFecha(TestDiasPorAsistencia):
         valores_b = {campo: valor for campo, valor in VALORES_COLOMBIA.items() if campo in self.env['hr.version']._fields}
         version_b = self.env['hr.version'].create(dict(
             valores_b, employee_id=empleado.id, date_version=date(2026, 9, 9), contract_date_start=version_a.contract_date_start, wage=version_a.wage,
-            structure_type_id=self.tipo.id, resource_calendar_id=self.calendario.id))
+            structure_type_id=self.tipo.id, resource_calendar_id=self.calendario.id, company_id=empleado.company_id.id))
         self.assertEqual(empleado._get_version(date(2026, 9, 8)), version_a, 'Premisa: el 8 es de la versión A')
         self.assertEqual(empleado._get_version(date(2026, 9, 9)), version_b, 'Premisa: el 9 es de la versión B')
         recibo = self.env['hr.payslip'].create({
