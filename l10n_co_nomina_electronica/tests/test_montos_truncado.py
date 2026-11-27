@@ -22,7 +22,7 @@ class TestMontosTruncado(BaseCase):
         generador = random.Random(332)
         for _i in range(20000):
             centavos = generador.randrange(0, 10 ** 12)
-            self.assertEqual(montos.format_amount(centavos / 100), '%d.%02d' % divmod(centavos, 100))
+            self.assertEqual(montos.format_amount(centavos / 100), '%d.%02d' % (centavos // 100, centavos % 100))
 
     def test_el_xml_y_el_cune_usan_la_misma_funcion(self):
         self.assertIs(dian_utils.format_amount, montos.format_amount)
