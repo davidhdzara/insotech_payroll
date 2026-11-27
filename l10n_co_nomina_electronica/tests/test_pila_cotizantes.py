@@ -258,3 +258,41 @@ class TestPilaCotizantesPorEmpleado(TransactionCase):
         _encabezado, detalle = self._archivo(asistente)
         irl = {self._campo(pila_generator_v2._TIPO_02_FIELDS, linea, 'numero_documento'): self._campo(pila_generator_v2._TIPO_02_FIELDS, linea, 'nov_irl') for linea in detalle}
         self.assertEqual(irl, {'1000000016': '2', '1000000017': '0'})
+
+    # ── un reembolso resta (.331) ────────────────────────────────────
+    def _con_aporte_voluntario(self, contrato):
+        recibo = self.env['hr.payslip'].create({
+            'name': 'Recibo %s con aporte' % contrato.employee_id.name, 'employee_id': contrato.employee_id.id, 'contract_id': contrato.id, 'company_id': self.company.id,
+            'struct_id': self.nomina.id, 'date_from': date(2026, 9, 1), 'date_to': date(2026, 9, 15),
+            'input_line_ids': [Command.create({'input_type_id': self.env.ref('l10n_co_nomina_electronica.input_co_pension_vol').id, 'code': 'CO_PENSION_VOL', 'amount': 200000.0})]})
+        recibo.compute_sheet()
+        recibo.state = 'done'
+        return recibo
+
+    def test_tras_reembolsar_y_rehacer_la_pila_lleva_el_fsp_y_el_aporte_voluntario_una_sola_vez(self):
+        """16.000.000 al mes: la quincena (8.000.000) pasa de 4 SMMLV y descuenta FSP 1 % = 80.000. Original + reembolso + recibo rehecho: queda uno."""
+        contrato = self._contrato('Reembolso', '1000000018')
+        contrato.wage = 16000000.0
+        original = self._con_aporte_voluntario(contrato)
+        original.refund_sheet()
+        reembolso = self.env['hr.payslip'].search([('contract_id', '=', contrato.id), ('credit_note', '=', True)])
+        self.assertEqual(len(reembolso), 1)
+        reembolso.state = 'done'
+        rehecho = self._con_aporte_voluntario(contrato)
+        self.assertEqual([sum(r.line_ids.filtered(lambda l: l.code == 'CO_FSP').mapped('total')) for r in (original, reembolso, rehecho)], [-80000.0, 80000.0, -80000.0], 'Premisa')
+        asistente = self.env['l10n.co.hr.pila.wizard.v2'].create({'company_id': self.company.id, 'year': '2026', 'month': '09', 'tipo_planilla': 'E'})
+        asistente.action_validate()
+        self.assertTrue(asistente.validation_ok, asistente.validation_errors)
+        _encabezado, detalle = self._archivo(asistente)
+        self.assertEqual(len(detalle), 1)
+        valores = {campo: self._campo(pila_generator_v2._TIPO_02_FIELDS, detalle[0], campo) for campo in ('aporte_fsp_subcuenta', 'avp_afiliado', 'total_cotizacion_pension', 'nov_avp')}
+        self.assertEqual(valores, {'aporte_fsp_subcuenta': '80000', 'avp_afiliado': '200000', 'total_cotizacion_pension': '1560000', 'nov_avp': 'X'})
+
+    def test_un_aporte_voluntario_reembolsado_no_se_marca(self):
+        primera, segunda = self._quincenas(self._contrato('Devuelto', '1000000019'))
+        regla = self.env['hr.salary.rule'].search([('struct_id', '=', self.nomina.id), ('code', '=', 'CO_PENSION_VOL')], limit=1)
+        for recibo, valor in ((primera, -100000.0), (segunda, 100000.0)):
+            recibo.write({'line_ids': [Command.create({
+                'name': regla.name, 'code': regla.code, 'salary_rule_id': regla.id, 'contract_id': recibo.contract_id.id, 'employee_id': recibo.employee_id.id,
+                'sequence': regla.sequence, 'amount': valor, 'quantity': 1.0, 'rate': 100.0, 'total': valor})]})
+        self.assertEqual(self._novedades(segunda, primera | segunda)['avp'], '')
