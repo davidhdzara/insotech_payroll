@@ -324,8 +324,8 @@ class TestAprendizAportes(pension.TestPensionNoExigida):
     def test_aviso_si_la_ficha_del_aprendiz_dice_otro_tipo_y_nada_si_coincide(self):
         empleado, recibo = self._empleado_y_recibo('Aviso TT', tipo='19', tipo_contrato='4', eps=self.eps, ccf=self.ccf)
         self.assertIn('Aviso TT', recibo.l10n_co_ne_aviso_tipo_trabajador)
-        self.assertIn('12 - Aprendiz del SENA en Etapa Lectiva', recibo.l10n_co_ne_aviso_tipo_trabajador)
-        self.assertIn('01 - Trabajador Dependiente', recibo.l10n_co_ne_aviso_tipo_trabajador)
+        self.assertIn('12 - Aprendices del SENA en etapa lectiva', recibo.l10n_co_ne_aviso_tipo_trabajador)
+        self.assertIn('01 - Dependiente', recibo.l10n_co_ne_aviso_tipo_trabajador)
         empleado.l10n_co_ne_worker_type = '12'
         self.assertFalse(recibo.l10n_co_ne_aviso_tipo_trabajador)
         _e, normal = self._empleado_y_recibo('Normal TT', tipo='01', tipo_contrato='2', eps=self.eps, afp=self.afp, ccf=self.ccf)
