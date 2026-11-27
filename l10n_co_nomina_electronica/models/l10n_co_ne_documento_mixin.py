@@ -1343,6 +1343,8 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
                 'No se puede generar el XML de %(empleado)s: ni su contrato ni el tipo de estructura tienen «Calendario de pago», y de ahí sale el '
                 '«Periodo de Nómina». Elíjalo en la ficha del empleado, pestaña «Nómina», o en el tipo de estructura.',
                 empleado=employee.name))
+
+    def _validate_company_ne_config(self, company):
         """Envoltorio: la validación vive en ``res.company._l10n_co_ne_validar_config()`` (doc 53
         §23.13); se conserva el nombre para el ciclo por recibo, la habilitación y las pruebas."""
         return company._l10n_co_ne_validar_config()
