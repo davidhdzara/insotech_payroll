@@ -227,7 +227,7 @@ class TestDocumentoGenerarReal(TransactionCase):
                                     if l.salary_rule_id.l10n_co_ne_dian_concept and l.salary_rule_id.l10n_co_ne_is_deduction == (seccion == 'Deducciones')), Decimal('0'))
                     self.assertEqual(Decimal(raiz.find('{*}%s' % total).text), esperado.quantize(Decimal('0.01')), seccion)
                 comisiones = [Decimal(e.text) for e in raiz.findall('.//{*}Comisiones/{*}Comision')]
-                self.assertEqual(comisiones, [abs(Decimal(str(l.total))).quantize(Decimal('0.01')) for r in recibos for l in r.line_ids if l.salary_rule_id.code == 'T_LISTA_COMISION'])
+                self.assertEqual(comisiones, [abs(Decimal(str(l.total))).quantize(Decimal('0.01')) for r in recibos for l in r.line_ids if l.salary_rule_id.code == 'T_LISTA_COMISION' and l.total])          # sin las de valor cero de la vuelta anterior: el XML no las lleva
 
     def test_el_documento_de_un_aprendiz_es_valido_con_basico_en_cero_y_el_apoyo(self):
         """H-F1-09 (doc 88, D1): el apoyo es el sueldo del contrato. El XML lleva ``Basico`` (obligatorio en el XSD) con los dias y SueldoTrabajado 0.00, y ``ApoyoSost`` con el valor; antes, con sueldo 0 y
