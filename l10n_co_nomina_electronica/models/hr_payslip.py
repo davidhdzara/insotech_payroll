@@ -38,7 +38,8 @@ from odoo.exceptions import UserError, ValidationError
 from odoo.tools import float_is_zero, float_round
 from odoo.tools.misc import format_amount, format_date
 
-from .hr_employee import NE_EMPLEADO_GRUPO_AFILIACION, NE_EMPLEADO_PESTANA, NE_UBICACION_AJUSTES_PILA
+from .hr_employee import (NE_EMPLEADO_GRUPO_AFILIACION, NE_EMPLEADO_PESTANA, NE_SUBTIPOS_TRABAJADOR_DIAN, NE_TIPOS_TRABAJADOR_DIAN,
+                          NE_UBICACION_AJUSTES_PILA)
 
 from ..services import (
     cune as cune_service,
@@ -2467,8 +2468,8 @@ class HrPayslip(models.Model):
         }
 
     # Anexo Técnico V1.0, tablas 5.5.3 (TipoTrabajador) y 5.5.4 (SubTipoTrabajador): los códigos que el XML admite.
-    _NE_TIPOS_TRABAJADOR_DIAN = frozenset(('01', '02', '04', '12', '18', '19', '21', '22', '23', '30', '31', '47', '51', '54', '56', '58'))
-    _NE_SUBTIPOS_TRABAJADOR_DIAN = frozenset(('00', '01'))
+    _NE_TIPOS_TRABAJADOR_DIAN = frozenset(dict(NE_TIPOS_TRABAJADOR_DIAN))
+    _NE_SUBTIPOS_TRABAJADOR_DIAN = frozenset(dict(NE_SUBTIPOS_TRABAJADOR_DIAN))
 
     def _ne_codigo_del_contrato_para_el_xml(self, campo, admitidos):
         """H-F3-04 (doc 117): tipo o subtipo de trabajador desde el contrato DEL RECIBO (el mismo dato del cálculo y de la PILA; el contrato le da la fecha). Sin
