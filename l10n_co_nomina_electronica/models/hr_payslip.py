@@ -1414,11 +1414,29 @@ class HrPayslip(models.Model):
             confirmados = self._ne_solo_colombia().filtered(lambda r: r.state in ('validated', 'paid'))
             confirmados._ne_liq_validar_anulacion()
             self._ne_rete_validar_anulacion(confirmados)          # R-2: lo que sumó la retención de un cierre confirmado no sale del mes
+        # Clase A (.335): un recibo de un documento mensual que pierde un pago (anular, borrador, cancelar, lote o cualquier otra escritura) no puede dejar enviable un XML que lo lleva.
+        vigilados = self.filtered('l10n_co_ne_documento_id') if self._NE_CAMPOS_DEL_PAGO.intersection(vals) else self.browse()
+        antes = {recibo.id: recibo.sudo()._ne_pagos_vigentes() for recibo in vigilados}
         res = super().write(vals)
+        perdieron = vigilados.filtered(lambda r: not antes[r.id] <= r.sudo()._ne_pagos_vigentes())
+        if perdieron:
+            self.env['l10n.co.ne.documento']._ne_tras_perder_un_pago(perdieron)
         if ('input_line_ids' in vals and self._ne_comandos_cambian_novedades(vals['input_line_ids'])) or (
                 'l10n_co_concepto_ids' in vals and self._ne_comandos_cambian_conceptos(vals['l10n_co_concepto_ids'])):
             self._ne_recalcular_hoja_por_novedad()
         return res
+
+    _NE_CAMPOS_DEL_PAGO = frozenset({'state', 'paid_date', 'l10n_co_ne_fecha_pago_registrada'})
+
+    def _ne_pagos_vigentes(self):
+        """Fechas de pago con las que este recibo puede ir en un XML: confirmado o pagado y con fecha según la fuente de la compañía. Vacío si no."""
+        self.ensure_one()
+        if self.state not in ('validated', 'paid'):
+            return frozenset()
+        try:
+            return frozenset(self._ne_fechas_pago())
+        except UserError:
+            return frozenset()
 
     def _ne_recalcular_hoja_por_novedad(self):
         """Recalcula la hoja de los recibos cuya novedad (``hr.payslip.input``) se creó, cambió o borró (.283, doc 68 §14; orden de David).

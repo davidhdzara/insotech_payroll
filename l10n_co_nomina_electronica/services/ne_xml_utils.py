@@ -35,3 +35,10 @@ def cunenov_de_xml(xml_bytes):
     raiz = etree.fromstring(xml_bytes)
     novedad = raiz.find('{*}Novedad')
     return novedad.get('CUNENov', '') if novedad is not None else ''
+
+
+def fechas_de_pago_de_xml(xml_bytes):
+    """Las ``FechaPago`` de un XML de nómina (``FechasPagos``) como textos 'AAAA-MM-DD'; vacío si no lleva ninguna.
+
+    Lanza ``lxml.etree.XMLSyntaxError`` si el XML no se puede leer: quien llama decide cómo tratarlo."""
+    return {(nodo.text or '').strip() for nodo in etree.fromstring(xml_bytes).iter('{*}FechaPago')} - {''}
