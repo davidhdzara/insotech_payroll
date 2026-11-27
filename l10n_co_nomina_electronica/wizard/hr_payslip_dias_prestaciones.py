@@ -3,7 +3,7 @@
 """Días de prima y de vacaciones compensadas (Q-19, doc 116, .332): la nómina electrónica pide los días y la novedad en pesos no los lleva.
 
 «Conceptos de pago» solo ofrece novedades con regla y estas no la tienen (no cambian valores), por eso se registran aquí: en un recibo en borrador o confirmado
-que aún no se ha reportado. En uno confirmado no se recalcula nada: ni líneas, ni neto, ni asiento (``HrPayslip._ne_registrar_dias``)."""
+que aún no se ha reportado, o en uno reportado con una nota de ajuste «Reemplazar» sin enviar (.335). En uno confirmado no se recalcula nada: ni líneas, ni neto, ni asiento (``HrPayslip._ne_registrar_dias``)."""
 
 from odoo import api, fields, models
 

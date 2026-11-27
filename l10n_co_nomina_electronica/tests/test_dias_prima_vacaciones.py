@@ -4,7 +4,7 @@
 Los días van en una novedad aparte, sin regla: se registran con «Días de prima y vacaciones» en un recibo en borrador o confirmado sin reportar, sin cambiar valores."""
 
 import base64
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import patch
 
 from odoo.exceptions import UserError
@@ -142,6 +142,48 @@ class TestDiasDePrimaYVacacionesCompensadas(TransactionCase):
         with self.assertRaisesRegex(UserError, 'aún no se haya reportado'):
             self._registrar(recibo)
         self.assertFalse(self._recibo(novedades=(('input_co_bonif_nosal', 100000.0),)).l10n_co_ne_puede_registrar_dias)
+
+    def _intento(self, documento, estado):
+        self.env['l10n.co.ne.documento.intento'].create({
+            'documento_id': documento.id, 'state': estado, 'identifier': documento.cune, 'numero': documento.consecutive, 'datetime': datetime(2026, 10, 2)})
+
+    def _documento_aceptado(self, recibo):
+        documento = self.env['l10n.co.ne.documento'].create({
+            'company_id': self.company.id, 'employee_id': recibo.employee_id.id, 'contract_id': recibo.contract_id.id, 'period': date(2026, 9, 1)})
+        recibo.l10n_co_ne_documento_id = documento
+        documento.write({'cune': 'a' * 96, 'consecutive': 'NE%08d' % recibo.id})
+        self._intento(documento, 'invoice_accepted')
+        self.assertEqual(documento.state, 'invoice_accepted', 'Premisa')
+        return documento
+
+    def test_reportado_con_nota_reemplazar_sin_enviar_se_registran_y_se_descarta_su_xml(self):
+        """.335: el documento aceptado se corrige con una nota «Reemplazar»; mientras no se haya enviado se registran los días que faltaban."""
+        recibo = self._recibo()
+        recibo.state = 'done'
+        documento = self._documento_aceptado(recibo)
+        self.assertFalse(recibo.l10n_co_ne_puede_registrar_dias)
+        nota = documento.action_crear_ajuste('1')
+        adjunto = self.env['ir.attachment'].create({'name': 'na.xml', 'datas': base64.b64encode(b'<x/>'), 'res_model': nota._name, 'res_id': nota.id})
+        nota.write({'xml_attachment_id': adjunto.id, 'cune': 'b' * 96, 'consecutive': 'NA%08d' % recibo.id, 'etapa': 'ready'})
+        recibo.invalidate_recordset(['l10n_co_ne_puede_registrar_dias'])
+        self.assertTrue(recibo.l10n_co_ne_puede_registrar_dias)
+        self._registrar(recibo)
+        self.assertEqual(self._cantidades_del_xml(recibo), ('180', '5'))
+        self.assertEqual((bool(nota.xml_attachment_id), nota.etapa, documento.state), (False, 'draft', 'invoice_accepted'))
+        self.assertTrue(any('nota de ajuste se descartó' in (m.body or '') for m in recibo.message_ids))
+        nota.cune = 'b' * 96
+        self._intento(nota, 'invoice_pending')                      # ya viajó: no se registran más
+        recibo.invalidate_recordset(['l10n_co_ne_puede_registrar_dias'])
+        self.assertFalse(recibo.l10n_co_ne_puede_registrar_dias)
+        with self.assertRaisesRegex(UserError, 'Reemplazar'):
+            self._registrar(recibo, prima=90.0)
+
+    def test_reportado_con_nota_eliminar_no_se_registra(self):
+        recibo = self._recibo()
+        recibo.state = 'done'
+        self._documento_aceptado(recibo).action_crear_ajuste('2')
+        recibo.invalidate_recordset(['l10n_co_ne_puede_registrar_dias'])
+        self.assertFalse(recibo.l10n_co_ne_puede_registrar_dias)
 
     def test_los_dias_deben_ser_mayores_que_cero(self):
         recibo = self._recibo()

@@ -1682,15 +1682,30 @@ class HrPayslip(models.Model):
             return True
         return self.l10n_co_ne_state in ('sent', 'uncertain', 'accepted', 'eliminated')
 
+    def _ne_nota_por_corregir(self):
+        """Nota «Reemplazar» de la cadena del documento del recibo cuyo XML todavía se puede generar (sin enviar o rechazada). Su XML se arma con este recibo: mientras
+        exista, sus días se pueden registrar aunque el recibo ya se haya reportado (.335)."""
+        self.ensure_one()
+        documento = self.l10n_co_ne_documento_id.sudo()
+        if not documento:
+            return documento
+        return documento._ne_cadena().filtered(
+            lambda d: d.is_adjustment and d.adjustment_type == '1' and d.state in (False, 'invoice_rejected')
+            and not d.is_being_sent and not d.incierto and not d.eliminado)[:1]
+
+    def _ne_puede_registrar_dias(self):
+        self.ensure_one()
+        return bool(
+            self.state in ('draft', 'verify', 'done', 'paid') and not self.credit_note and self.company_id and self._ne_solo_colombia()
+            and self._ne_novedades_que_piden_dias() and (not self._ne_ya_reportado() or self._ne_nota_por_corregir()))
+
     l10n_co_ne_puede_registrar_dias = fields.Boolean(compute='_compute_ne_puede_registrar_dias')
 
     @api.depends('state', 'credit_note', 'company_id', 'struct_id', 'line_ids.total', 'input_line_ids.amount', 'input_line_ids.input_type_id', 'l10n_co_ne_state',
                  'l10n_co_ne_documento_id.state')
     def _compute_ne_puede_registrar_dias(self):
         for recibo in self:
-            recibo.l10n_co_ne_puede_registrar_dias = bool(
-                recibo.state in ('draft', 'verify', 'done', 'paid') and not recibo.credit_note and recibo.company_id and recibo._ne_solo_colombia()
-                and recibo._ne_novedades_que_piden_dias() and not recibo._ne_ya_reportado())
+            recibo.l10n_co_ne_puede_registrar_dias = recibo._ne_puede_registrar_dias()
 
     def action_ne_registrar_dias(self):
         self.ensure_one()
@@ -1702,10 +1717,11 @@ class HrPayslip(models.Model):
         no recalcula nada (el recálculo solo corre en borrador o en espera): líneas, neto y asiento quedan igual. Un XML mensual generado y sin enviar se
         descarta para que no salga con la cantidad vieja."""
         self.ensure_one()
-        if not self.l10n_co_ne_puede_registrar_dias:
+        if not self._ne_puede_registrar_dias():
             raise UserError(_(
                 'Solo se registran días en un recibo en borrador o confirmado, que pague prima o vacaciones compensadas en pesos y que aún no se haya reportado a '
-                'la DIAN. Recibo "%(recibo)s" de %(empleado)s.', recibo=self.name or self.display_name, empleado=self.employee_id.name))
+                'la DIAN. Si ya se reportó, cree primero la nota de ajuste "Reemplazar" en su documento mensual. Recibo "%(recibo)s" de %(empleado)s.',
+                recibo=self.name or self.display_name, empleado=self.employee_id.name))
         confirmado = self.state in ('done', 'paid')
         cambios = []
         for codigo in sorted(self._ne_novedades_que_piden_dias()):
@@ -1729,10 +1745,11 @@ class HrPayslip(models.Model):
         notas = [_('Días registrados para la nómina electrónica. %s.', '; '.join(cambios))]
         if confirmado:
             notas.append(_('El recibo está confirmado: no se recalculó la hoja ni cambió el asiento.'))
-        documento = self.l10n_co_ne_documento_id.sudo()
-        if documento and not documento.state and documento.xml_attachment_id:
-            documento.write({'xml_attachment_id': False, 'cune': False, 'etapa': 'draft'})
-            notas.append(_('El XML generado del documento mensual se descartó: genérelo de nuevo.'))
+        for documento in self.l10n_co_ne_documento_id.sudo() | self._ne_nota_por_corregir():
+            if not documento.state and documento.xml_attachment_id:
+                documento.write({'xml_attachment_id': False, 'cune': False, 'etapa': 'draft'})
+                notas.append(_('El XML generado de la nota de ajuste se descartó: genérelo de nuevo.') if documento.is_adjustment
+                             else _('El XML generado del documento mensual se descartó: genérelo de nuevo.'))
         if self.l10n_co_ne_state == 'generated':
             notas.append(_('Regenere el XML de este recibo antes de enviarlo.'))
         self.message_post(body=' '.join(notas), message_type='notification', subtype_xmlid='mail.mt_note')
