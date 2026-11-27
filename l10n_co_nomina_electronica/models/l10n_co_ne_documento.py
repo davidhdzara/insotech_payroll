@@ -295,8 +295,8 @@ class L10nCoNeDocumento(models.Model):
             recibos = self.env['hr.payslip'].search(dominio + [('paid_date', '>=', period), ('paid_date', '<=', fin)])
         else:
             candidatos = self.env['hr.payslip'].search(dominio)
-            recibos = candidatos.filtered(lambda s: s._ne_fechas_pagos_contables()
-                                          and period <= s._ne_fechas_pagos_contables()[0] <= fin)
+            recibos = candidatos.filtered(lambda s: s._ne_fechas_segun_contabilidad()
+                                          and period <= s._ne_fechas_segun_contabilidad()[0] <= fin)
         return recibos.filtered(lambda s: not self._ne_motivo_no_entra(s))
 
     @api.model
