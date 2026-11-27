@@ -373,17 +373,8 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
                     % emp_name
                 )
 
-        # Construir datos de cotizantes para el resumen
-        periodo_str = '%s-%s' % (self.year, self.month)
-        cotizantes_data = []
-        seq = 1
-        for payslip in payslips:
-            cotizante = self._build_cotizante_data(payslip, seq)
-            cotizantes_data.append(cotizante)
-            seq += 1
-
-        # Calcular resumen
-        resumen = pila_generator_v2.compute_summary(cotizantes_data)
+        # Calcular resumen sobre los mismos registros que lleva el archivo (.330)
+        resumen = pila_generator_v2.compute_summary(self._ne_cotizantes_pila(payslips))
 
         # Calcular total nómina
         total_nomina = sum(
@@ -477,15 +468,7 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
         )
 
         # Construir datos de cotizantes (Tipo 02)
-        # H-017b: PILA reporta UNA linea por cotizante y mes; los recibos del mes
-        # (nomina, liquidacion parcial, bonificacion) se agrupan por empleado y el IBC y
-        # los dias salen del consolidado mensual (l10n.co.ibc.mensual).
-        cotizantes = []
-        seq = 1
-        for employee in payslips.mapped('employee_id'):
-            slips = payslips.filtered(lambda s: s.employee_id == employee)
-            cotizantes.append(self._build_cotizante_data(slips[-1], seq, slips))
-            seq += 1
+        cotizantes = self._ne_cotizantes_pila(payslips)
 
         # Generar archivo completo
         file_content = pila_generator_v2.generate_pila_file_v2(
@@ -662,13 +645,25 @@ class L10nCoHrPilaWizardV2(models.TransientModel):
             'codigo_arl': company.l10n_co_pila_arl_code or '',
             'periodo_cotizacion_salud': periodo_str,
             'periodo_cotizacion_pension': periodo_str,
-            'numero_total_cotizantes': len(payslips),
+            'numero_total_cotizantes': len(payslips.mapped('employee_id')),          # .330: cotizantes, no recibos (igual que los registros tipo 2)
             'valor_total_nomina': total_nomina,
             'tipo_aportante': company._ne_valor_obligatorio('l10n_co_pila_tipo_aportante'),
             'codigo_operador': company.l10n_co_pila_operador_code or '',
             'fecha_pago': '',
             'numero_planilla': '',
         }
+
+    # ──────────────────────────────────────────────────────────────────
+    # Cotizantes del mes: uno por empleado
+    # ──────────────────────────────────────────────────────────────────
+    def _ne_cotizantes_pila(self, payslips):
+        """Los registros tipo 2 del mes. H-017b: la PILA reporta UNA línea por cotizante y mes; sus recibos (quincenas, liquidación parcial, bonificación) se agrupan por empleado y el IBC y los días
+        salen del consolidado mensual (``l10n.co.ibc.mensual``). Fuente única del resumen de la validación y del archivo (.330: el resumen contaba un cotizante por recibo y repetía su IBC del mes)."""
+        cotizantes = []
+        for secuencia, employee in enumerate(payslips.mapped('employee_id'), start=1):
+            slips = payslips.filtered(lambda s: s.employee_id == employee)
+            cotizantes.append(self._build_cotizante_data(slips[-1], secuencia, slips))
+        return cotizantes
 
     # ──────────────────────────────────────────────────────────────────
     # Builder: Datos de cotizante (Tipo 02)
