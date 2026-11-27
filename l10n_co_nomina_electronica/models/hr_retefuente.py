@@ -19,7 +19,7 @@ Referencia legal:
 """
 
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 
 from odoo import api, fields, models, _
 from odoo.exceptions import AccessError, UserError, ValidationError
@@ -220,13 +220,22 @@ class L10nCoRetefuenteUvt(models.Model):
                 f"${rec.uvt_value:,.2f} ({proc_label})"
             )
 
+    def _ne_fecha_de_la_norma(self, fecha=None):
+        """Fecha con la que se leen la tabla y los topes: ``fecha`` sin salir del año de esta configuración (un recibo que cruza de año conserva los valores de
+        ese año); sin ``fecha``, su 1 de enero."""
+        self.ensure_one()
+        primero = date(int(self.year), 1, 1)
+        if not fecha:
+            return primero
+        return min(max(fecha, primero), date(primero.year, 12, 31))
+
     # ══════════════════════════════════════════════════════════════════
     # MÉTODO PRINCIPAL: compute_retefuente
     # ══════════════════════════════════════════════════════════════════
     def compute_retefuente(self, employee, gross_salary, ibc_pension,
                            ibc_salud, company=None, contract=None,
                            payslip=None, force_procedure=None, fecha_mes=None,
-                           sin_aportes_voluntarios=False, aporte_salud=None, aporte_pension=None):
+                           sin_aportes_voluntarios=False, aporte_salud=None, aporte_pension=None, fecha_calculo=None):
         """Calcula la retención en la fuente mensual para un empleado.
 
         Ejecuta la depuración de la base gravable según la normatividad
@@ -265,6 +274,12 @@ class L10nCoRetefuenteUvt(models.Model):
         :param aporte_salud: float (opcional, R-2). Salud del trabajador EFECTIVAMENTE descontada en los recibos que
             suman; si se pasa, la depuración resta ese valor y no el calculado sobre ``ibc_salud``.
         :param aporte_pension: float (opcional, R-2). Igual para la pensión obligatoria del trabajador.
+        :param fecha_calculo: date (opcional, .334). Procedimiento 2: día en que se calcula el porcentaje fijo (junio o
+            diciembre). La tabla es la vigente ese día; los topes, ese día sin salir del año de esta configuración.
+
+        La tabla y los topes se leen con la fecha del mes que se retiene (``fecha_mes`` o el «Hasta» del recibo; en la
+        liquidación, el retiro), sin salir del año de esta configuración; sin recibo ni fecha, el 1 de enero. La UVT
+        es la anual de la configuración.
         :returns: dict con el detalle de la depuración y el valor final
             de retención en pesos, con la siguiente estructura::
 
@@ -291,7 +306,7 @@ class L10nCoRetefuenteUvt(models.Model):
         """
         self.ensure_one()
         uvt = self.uvt_value
-        _ref_date = '%s-01-01' % self.year
+        _ref_date = self._ne_fecha_de_la_norma(fecha_calculo or fecha_mes or (payslip.date_to if payslip else None))
         RuleParameter = self.env['hr.rule.parameter']
 
         def _p(code):
@@ -447,7 +462,7 @@ class L10nCoRetefuenteUvt(models.Model):
             or self.procedure
         )
         if effective_procedure == '1':
-            retencion_uvt = self._apply_marginal_table(base_uvt, _ref_date)
+            retencion_uvt = self._apply_marginal_table(base_uvt, fecha_calculo or _ref_date)
         else:
             # Procedimiento 2 (Art. 384 ET): % fijo del semestre vigente,
             # calculado por contrato (doc 08) -- ``percentage_procedure2``

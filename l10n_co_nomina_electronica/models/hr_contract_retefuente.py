@@ -148,6 +148,7 @@ class HrContractRetefuenteProcedure(models.Model):
             self.employee_id, avg_gross, avg_ibc, avg_ibc,
             self.company_id, contract=self, force_procedure='1',
             aporte_salud=avg_salud, aporte_pension=avg_pension,
+            fecha_calculo=today,          # tabla vigente el día del cálculo (.334)
         )
         base_uvt = result['base_uvt']
         if base_uvt > 0:
