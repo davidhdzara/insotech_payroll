@@ -21,7 +21,10 @@ class HrPayslipRun(models.Model):
 
     def action_draft(self):
         self._ne_validar_volver_a_borrador()
-        return super().action_draft()
+        colombia = self.slip_ids._ne_solo_colombia()
+        res = super().action_draft()
+        colombia.filtered('l10n_co_ne_fecha_pago_registrada').l10n_co_ne_fecha_pago_registrada = False     # CC-08: el lote no pasa por ``action_payslip_draft``
+        return res
 
     def _ne_validar_volver_a_borrador(self):
         """Los cancelados ya se reversaron; los pagados los rechaza el nativo con su propio mensaje."""

@@ -73,6 +73,16 @@ class TestLoteVolverABorrador(DocumentoFixture, TransactionCase):
         lote.action_draft()
         self.assertEqual(set(lote.slip_ids.mapped('state')), {'draft'})
 
+    def test_el_borrador_del_lote_borra_la_fecha_de_pago_registrada(self):
+        """CC-08 (.334): el lote no pasa por el borrador del recibo y cancelar tampoco la borra; la fecha de un neto 0 se registra de nuevo."""
+        lote, _limpio, afectado = self._lote()
+        afectado.l10n_co_ne_fecha_pago_registrada = date(2026, 3, 31)
+        afectado.move_id = self._asiento()
+        afectado.action_payslip_cancel()
+        self.assertEqual(afectado.l10n_co_ne_fecha_pago_registrada, date(2026, 3, 31), 'Premisa: cancelar no la borra')
+        lote.action_draft()
+        self.assertEqual((afectado.state, afectado.l10n_co_ne_fecha_pago_registrada), ('draft', False))
+
     def test_sin_asiento_ni_libranza_vuelve_a_borrador_como_el_nativo(self):
         lote, _limpio, _afectado = self._lote()
         lote.action_draft()
