@@ -40,7 +40,7 @@ class TestAprendizRegimen(base.TestValidacionAfiliacion):
             self.assertEqual((regimen['etapa'], regimen['tipo_trabajador']), (etapa, tipo_trabajador), nombre)
 
     def test_un_dependiente_normal_no_es_aprendiz(self):
-        """Tipo 01 con un contrato que no es de aprendizaje: sin etapa y sin TipoTrabajador derivado (se usa el de la ficha, como siempre)."""
+        """Tipo 01 con un contrato que no es de aprendizaje: sin etapa y sin TipoTrabajador derivado (se usa el tipo de cotizante del contrato, H-F3-04)."""
         regimen = self._regimen('Normal', '01', '2')
         self.assertEqual(regimen, {'etapa': False, 'es_aprendiz': False, 'tipo_trabajador': False, 'paga_auxilio_transporte': True, 'causa_prestaciones': True})      # las reglas generales (con sus topes) deciden
 
@@ -297,7 +297,7 @@ class TestAprendizAportes(pension.TestPensionNoExigida):
         ciudad = ciudad_con_dane(self.env, departamento, 'Ciudad Prueba Aprendiz')
         self.company.partner_id.write({'country_id': pais.id, 'state_id': departamento.id, 'city_id': ciudad.id, 'street': 'Calle Prueba Aprendiz # 1-1'})
 
-    def test_el_tipo_de_trabajador_del_aprendiz_sale_del_contrato_y_el_de_los_demas_de_la_ficha(self):
+    def test_el_tipo_de_trabajador_sale_del_contrato_del_recibo(self):
         self._lugar_de_trabajo_completo()
         empleado_1, lectiva = self._empleado_y_recibo('TT Lectiva', tipo='19', tipo_contrato='4', eps=self.eps, ccf=self.ccf)
         empleado_2, practica = self._empleado_y_recibo('TT Practica', tipo='01', tipo_contrato='4', eps=self.eps, afp=self.afp, ccf=self.ccf)
@@ -306,10 +306,10 @@ class TestAprendizAportes(pension.TestPensionNoExigida):
             empleado.l10n_co_ne_identification_type_id = self.env.ref('l10n_co.national_citizen_id')      # _ne_tipo_documento() exige un tipo con equivalente DIAN
         self.assertEqual(lectiva._ne_trabajador()['TipoTrabajador'], '12')                    # la ficha dice 01
         self.assertEqual(practica._ne_trabajador()['TipoTrabajador'], '19')
-        self.assertEqual(normal._ne_trabajador()['TipoTrabajador'], '01')                     # la ficha, como siempre
+        self.assertEqual(normal._ne_trabajador()['TipoTrabajador'], '01')                     # el tipo de cotizante del contrato (H-F3-04)
 
-    def test_la_clave_del_segmento_sale_del_tipo_de_trabajador_del_contrato_y_el_subtipo_de_la_ficha(self):
-        """H-F3-04 (doc 98): la clave con la que el mes se parte en segmentos es la MISMA que escribe el XML: la lectiva (12) y la practica (19) del aprendiz dan claves distintas; el dependiente normal, la de su ficha."""
+    def test_la_clave_del_segmento_sale_del_contrato(self):
+        """H-F3-04 (doc 98): la clave con la que el mes se parte en segmentos es la MISMA que escribe el XML: la lectiva (12) y la practica (19) del aprendiz dan claves distintas; el dependiente normal, la de su contrato."""
         _e, lectiva = self._empleado_y_recibo('Clave Lectiva', tipo='19', tipo_contrato='4', eps=self.eps, ccf=self.ccf)
         _e, practica = self._empleado_y_recibo('Clave Practica', tipo='01', tipo_contrato='4', eps=self.eps, afp=self.afp, ccf=self.ccf)
         _e, normal = self._empleado_y_recibo('Clave Normal', tipo='01', tipo_contrato='2', eps=self.eps, afp=self.afp, ccf=self.ccf)

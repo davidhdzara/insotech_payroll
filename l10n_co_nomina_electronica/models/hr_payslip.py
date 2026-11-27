@@ -329,13 +329,13 @@ class HrPayslip(models.Model):
 
     l10n_co_ne_aviso_tipo_trabajador = fields.Char(
         string='Aviso del tipo de trabajador', compute='_compute_ne_aviso_tipo_trabajador',
-        help='Solo para las vistas: aviso (no bloquea) cuando el empleado es un aprendiz y el tipo de trabajador de su ficha no es el que corresponde al tipo de cotizante y de contrato de su contrato: el XML usa el del contrato.')
+        help='Solo para las vistas: aviso (no bloquea) cuando el tipo o el subtipo de trabajador de la ficha no es el que corresponde al contrato del recibo: el XML usa el del contrato.')
 
-    @api.depends('state', 'employee_id', 'contract_id', 'date_from', 'date_to', 'company_id', 'employee_id.l10n_co_ne_worker_type', 'contract_id.l10n_co_pila_tipo_cotizante',
-                 'contract_id.l10n_co_ne_contract_type')
+    @api.depends('state', 'employee_id', 'contract_id', 'date_from', 'date_to', 'company_id', 'employee_id.l10n_co_ne_worker_type', 'employee_id.l10n_co_ne_worker_subtype',
+                 'contract_id.l10n_co_pila_tipo_cotizante', 'contract_id.l10n_co_pila_subtipo_cotizante', 'contract_id.l10n_co_ne_contract_type')
     def _compute_ne_aviso_tipo_trabajador(self):
-        """H-F1-09 (decision del TL del 22-nov): el TipoTrabajador del aprendiz sale del contrato (``_ne_regimen_cotizante``); si la ficha del empleado dice otro, se AVISA (el XML usa el del contrato). Los
-        demas empleados no se tocan. Un parametro que falta no rompe el formulario: el aviso dice que falta."""
+        """H-F1-09 y H-F3-04: el TipoTrabajador y el SubTipoTrabajador salen del contrato (``_ne_tipo_trabajador``); si la ficha del empleado dice otro, se AVISA (el XML usa el del contrato). La ficha vacía
+        solo se avisa en el aprendiz, como antes. Un parametro que falta no rompe el formulario: el aviso dice que falta."""
         for recibo in self:
             recibo.l10n_co_ne_aviso_tipo_trabajador = False
             if not (isinstance(recibo.id, int) and recibo.state in self._NE_ESTADOS_AVISO_AFILIACION and recibo.employee_id and recibo.contract_id and recibo._ne_solo_colombia()):
@@ -345,13 +345,31 @@ class HrPayslip(models.Model):
             except UserError as error:
                 recibo.l10n_co_ne_aviso_tipo_trabajador = error.args[0]
                 continue
-            ficha = recibo.employee_id.l10n_co_ne_worker_type
+            empleado, contrato = recibo.employee_id, recibo.contract_id
+
+            vacio = _('(vacío)')       # fuera de la función interna: ``_()`` busca el idioma en las variables del marco
+
+            def etiqueta(registro, campo, valor):
+                return dict(registro._fields[campo].selection).get(valor, valor) if valor else vacio
+
+            ficha = empleado.l10n_co_ne_worker_type
             if derivado and ficha != derivado:
-                etiqueta = dict(recibo.employee_id._fields['l10n_co_ne_worker_type'].selection)
                 recibo.l10n_co_ne_aviso_tipo_trabajador = _(
                     'El empleado %(empleado)s es un aprendiz: por el tipo de cotizante y el tipo de contrato de su contrato le corresponde el tipo de trabajador «%(derivado)s» y su ficha dice «%(ficha)s». '
                     'El XML de nómina electrónica usa el del contrato; corrija el de la ficha (pestaña Nómina) para que coincidan.',
-                    empleado=recibo.employee_id.name, derivado=etiqueta.get(derivado, derivado), ficha=etiqueta.get(ficha, ficha) if ficha else _('(vacío)'))
+                    empleado=empleado.name, derivado=etiqueta(empleado, 'l10n_co_ne_worker_type', derivado), ficha=etiqueta(empleado, 'l10n_co_ne_worker_type', ficha))
+                continue
+            diferencias = []
+            for de_ficha, de_contrato, aplica in (('l10n_co_ne_worker_type', 'l10n_co_pila_tipo_cotizante', not derivado),
+                                                  ('l10n_co_ne_worker_subtype', 'l10n_co_pila_subtipo_cotizante', True)):
+                if aplica and empleado[de_ficha] and empleado[de_ficha] != contrato[de_contrato]:
+                    diferencias.append(_(
+                        '%(campo)s: la ficha dice «%(ficha)s» y el contrato «%(contrato)s»', campo=empleado._fields[de_ficha].string,
+                        ficha=etiqueta(empleado, de_ficha, empleado[de_ficha]), contrato=etiqueta(contrato, de_contrato, contrato[de_contrato])))
+            if diferencias:
+                recibo.l10n_co_ne_aviso_tipo_trabajador = _(
+                    '%(empleado)s: %(diferencias)s. El XML de nómina electrónica usa el del contrato «%(nombre)s»; corrija el que esté mal.',
+                    empleado=empleado.name, diferencias='; '.join(diferencias), nombre=contrato.name)
 
     l10n_co_ne_aviso_segmento = fields.Char(
         string='Aviso del segmento del mes', compute='_compute_ne_aviso_segmento',
@@ -2309,16 +2327,36 @@ class HrPayslip(models.Model):
             'NumeroCuenta': (cuenta.acc_number or '') if cuenta else '',
         }
 
-    def _ne_tipo_trabajador(self):
-        """``TipoTrabajador`` del XML (Anexo NIE041): para el APRENDIZ se deriva del contrato del recibo (``_ne_regimen_cotizante``, H-F1-09); para los demás sale de la ficha del empleado. UNA sola fuente: la
-        usan ``_ne_trabajador`` y la clave del segmento del mes (``_ne_clave_segmento``)."""
+    # Anexo Técnico V1.0, tablas 5.5.3 (TipoTrabajador) y 5.5.4 (SubTipoTrabajador): los códigos que el XML admite.
+    _NE_TIPOS_TRABAJADOR_DIAN = frozenset(('01', '02', '04', '12', '18', '19', '21', '22', '23', '30', '31', '47', '51', '54', '56', '58'))
+    _NE_SUBTIPOS_TRABAJADOR_DIAN = frozenset(('00', '01'))
+
+    def _ne_codigo_del_contrato_para_el_xml(self, campo, admitidos):
+        """H-F3-04 (doc 117): tipo o subtipo de trabajador desde el contrato DEL RECIBO (el mismo dato del cálculo y de la PILA; el contrato le da la fecha). Sin
+        dato o con un código que la DIAN no admite, error claro: nunca se toma el de la ficha ni se asume otro."""
         self.ensure_one()
-        return self._ne_regimen_cotizante()['tipo_trabajador'] or self.employee_id._ne_valor_obligatorio('l10n_co_ne_worker_type')
+        contrato = self.contract_id
+        if not contrato:
+            raise UserError(_('El recibo %s no tiene contrato asociado.', self.number or self.name))
+        codigo = contrato._ne_valor_obligatorio(campo)
+        if codigo not in admitidos:
+            raise UserError(_(
+                'El contrato "%(contrato)s" de %(empleado)s tiene "%(campo)s" %(codigo)s, que no está en las tablas de la nómina electrónica de la DIAN (Anexo '
+                'Técnico, 5.5.3 y 5.5.4). Corrija el contrato; si ya tiene recibos confirmados, ciérrelo y cree un contrato nuevo desde la fecha del cambio.',
+                contrato=contrato.name, empleado=self.employee_id.name, campo=contrato._fields[campo].string, codigo=codigo))
+        return codigo
+
+    def _ne_tipo_trabajador(self):
+        """``TipoTrabajador`` del XML (Anexo NIE041): para el APRENDIZ se deriva del contrato del recibo (``_ne_regimen_cotizante``, H-F1-09); para los demás es el tipo de cotizante de ese contrato (H-F3-04).
+        UNA sola fuente: la usan ``_ne_trabajador`` y la clave del segmento del mes (``_ne_clave_segmento``)."""
+        self.ensure_one()
+        return self._ne_regimen_cotizante()['tipo_trabajador'] or self._ne_codigo_del_contrato_para_el_xml(
+            'l10n_co_pila_tipo_cotizante', self._NE_TIPOS_TRABAJADOR_DIAN)
 
     def _ne_subtipo_trabajador(self):
-        """``SubTipoTrabajador`` del XML (Anexo NIE042): el de la ficha del empleado. Misma fuente para ``_ne_trabajador`` y la clave del segmento."""
+        """``SubTipoTrabajador`` del XML (Anexo NIE042): el subtipo de cotizante del contrato del recibo (H-F3-04). Misma fuente para ``_ne_trabajador`` y la clave del segmento."""
         self.ensure_one()
-        return self.employee_id._ne_valor_obligatorio('l10n_co_ne_worker_subtype')
+        return self._ne_codigo_del_contrato_para_el_xml('l10n_co_pila_subtipo_cotizante', self._NE_SUBTIPOS_TRABAJADOR_DIAN)
 
     def _ne_clave_segmento(self):
         """Clave con la que el documento mensual parte el mes de un empleado en segmentos (H-F3-04, opcion A del doc 95; decision del TL del 23-nov, doc 98): ``(TipoTrabajador, SubTipoTrabajador)``. El porcentaje de
@@ -2334,8 +2372,8 @@ class HrPayslip(models.Model):
         lugar_trabajo = self._ne_lugar_trabajo_partner()
         departamento_trabajo, municipio_trabajo = self._ne_codigos_ubicacion(lugar_trabajo, _('el lugar de trabajo de %s', employee.name))
         return {
-            # H-F1-09 (decision del TL del 22-nov): para el APRENDIZ el TipoTrabajador se DERIVA del tipo de cotizante y de contrato del CONTRATO del recibo (tabla ``l10n_co_aprendiz_etapas``: una sola
-            # fuente); para los demas sale de la ficha, como siempre. ``l10n_co_ne_aviso_tipo_trabajador`` avisa si la ficha del aprendiz dice otra cosa.
+            # H-F1-09 y H-F3-04: tipo y subtipo salen del CONTRATO del recibo (para el aprendiz el tipo se deriva con la tabla ``l10n_co_aprendiz_etapas``).
+            # ``l10n_co_ne_aviso_tipo_trabajador`` avisa si la ficha dice otra cosa.
             'TipoTrabajador': self._ne_tipo_trabajador(),
             'SubTipoTrabajador': self._ne_subtipo_trabajador(),
             'AltoRiesgoPension': (

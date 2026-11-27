@@ -196,3 +196,4 @@ from . import test_liquidacion_aux_y_prestaciones_ajustables
 from . import test_montos_truncado          # Q-10 (.332)
 from . import test_periodo_nomina_xml       # Q-17 (.332)
 from . import test_fecha_pago_neto_cero     # CC-08 (.332)
+from . import test_tipo_trabajador_del_contrato   # H-F3-04 (.332)

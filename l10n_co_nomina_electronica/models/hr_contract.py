@@ -178,9 +178,28 @@ class HrContract(models.Model):
                         '2.2.6.3.3.6, parágrafo 3). Cierre este contrato y cree un contrato nuevo, con su fecha de inicio y el sueldo que le corresponde (en la práctica, el apoyo de esa etapa).',
                         contrato=contrato.name, empleado=contrato.employee_id.name, recibo=recibo.name))
 
+    def _ne_validar_tipo_con_recibos(self, vals):
+        """H-F3-04 (doc 117): la nómina electrónica y la PILA leen el tipo y el subtipo de cotizante del contrato de cada recibo, así que no se reescriben en un
+        contrato colombiano con recibos confirmados o pagados: un cambio es un contrato nuevo. Completar un dato vacío sí se permite."""
+        Recibo = self.env['hr.payslip'].sudo()      # quien edita contratos no tiene por qué leer recibos: solo se usa para decidir y dar el error
+        for contrato in self.filtered(lambda c: c.company_id._ne_es_colombia()):
+            cambiados = [campo for campo in ('l10n_co_pila_tipo_cotizante', 'l10n_co_pila_subtipo_cotizante')
+                         if campo in vals and contrato[campo] and (vals[campo] or False) != contrato[campo]]
+            if not cambiados:
+                continue
+            recibo = Recibo.search([('contract_id', '=', contrato.id), ('state', 'in', ('done', 'paid'))], limit=1)
+            if recibo:
+                raise UserError(_(
+                    'El contrato «%(contrato)s» de %(empleado)s tiene recibos confirmados (por ejemplo «%(recibo)s») y no se le puede cambiar «%(campos)s»: la nómina '
+                    'electrónica y la PILA toman ese dato del contrato de cada recibo. Cierre este contrato y cree un contrato nuevo desde la fecha del cambio.',
+                    contrato=contrato.name, empleado=contrato.employee_id.name, recibo=recibo.name,
+                    campos=', '.join(contrato._fields[campo].string for campo in cambiados)))
+
     def write(self, vals):
         if {'l10n_co_pila_tipo_cotizante', 'l10n_co_ne_contract_type'} & set(vals):
             self._ne_validar_cambio_de_etapa(vals)
+        if {'l10n_co_pila_tipo_cotizante', 'l10n_co_pila_subtipo_cotizante'} & set(vals):
+            self._ne_validar_tipo_con_recibos(vals)
         resultado = super().write(vals)
         if {'wage', 'l10n_co_ne_integral_salary', 'date_start'} & set(vals):
             # Un cambio solo de salario se valida con el SMMLV de hoy; si se toca el ingreso o
