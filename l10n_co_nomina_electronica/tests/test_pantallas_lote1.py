@@ -48,3 +48,15 @@ class TestPantallasLote1(TransactionCase):
                     self.assertNotIn(self.env.ref('hr_payroll.structure_002'), estructuras)
                 else:
                     self.assertEqual(dominio, [('country_id', 'in', [country.id, False])], 'El dominio nativo')
+
+    def test_enviar_y_procesar_sale_en_un_recibo_pagado_sin_documento(self):
+        """Q-73: en Producción; en habilitación el ciclo por recibo exige el recibo confirmado («validated»)."""
+        arbol = self._arbol('hr.payslip', 'hr_payroll.view_hr_payslip_form')
+        boton, = arbol.xpath("//header/button[@string='Enviar y Procesar']")
+        base = {'country_code': 'CO', 'l10n_co_ne_documento_id': False, 'l10n_co_ne_state': 'draft', 'l10n_co_ne_en_produccion': True}
+        casos = (({'state': 'paid'}, False), ({'state': 'validated'}, False), ({'state': 'paid', 'l10n_co_ne_en_produccion': False}, True),
+                 ({'state': 'validated', 'l10n_co_ne_en_produccion': False}, False), ({'state': 'draft'}, True), ({'state': 'paid', 'l10n_co_ne_state': 'accepted'}, True),
+                 ({'state': 'paid', 'country_code': 'MX'}, True))
+        for cambios, oculto in casos:
+            with self.subTest(**cambios):
+                self.assertEqual(bool(safe_eval(boton.get('invisible'), dict(base, **cambios))), oculto)
