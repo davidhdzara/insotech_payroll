@@ -7,6 +7,7 @@ from datetime import datetime
 from lxml import etree
 
 from odoo.tests.common import TransactionCase, tagged
+from odoo.tools.safe_eval import safe_eval
 
 PREFIJO = 'l10n_co_nomina_electronica.'
 
@@ -65,3 +66,15 @@ class TestPantallasLote1(TransactionCase):
             'work_entry_type_id': self.env.ref('hr_work_entry.work_entry_type_attendance').id})
         entrada.action_validate()
         self.assertEqual(entrada.state, 'validated')
+
+    def test_enviar_y_procesar_sale_en_un_recibo_pagado_sin_documento(self):
+        """Q-73: en Producción; en habilitación el ciclo por recibo exige «Hecho»."""
+        arbol = self._arbol('hr.payslip', 'hr_payroll.view_hr_payslip_form')
+        boton, = [b for b in arbol.xpath("//header/button[@string='Enviar y Procesar']")]
+        base = {'country_code': 'CO', 'l10n_co_ne_documento_id': False, 'l10n_co_ne_state': 'draft', 'l10n_co_ne_en_produccion': True}
+        casos = (({'state': 'paid'}, False), ({'state': 'done'}, False), ({'state': 'paid', 'l10n_co_ne_en_produccion': False}, True),
+                 ({'state': 'done', 'l10n_co_ne_en_produccion': False}, False), ({'state': 'verify'}, True), ({'state': 'paid', 'l10n_co_ne_state': 'accepted'}, True),
+                 ({'state': 'paid', 'country_code': 'MX'}, True))
+        for cambios, oculto in casos:
+            with self.subTest(**cambios):
+                self.assertEqual(bool(safe_eval(boton.get('invisible'), dict(base, **cambios))), oculto)
