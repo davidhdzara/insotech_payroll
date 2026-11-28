@@ -5058,6 +5058,7 @@ class HrPayslip(models.Model):
     def action_payslip_cancel(self):
         colombia = self._ne_solo_colombia()
         self._ne_rete_validar_anulacion(colombia)          # R-2: antes de reversar nada
+        colombia.filtered(lambda r: r.state in ('done', 'paid'))._ne_exigir_cancelar_antes_su_reembolso(van_juntos=self)          # .341: también antes de reversar
         colombia._ne_aplicar_libranzas(revertir=True)
         res = super().action_payslip_cancel()
         colombia._ne_refrescar_ibc_mensual()

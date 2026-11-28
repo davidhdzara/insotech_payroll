@@ -19,6 +19,7 @@ _PREFIJO = 'hr_salary_rule_category_'
 _SECCIONES = {
     'devengados_salariales': 'devengados', 'devengados_no_salariales': 'devengados', 'horas_extra': 'devengados',
     'prestaciones': 'devengados', 'vacaciones': 'devengados', 'incapacidades': 'devengados',
+    'reintegros': 'devengados',          # .341: «Reintegro» a favor del trabajador
     'deducciones': 'deducciones', 'seguridad_social_emp': 'deducciones',
     'seguridad_social_cia': 'costo_empresa', 'provisiones': 'costo_empresa',
     'acumuladores_internos': 'bases',      # .294 (pieza 4a): los acumuladores son la sección «Bases» de «Cálculo del salario»

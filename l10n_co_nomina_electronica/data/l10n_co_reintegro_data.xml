@@ -69,10 +69,11 @@
         </record>
 
         <!-- ==================== Liquidación de Contrato - Colombia ==================== -->
+        <!-- No ajustables: en las demás estructuras solo lo son la prima, las cesantías, sus intereses y las vacaciones compensadas (.328); el valor ya se digita en la novedad. -->
         <record id="hr_salary_rule_co_liq_reintegro_dev" model="hr.salary.rule">
             <field name="name">Reintegro a Favor del Trabajador</field>
             <field name="code">CO_REINTEGRO_DEV</field>
-            <field name="l10n_co_ne_ajustable" eval="True"/>
+            <field name="l10n_co_ne_ajustable" eval="False"/>
             <field name="l10n_co_ne_vigilar_habitualidad" eval="False"/>
             <field name="l10n_co_ne_base_prima_cesantias" eval="False"/>
             <field name="l10n_co_ne_base_vacaciones" eval="False"/>
@@ -91,7 +92,7 @@
         <record id="hr_salary_rule_co_liq_reintegro_ded" model="hr.salary.rule">
             <field name="name">Reintegro a Favor de la Empresa</field>
             <field name="code">CO_REINTEGRO_DED</field>
-            <field name="l10n_co_ne_ajustable" eval="True"/>
+            <field name="l10n_co_ne_ajustable" eval="False"/>
             <field name="l10n_co_ne_vigilar_habitualidad" eval="False"/>
             <field name="l10n_co_ne_base_prima_cesantias" eval="False"/>
             <field name="l10n_co_ne_base_vacaciones" eval="False"/>

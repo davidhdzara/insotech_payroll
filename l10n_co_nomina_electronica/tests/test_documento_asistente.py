@@ -27,9 +27,9 @@ NS_AJUSTE = 'dian:gov:co:facturaelectronica:NominaIndividualDeAjuste'
 
 
 def _xml_con_datos(datos):
-    """XML mínimo que deja ver lo que viajó: el sueldo del trabajador y el total devengado."""
-    return ('<NominaIndividual xmlns="%s"><InformacionGeneral FechaGen="2026-04-01"/><Trabajador Sueldo="%s"/><DevengadosTotal>%s</DevengadosTotal></NominaIndividual>'
-            % (NS_NOMINA, datos['trabajador']['Sueldo'], datos['totales']['DevengadosTotal'])).encode()
+    """XML mínimo que deja ver lo que viajó: el sueldo del trabajador y los totales (el constructor real escribe siempre los dos, y el envío los compara desde la .341)."""
+    return ('<NominaIndividual xmlns="%s"><InformacionGeneral FechaGen="2026-04-01"/><Trabajador Sueldo="%s"/><DevengadosTotal>%s</DevengadosTotal><DeduccionesTotal>%s</DeduccionesTotal></NominaIndividual>'
+            % (NS_NOMINA, datos['trabajador']['Sueldo'], datos['totales']['DevengadosTotal'], datos['totales']['DeduccionesTotal'])).encode()
 
 
 def _xml_de_nota(datos):

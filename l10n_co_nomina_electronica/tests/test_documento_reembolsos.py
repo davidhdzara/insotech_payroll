@@ -104,6 +104,7 @@ class TestDocumentoReembolsos(DocumentoFixture, TransactionCase):
         _reembolsar(anulada)
         anulada.write({'state': 'cancel'})
         nueva = self._otro(anulada, 1900000.0)
+        nueva.paid_date = base.paid_date          # «anulada» quedó sin fecha de pago al reembolsarla (.341) y la copia no la hereda
         self.assertEqual((anulada | nueva)._ne_reembolsos(), (anulada, []))
         self.assertEqual(nueva._ne_fecha_retiro(), str(nueva.date_to))
         self.Documento._ne_preparar(nueva)
@@ -116,12 +117,14 @@ class TestDocumentoReembolsos(DocumentoFixture, TransactionCase):
             with self.subTest(corregido_antes_del_reembolso=corregido_antes_del_reembolso):
                 doc = self._doc(pagos=((15, 15),))
                 original = doc.payslip_ids
+                fecha_de_pago = original.paid_date
                 if corregido_antes_del_reembolso:
                     corregido = self._otro(original, 1400000.0)
                     _reembolsar(original)
                 else:
                     _reembolsar(original)
                     corregido = self._otro(original, 1400000.0)
+                    corregido.paid_date = fecha_de_pago          # el original quedó sin fecha de pago al reembolsarlo (.341)
                 self.assertEqual((original | corregido)._ne_reembolsos(), (original, []))
                 self.Documento._ne_preparar(original | corregido)
                 self.assertEqual(doc.payslip_ids, corregido)
@@ -227,6 +230,8 @@ class TestDocumentoReembolsos(DocumentoFixture, TransactionCase):
                 self.assertEqual((primero | segundo)._ne_reembolsos(), (primero | segundo, []))
 
     def test_un_reembolso_solo_anula_recibos_anteriores_aunque_los_numeros_cuadren(self):
+        # Desde la .341 el segundo reembolso de un mismo recibo ya no se puede confirmar: así quedan los datos hechos antes.
+        self.patch(type(self.env['hr.payslip']), '_ne_exigir_recibo_que_respalde', lambda *args, **kwargs: None)
         doc = self._doc(pagos=((15, 15),))
         primero = doc.payslip_ids
         _reembolsar(primero)

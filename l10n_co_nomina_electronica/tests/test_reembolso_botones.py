@@ -303,7 +303,7 @@ class TestReembolsoBotones(FixtureBotones, TransactionCase):
             original.unlink()
             anulados, dudas = self._anulados_y_dudas(corregido)
             self.assertFalse(anulados)
-            for texto in ('no son exactamente las contrarias', 'id %s' % corregido.id, 'En este orden: 1) cancele «', 'sin eliminarlos'):
+            for texto in ('no son exactamente las contrarias', 'id %s' % corregido.id, 'En este orden: 1) cancele «', 'cancélelo sin eliminarlo'):
                 self.assertIn(texto, dudas)
             self._como(reembolso).action_payslip_cancel()
             self.assertEqual(corregido._ne_reembolsos(), (corregido.browse(), []))
@@ -320,7 +320,7 @@ class TestReembolsoBotones(FixtureBotones, TransactionCase):
         self.assertEqual(otro._ne_huella_de_lineas(), original._ne_huella_de_lineas(), 'Premisa: son idénticos')
         anulados, dudas = self._anulados_y_dudas(original | otro)
         self.assertFalse(anulados)
-        for texto in ('puede ser cualquiera', 'En este orden: 1) cancele «', 'sin eliminarlos'):
+        for texto in ('puede ser cualquiera', 'En este orden: 1) cancele «', 'cancélelo sin eliminarlo'):
             self.assertIn(texto, dudas)
         self.assertNotIn('Elimine', dudas)
         with self.assertRaisesRegex(UserError, 'tiene el reembolso'):          # eliminarlo dejaría anulado al otro sin avisar
@@ -409,6 +409,11 @@ class TestReintegro(FixtureBotones, TransactionCase):
     """«Reintegro» (.341): entra al neto, al asiento y a los totales; no toca ninguna otra línea (IBC, retención, embargo, aportes, provisiones)."""
 
     def _con(self, contrato, devengado=0.0, descuento=0.0, **extra):
+        # El ajuste manual de embargo solo se reparte entre asignaciones salariales con juzgado: sin una, el cálculo se detiene.
+        self.env['hr.salary.attachment'].create({
+            'description': 'Embargo %s' % contrato.name, 'employee_ids': [(6, 0, contrato.employee_id.ids)], 'company_id': self.company.id,
+            'other_input_type_id': self.env.ref(PREFIJO + 'input_l10n_co_embargo_civil').id, 'monthly_amount': 100000.0, 'date_start': date(2026, 1, 1), 'no_end_date': True,
+            'l10n_co_partner_id': self.env['res.partner'].create({'name': 'Juzgado %s' % contrato.name}).id})
         entradas = [(0, 0, {'input_type_id': self.env.ref(PREFIJO + 'input_co_embargo_manual').id, 'amount': 50000.0})]
         for xmlid, valor in (('input_co_reintegro_dev', devengado), ('input_co_reintegro_ded', descuento)):
             if valor:
