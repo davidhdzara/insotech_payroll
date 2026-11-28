@@ -26,11 +26,12 @@
                             <field name="l10n_co_pila_tipo_cotizante"/>
                             <field name="l10n_co_pila_subtipo_cotizante"/>
                             <field name="l10n_co_pila_salario_variable"/>
+                            <!-- Q-59: la actividad va primero; al elegirla se propone la clase, que sigue editable -->
+                            <field name="l10n_co_pila_actividad_economica" options="{'no_create': True}"/>
                             <field name="l10n_co_pila_clase_riesgo"/>
                         </group>
                         <group>
                             <field name="l10n_co_pila_centro_trabajo"/>
-                            <field name="l10n_co_pila_actividad_economica" options="{'no_create': True}"/>
                             <field name="l10n_co_pila_indicador_alto_riesgo"/>
                             <field name="l10n_co_pila_tarifa_especial_afp"/>
                         </group>

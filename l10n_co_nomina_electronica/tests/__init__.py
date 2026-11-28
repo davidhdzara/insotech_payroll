@@ -144,6 +144,7 @@ from . import test_documento_xml
 from . import test_documento_reembolsos
 from . import test_reembolso_botones
 from . import test_reembolso_pagado
+from . import test_pantallas_lote1
 from . import test_documento_generar
 from . import test_documento_generar_real
 from . import test_dian_respuesta
