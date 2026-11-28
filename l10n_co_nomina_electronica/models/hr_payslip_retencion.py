@@ -194,7 +194,8 @@ class HrPayslipRetencion(models.Model):
             limite = min(retencion.mapped('sequence'))
             codigos = recibo._ne_rete_codigos_base(reglas)
             tarde = reglas.filtered(lambda r: r.sequence >= limite and (
-                r.code in codigos or _en_categorias(r.category_id.parent_id, ('DEV',)) or _en_categorias(r.category_id, ('SS_EMP',))))
+                r.code in codigos or (_en_categorias(r.category_id.parent_id, ('DEV',)) and r.category_id.code != 'DEV_REINT')          # «Reintegro» va después a propósito (.341): no es base
+                or _en_categorias(r.category_id, ('SS_EMP',))))
             if tarde:
                 raise UserError(_(
                     'No se puede calcular «%(recibo)s»: estas reglas se calculan después de «%(retencion)s» (secuencia %(limite)s) y quedarían fuera de la retención en la fuente: %(reglas)s. '

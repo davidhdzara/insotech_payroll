@@ -27,7 +27,16 @@ def _linea(env, recibo, valor):
         'sequence': 1, 'quantity': 1.0, 'rate': 100.0, 'amount': valor, 'total': valor})
 
 
-def _reembolsar(recibo, confirmar=True):
+def _quitar_pago(recibo):
+    if recibo.state == 'paid':
+        recibo.action_payslip_unpaid()
+    recibo.paid_date = False
+
+
+def _reembolsar(recibo, confirmar=True, quitar_pago=True):
+    """``quitar_pago``: solo lo NO pagado se excluye del XML (.341); uno pagado detiene (lo prueba ``test_reembolso_pagado``)."""
+    if quitar_pago:
+        _quitar_pago(recibo)
     accion = recibo.refund_sheet()
     reembolso = recibo.env['hr.payslip'].browse(accion['domain'][0][2])
     if confirmar:
@@ -86,6 +95,8 @@ class TestDocumentoReembolsos(DocumentoFixture, TransactionCase):
         doc.action_generar_xml()
 
     def test_si_el_reembolsado_se_cancela_y_se_rehace_el_nuevo_si_viaja_con_su_retiro(self):
+        # Desde la .341 ya no se puede cancelar con el reembolso confirmado: así quedan los datos hechos antes.
+        self.patch(type(self.env['hr.payslip']), '_ne_exigir_cancelar_antes_su_reembolso', lambda *args, **kwargs: None)
         doc = self._doc()
         quincenas = doc.payslip_ids
         base = quincenas.sorted('date_to')[-1]
@@ -119,10 +130,11 @@ class TestDocumentoReembolsos(DocumentoFixture, TransactionCase):
     def test_un_reembolso_sin_confirmar_no_excluye_y_al_confirmarlo_sale_solo_el_suyo(self):
         doc = self._doc()
         primera, segunda = doc.payslip_ids.sorted('date_to')
-        reembolso = _reembolsar(primera, confirmar=False)
+        reembolso = _reembolsar(primera, confirmar=False, quitar_pago=False)
         self.Documento._ne_preparar(doc.payslip_ids)
         self.assertEqual(doc.payslip_ids, primera | segunda)
         reembolso.write({'state': 'done'})
+        _quitar_pago(primera)
         self.Documento._ne_preparar(doc.payslip_ids)
         self.assertEqual(doc.payslip_ids, segunda)
 

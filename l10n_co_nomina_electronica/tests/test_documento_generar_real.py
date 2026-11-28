@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 from lxml import etree
 
+from odoo import Command
 from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
@@ -241,6 +242,23 @@ class TestDocumentoGenerarReal(TransactionCase):
                     'slip_id': recibo.id, 'salary_rule_id': regla.id, 'code': regla.code, 'name': regla.name, 'contract_id': recibo.contract_id.id,
                     'employee_id': recibo.employee_id.id, 'sequence': regla.sequence, 'quantity': 1.0, 'rate': 100.0, 'amount': valor, 'total': valor})
 
+    def test_el_reintegro_va_en_el_xml_valido_y_suma_en_los_totales(self):
+        recibo = self._recibos_de_un_empleado_nuevo(((1, 31),))
+        antes = recibo._collect_payslip_data()
+        recibo.write({'state': 'verify'})
+        recibo.input_line_ids = [Command.create({'input_type_id': self.env.ref('l10n_co_nomina_electronica.%s' % nombre).id, 'amount': valor})
+                                 for nombre, valor in (('input_co_reintegro_dev', 120000.0), ('input_co_reintegro_ded', 45000.0))]
+        recibo.compute_sheet()
+        recibo.write({'state': 'paid', 'paid_date': date(2026, 3, 31)})
+        despues = recibo._collect_payslip_data()
+        self.assertAlmostEqual(despues['devengados_total'] - antes['devengados_total'], 120000.0, delta=0.01)
+        self.assertAlmostEqual(despues['deducciones_total'] - antes['deducciones_total'], 45000.0, delta=0.01)
+        raiz = etree.fromstring(self._xml_valido(self._documento_de(recibo)))
+        self.assertEqual({etree.QName(nodo.getparent()).localname: nodo.text for nodo in raiz.iter('{*}Reintegro')}, {'Devengados': '120000.00', 'Deducciones': '45000.00'})
+        totales = [Decimal(next(raiz.iter('{*}%s' % nombre)).text) for nombre in ('DevengadosTotal', 'DeduccionesTotal', 'ComprobanteTotal')]
+        devengados, deducciones = (Decimal('%.2f' % despues[clave]) for clave in ('devengados_total', 'deducciones_total'))
+        self.assertEqual(totales, [devengados, deducciones, devengados - deducciones])
+
     def _con_ausencias(self, recibos):
         """Incapacidades, vacaciones y licencias salen de las Ausencias; aqui se agregan a los datos del recibo con la forma que arma el constructor (pago 0: no cambian los totales)."""
         original = type(recibos)._collect_payslip_data
@@ -307,6 +325,7 @@ class TestDocumentoGenerarReal(TransactionCase):
 
     def _xml_valido(self, documento, archivo='NominaIndividualElectronicaXSDV1.0.6.xsd'):
         documento.action_generar_xml()
+        documento._ne_exigir_pagos_vigentes(contra_el_xml=True)          # .341: con datos y redondeos reales, lo recién generado no se detiene al enviar
         xml_bytes = base64.b64decode(documento.xml_attachment_id.datas)
         valido, errores = self._validar_xsd(xml_bytes, archivo)
         self.assertTrue(valido, 'XML invalido contra %s: %s' % (archivo, errores))

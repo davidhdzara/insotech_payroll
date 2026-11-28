@@ -97,6 +97,22 @@ class TestPilaCotizantesPorEmpleado(TransactionCase):
         self.assertAlmostEqual(asistente.summary_total_ibc, SALARIO * 1.5, delta=1.0)          # mes completo + una quincena
         self.assertAlmostEqual(asistente.summary_total_pension, SALARIO * 1.5 * 0.16, delta=100.0)
 
+    def test_el_reintegro_no_cambia_la_pila(self):
+        """.341: dos empleados iguales, uno con «Reintegro» a favor y en contra: sus líneas de la planilla son las mismas."""
+        for documento, importes in (('1000000021', ()), ('1000000022', (('input_co_reintegro_dev', 120000.0), ('input_co_reintegro_ded', 45000.0)))):
+            recibo = self._sin_calcular(self._contrato('Reintegro', documento), date(2026, 9, 1), date(2026, 9, 15))
+            recibo.input_line_ids = [Command.create({'input_type_id': self.env.ref('l10n_co_nomina_electronica.%s' % nombre).id, 'amount': valor}) for nombre, valor in importes]
+            recibo.compute_sheet()
+            self.assertEqual(len(recibo.line_ids.filtered(lambda l: l.code.startswith('CO_REINTEGRO'))), len(importes))
+            recibo.state = 'done'
+        asistente = self.env['l10n.co.hr.pila.wizard.v2'].create({'company_id': self.company.id, 'year': '2026', 'month': '09', 'tipo_planilla': 'E'})
+        asistente.action_validate()
+        self.assertTrue(asistente.validation_ok, asistente.validation_errors)
+        _encabezado, detalle = self._archivo(asistente)
+        campos = [campo for campo, _formato in pila_generator_v2._TIPO_02_FIELDS if campo not in ('secuencia', 'numero_documento')]
+        primera, segunda = [{campo: self._campo(pila_generator_v2._TIPO_02_FIELDS, linea, campo) for campo in campos} for linea in detalle]
+        self.assertEqual(segunda, primera)
+
     def test_los_totales_del_resumen_son_los_del_archivo(self):
         asistente = self._planilla_del_mes()
         _encabezado, detalle = self._archivo(asistente)

@@ -70,6 +70,7 @@ Funcionalidades principales:
         'data/l10n_co_ausencias_data.xml',
         'data/l10n_co_work_entry_types_dias_data.xml',
         'data/hr_payroll_structure_special_data.xml',
+        'data/l10n_co_reintegro_data.xml',
         'data/hr_salary_rule_alinear_nativas.xml',
         'data/hr_salary_rule_auto_deductions.xml',
         'data/hr_salary_rule_tercero_origen.xml',

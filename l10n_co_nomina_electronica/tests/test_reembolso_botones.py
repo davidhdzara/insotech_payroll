@@ -14,8 +14,8 @@ from odoo.tests.common import TransactionCase, tagged
 PREFIJO = 'l10n_co_nomina_electronica.'
 
 
-@tagged('post_install', '-at_install')
-class TestReembolsoBotones(TransactionCase):
+class FixtureBotones:
+    """Compañía con contabilidad, un administrador de nómina real y recibos calculados por las reglas."""
 
     @classmethod
     def setUpClass(cls):
@@ -99,6 +99,10 @@ class TestReembolsoBotones(TransactionCase):
     def _anulados_y_dudas(self, recibos):
         anulados, dudas = recibos._ne_reembolsos()
         return anulados, ' '.join(dudas)
+
+
+@tagged('post_install', '-at_install')
+class TestReembolsoBotones(FixtureBotones, TransactionCase):
 
     # ── el reembolso nativo de un recibo calculado ───────────────────
     def test_el_reembolso_nativo_de_un_recibo_calculado_coincide_exacto(self):
@@ -201,7 +205,7 @@ class TestReembolsoBotones(TransactionCase):
 
     def test_la_marca_del_lote_no_abre_el_bloqueo(self):
         recibo = self._confirmado(self._contrato())
-        self._reembolsar(recibo)
+        self._reembolsar(recibo, confirmar=False)
         con_marca = self._como(recibo).with_context(ne_lote_conserva_reembolsados=True)          # como la mandaría una llamada externa
         for vals in ({'state': 'draft'}, {'state': 'verify', 'name': 'Otro nombre'}):
             with self.subTest(vals=vals), self.assertRaisesRegex(UserError, 'tiene el reembolso'):
@@ -226,7 +230,7 @@ class TestReembolsoBotones(TransactionCase):
         hecho = self._confirmado(self._contrato())
         self._reembolsar(hecho)
         cancelado = self._confirmado(self._contrato())
-        self._reembolsar(cancelado)
+        self._reembolsar(cancelado, confirmar=False)          # con el reembolso confirmado ya no se podría cancelar
         self._como(cancelado).action_payslip_cancel()
         normal = self._calculado(self._contrato())
         lote = self._lote(hecho | cancelado | normal)
@@ -242,11 +246,11 @@ class TestReembolsoBotones(TransactionCase):
         self.assertEqual(todos.mapped('state'), ['done', 'cancel', 'verify', 'verify'])
         self._como(lote).action_validate()
         self.assertEqual(todos.mapped('state'), ['done', 'cancel', 'done', 'done'])
-        self.assertEqual((hecho | cancelado)._ne_reembolsos(), (hecho | cancelado, []))
+        self.assertEqual(hecho._ne_reembolsos(), (hecho, []))
 
     def test_el_lote_no_vuelve_a_borrador_ni_se_elimina_con_recibos_reembolsados(self):
         cancelado = self._confirmado(self._contrato())
-        reembolso = self._reembolsar(cancelado)
+        reembolso = self._reembolsar(cancelado, confirmar=False)
         self._como(cancelado).action_payslip_cancel()
         normal = self._calculado(self._contrato())
         lote = self._lote(cancelado | normal)
@@ -278,7 +282,12 @@ class TestReembolsoBotones(TransactionCase):
         self.assertEqual(reembolso.state, 'done')
 
     # ── el escenario del consultor ───────────────────────────────────
+    def _como_antes_de_la_341(self):
+        """Cancelar con el reembolso confirmado ya no se puede: los dos casos siguientes son datos hechos antes."""
+        self.patch(type(self.env['hr.payslip']), '_ne_exigir_cancelar_antes_su_reembolso', lambda *args, **kwargs: None)
+
     def test_sin_el_original_otro_recibo_con_otras_lineas_no_queda_anulado_y_la_salida_destraba(self):
+        self._como_antes_de_la_341()
         contrato = self._contrato()
         corregido = self._calculado(contrato, bono=200000.0)            # creado antes del reembolso
         original = self._confirmado(contrato)
@@ -300,6 +309,7 @@ class TestReembolsoBotones(TransactionCase):
             self.assertEqual(corregido._ne_reembolsos(), (corregido.browse(), []))
 
     def test_con_dos_identicos_la_duda_se_destraba_cancelando_el_reembolso(self):
+        self._como_antes_de_la_341()
         contrato = self._contrato()
         otro = self._calculado(contrato)                                # idéntico, creado antes del reembolso
         original = self._confirmado(contrato)
@@ -330,3 +340,141 @@ class TestReembolsoBotones(TransactionCase):
         self.assertIn('no son exactamente las contrarias', dudas)
         self._como(reembolso).action_payslip_cancel()
         self.assertEqual(recibo._ne_reembolsos(), (recibo.browse(), []))
+
+    # ── cancelar y confirmar reembolsos (Q-97) ───────────────────────
+    def test_no_se_cancela_un_recibo_con_reembolso_confirmado_si_el_reembolso_no_va(self):
+        recibo = self._confirmado(self._contrato())
+        reembolso = self._reembolsar(recibo)
+        mensaje = r'(?s)No se puede cancelar .*id %s\).*1\) cancele .*id %s\).*2\) cancele .*id %s\)' % (recibo.id, reembolso.id, recibo.id)
+        for nombre, camino in (('botón', self._como(recibo).action_payslip_cancel), ('escritura', lambda: self._como(recibo).write({'state': 'cancel'}))):
+            with self.subTest(nombre), self.assertRaisesRegex(UserError, mensaje):
+                camino()
+        self.assertEqual((recibo.state, bool(recibo.move_id)), ('done', True))          # el asiento no se reversó
+        self._como(recibo | reembolso).action_payslip_cancel()          # juntos sí
+        self.assertEqual((recibo | reembolso).mapped('state'), ['cancel', 'cancel'])
+
+    def test_un_reembolso_no_se_confirma_sin_un_recibo_que_lo_respalde(self):
+        recibo = self._confirmado(self._contrato())
+        primero = self._reembolsar(recibo, confirmar=False)
+        segundo = self._reembolsar(recibo, confirmar=False)
+        self._como(primero).action_payslip_done()
+        with self.assertRaisesRegex(UserError, 'no hay un recibo confirmado anterior'):
+            self._como(segundo).action_payslip_done()
+        self.assertEqual(segundo.state, 'verify')
+        otro = self._confirmado(self._contrato())
+        suelto = self._reembolsar(otro, confirmar=False)
+        self._como(otro).action_payslip_cancel()                    # con el reembolso sin confirmar, se puede
+        with self.assertRaisesRegex(UserError, 'no hay un recibo confirmado anterior'):
+            self._como(suelto).action_payslip_done()
+
+    # ── pagado y reembolsado, con «Pagos de Contabilidad» ────────────
+    def _banco(self):
+        def cuenta(code, tipo, **extra):
+            return self.env['account.account'].create(dict({'code': code, 'name': 'Banco %s' % code, 'account_type': tipo, 'company_ids': [(6, 0, [self.company.id])]}, **extra))
+        valores = {'name': 'Banco pagos', 'code': 'BNPG', 'type': 'bank', 'company_id': self.company.id, 'default_account_id': cuenta('111040', 'asset_cash').id}
+        if 'suspense_account_id' in self.env['account.journal']._fields:
+            valores['suspense_account_id'] = cuenta('111045', 'asset_current', reconcile=True).id
+        banco = self.env['account.journal'].create(valores)
+        banco.outbound_payment_method_line_ids.write({'payment_account_id': cuenta('111050', 'asset_current', reconcile=True).id})
+        return banco
+
+    def test_el_pago_conciliado_detiene_y_el_cruce_contra_el_reembolso_no_es_un_pago(self):
+        self.company.l10n_co_ne_fuente_fecha_pago = 'contabilidad'
+
+        def neto(recibo):
+            return recibo.move_id.line_ids.filtered(lambda l: l.account_id == self.neto)
+        cruzado = self._confirmado(self._contrato())
+        cruzado.move_id.action_post()
+        reembolso = self._reembolsar(cruzado)
+        reembolso.move_id.action_post()
+        (neto(cruzado) + neto(reembolso)).reconcile()
+        self.assertEqual(cruzado._ne_reembolsos(), (cruzado, []))          # excluido: no hay pago
+        pagado = self._confirmado(self._contrato())
+        pagado.move_id.action_post()
+        reembolso = self._reembolsar(pagado)
+        banco = self._banco()
+        pago = self.env['account.payment'].create({
+            'payment_type': 'outbound', 'partner_type': 'supplier', 'partner_id': neto(pagado).partner_id.id, 'amount': neto(pagado).credit, 'date': date(2026, 5, 31),
+            'journal_id': banco.id, 'destination_account_id': self.neto.id})
+        pago.action_post()
+        (pago.move_id.line_ids.filtered(lambda l: l.account_id == self.neto) + neto(pagado)).reconcile()
+        anulados, dudas = self._anulados_y_dudas(pagado)
+        self.assertFalse(anulados)
+        for texto in ('figura pagado', 'rompa la conciliación', 'Reintegro', 'id %s' % reembolso.id):
+            self.assertIn(texto, dudas)
+
+
+@tagged('post_install', '-at_install')
+class TestReintegro(FixtureBotones, TransactionCase):
+    """«Reintegro» (.341): entra al neto, al asiento y a los totales; no toca ninguna otra línea (IBC, retención, embargo, aportes, provisiones)."""
+
+    def _con(self, contrato, devengado=0.0, descuento=0.0, **extra):
+        entradas = [(0, 0, {'input_type_id': self.env.ref(PREFIJO + 'input_co_embargo_manual').id, 'amount': 50000.0})]
+        for xmlid, valor in (('input_co_reintegro_dev', devengado), ('input_co_reintegro_ded', descuento)):
+            if valor:
+                entradas.append((0, 0, {'input_type_id': self.env.ref(PREFIJO + xmlid).id, 'amount': valor}))
+        return self._calculado(contrato, input_line_ids=entradas, **extra)
+
+    def _lineas(self, recibo):
+        propias = ('CO_REINTEGRO_DEV', 'CO_REINTEGRO_DED', 'CO_BRUTO', 'CO_NETO', 'NET', 'GROSS')
+        return {l.code: round(l.total, 2) for l in recibo.line_ids if l.code not in propias}
+
+    def _total(self, recibo, codigo):
+        return sum(recibo.line_ids.filtered(lambda l: l.code == codigo).mapped('total'))
+
+    def test_el_reintegro_no_cambia_ninguna_otra_linea_y_entra_en_neto_y_totales(self):
+        base = self._con(self._contrato())
+        con = self._con(self._contrato(), devengado=120000.0, descuento=45000.0)
+        self.assertEqual((self._total(con, 'CO_REINTEGRO_DEV'), self._total(con, 'CO_REINTEGRO_DED')), (120000.0, -45000.0))
+        self.assertTrue(self._total(base, 'CO_RETEFUENTE') and self._total(base, 'CO_IBC_SP'), 'Premisa: hay retención e IBC que comparar')
+        self.assertEqual(self._lineas(con), self._lineas(base))          # IBC, 40 %, parafiscales, retención y su base, embargo, aportes y provisiones: idénticos
+        for codigo, diferencia in (('CO_BRUTO', 120000.0), ('CO_NETO', 75000.0), ('NET', 75000.0)):
+            self.assertAlmostEqual(self._total(con, codigo) - self._total(base, codigo), diferencia, delta=0.01, msg=codigo)
+        for campo, diferencia in (('gross_wage', 120000.0), ('net_wage', 75000.0), ('l10n_co_total_devengado', 120000.0)):
+            self.assertAlmostEqual(con[campo] - base[campo], diferencia, delta=0.01, msg=campo)
+        devengados = sum(base.line_ids.filtered(lambda l: l.salary_rule_id.category_id.code == 'DEV_SAL' or l.salary_rule_id.category_id.parent_id.code == 'DEV').mapped('total'))
+        self.assertAlmostEqual(self._total(base, 'CO_BRUTO'), devengados, delta=1.0, msg='sin reintegro el bruto es el de siempre')
+        self.assertAlmostEqual(base.gross_wage, self._total(base, 'CO_BRUTO'), delta=0.01)
+
+    def test_la_actualizacion_aplica_la_secuencia_del_bruto(self):
+        regla = self.env.ref(PREFIJO + 'hr_salary_rule_co_bruto')
+        self.assertEqual(regla.sequence, 195)
+        self.assertFalse(self.env['ir.model.data'].search([('module', '=', 'l10n_co_nomina_electronica'), ('name', '=', 'hr_salary_rule_co_bruto')]).noupdate)
+        for estructura in ('hr_payroll_structure_co_nomina', 'hr_payroll_structure_co_liquidacion'):
+            reglas = self.env.ref(PREFIJO + estructura).rule_ids.filtered(lambda r: r.code in ('CO_REINTEGRO_DEV', 'CO_REINTEGRO_DED'))
+            self.assertEqual((sorted(reglas.mapped('code')), set(reglas.mapped('sequence'))), (['CO_REINTEGRO_DED', 'CO_REINTEGRO_DEV'], {190}))
+            self.assertFalse(reglas.with_company(self.company).account_debit | reglas.with_company(self.company).account_credit)
+
+    def test_en_la_liquidacion_tambien_entra_al_neto(self):
+        liquidacion = self.env.ref(PREFIJO + 'hr_payroll_structure_co_liquidacion')
+        valores = {'struct_id': liquidacion.id, 'date_from': date(2026, 1, 1), 'date_to': date(2026, 5, 31)}
+        base = self._con(self._contrato(), **valores)
+        con = self._con(self._contrato(), devengado=120000.0, descuento=45000.0, **valores)
+        self.assertEqual(self._lineas(con).keys() - {'CO_LIQ_NETO'}, self._lineas(base).keys() - {'CO_LIQ_NETO'})
+        self.assertEqual({c: v for c, v in self._lineas(con).items() if c != 'CO_LIQ_NETO'}, {c: v for c, v in self._lineas(base).items() if c != 'CO_LIQ_NETO'})
+        self.assertAlmostEqual(self._total(con, 'CO_LIQ_NETO') - self._total(base, 'CO_LIQ_NETO'), 75000.0, delta=0.01)
+
+    def test_sin_cuenta_no_se_confirma_y_con_ella_el_asiento_lleva_cada_valor_a_su_cuenta(self):
+        def cuenta(code, tipo):
+            return self.env['account.account'].create({'code': code, 'name': 'Reintegro %s' % code, 'account_type': tipo, 'company_ids': [(6, 0, [self.company.id])]})
+        por_pagar, por_cobrar, ajuste = cuenta('519560', 'expense'), cuenta('136560', 'asset_current'), self.general.with_company(self.company).journal_id.default_account_id
+        reglas = {r.code: r.with_company(self.company) for r in self.general.rule_ids if r.code.startswith('CO_REINTEGRO')}
+        base = self._con(self._contrato())
+        self._como(base).action_payslip_done()
+        con = self._con(self._contrato(), devengado=120000.0, descuento=45000.0)
+        with self.assertRaisesRegex(UserError, 'Cuenta de débito'):
+            self._como(con).action_payslip_done()
+        reglas['CO_REINTEGRO_DEV'].account_debit = por_pagar
+        reglas['CO_REINTEGRO_DED'].account_credit = por_cobrar          # en un descuento, la de crédito descuadraría
+        with self.assertRaisesRegex(UserError, 'CO_REINTEGRO_DED'):
+            self._como(con).action_payslip_done()
+        reglas['CO_REINTEGRO_DED'].write({'account_credit': False, 'account_debit': por_cobrar.id})
+        self._como(con).action_payslip_done()
+        asiento = con.move_id
+        self.assertAlmostEqual(sum(asiento.line_ids.mapped('balance')), 0.0, delta=0.01)
+        saldo = lambda movimiento, c: sum(movimiento.line_ids.filtered(lambda l: l.account_id == c).mapped('balance'))
+        self.assertAlmostEqual(saldo(asiento, por_pagar), 120000.0, delta=0.01)
+        self.assertAlmostEqual(saldo(asiento, por_cobrar), -45000.0, delta=0.01)
+        self.assertAlmostEqual(saldo(asiento, ajuste), saldo(base.move_id, ajuste), delta=0.01)          # nada del reintegro cae en la cuenta de ajuste
+        self.assertAlmostEqual(saldo(asiento, self.neto) - saldo(base.move_id, self.neto), -75000.0, delta=0.01)
+

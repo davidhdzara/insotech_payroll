@@ -1370,6 +1370,10 @@ class HrPayslip(models.Model):
                     return siguen.write(vals) if siguen else True
             else:
                 self.filtered(lambda r: r.state not in ('draft', 'verify'))._ne_exigir_que_ningun_reembolso_lo_anule()
+        if vals.get('state') == 'cancel':          # .341: cancelar el recibo dejaría el reembolso restando solo (asiento, retención, PILA)
+            self.filtered(lambda r: r.state in ('done', 'paid'))._ne_exigir_cancelar_antes_su_reembolso(van_juntos=self)
+        if vals.get('state') in ('done', 'paid'):
+            self.filtered(lambda r: vals.get('credit_note', r.credit_note) and r.state not in ('done', 'paid'))._ne_exigir_recibo_que_respalde(van_juntos=self)
         # Clase A (.335): un recibo de un documento mensual que pierde un pago (anular, borrador, cancelar, lote o cualquier otra escritura) no puede dejar enviable un XML que lo lleva.
         vigilados = self.filtered('l10n_co_ne_documento_id') if self._NE_CAMPOS_DEL_PAGO.intersection(vals) else self.browse()
         antes = {recibo.id: recibo.sudo()._ne_pagos_vigentes() for recibo in vigilados}
@@ -1417,7 +1421,7 @@ class HrPayslip(models.Model):
             pago = tuple(valor for _campo, _op, valor in reembolso._ne_rete_mismo_pago())
             if pago in pedidos:
                 por_pago[pago] = por_pago.get(pago, recibos.browse()) | reembolso
-        hallados = recibos.browse()
+        hallados, anulado_por = recibos.browse(), {}
         for del_pago in por_pago.values():
             libres = recibos.search(del_pago[:1]._ne_rete_mismo_pago() + [('credit_note', '=', False), ('l10n_co_ne_is_adjustment', '=', False)], order='id')
             sueltos = del_pago.sorted('id')
@@ -1427,13 +1431,15 @@ class HrPayslip(models.Model):
                 por_lineas[clave] = por_lineas.get(clave, recibos.browse()) | reembolso
             for clave, gemelos in por_lineas.items():          # .341: si cada recibo con esas líneas tiene su reembolso posterior, quedan anulados todos y no hay nada que adivinar
                 candidatos = libres.filtered(lambda r: r.id < max(gemelos.ids) and tuple(r._ne_huella_de_lineas()) == clave).sorted('id')
-                sin_reembolso, usados = candidatos.ids, recibos.browse()
+                sin_reembolso, usados, pares = candidatos.ids, recibos.browse(), {}
                 for reembolso in gemelos.sorted('id'):
                     if sin_reembolso and sin_reembolso[0] < reembolso.id:
+                        pares[sin_reembolso[0]] = reembolso
                         sin_reembolso = sin_reembolso[1:]
                         usados |= reembolso
                 if candidatos and not sin_reembolso:
                     hallados |= candidatos
+                    anulado_por.update(pares)
                     libres -= candidatos
                     sueltos -= usados
             for reembolso in sueltos:
@@ -1458,8 +1464,34 @@ class HrPayslip(models.Model):
                         continue
                     posibles = posibles[-1:]
                 hallados |= posibles
+                anulado_por[posibles.id] = reembolso
                 libres -= posibles
-        return self & hallados.with_env(self.env), dudas
+        propios_hallados = self & hallados.with_env(self.env)
+        pagados = propios_hallados.filtered(lambda r: r.sudo()._ne_figura_pagado())          # .341: un recibo pagado no se saca solo: se detiene y dice las dos salidas
+        dudas += [self._ne_freno_por_pagado(recibo.sudo(), anulado_por[recibo.id]) for recibo in pagados]
+        return propios_hallados - pagados, dudas
+
+    def _ne_figura_pagado(self):
+        """Estado «Pagado» o, confirmado, con fecha de pago según la fuente de la compañía (con «Pagos de Contabilidad», un pago conciliado con su neto: un cruce contra el asiento del reembolso no es un pago)."""
+        self.ensure_one()
+        return self.state == 'paid' or bool(self._ne_pagos_vigentes())
+
+    def _ne_freno_por_pagado(self, recibo, reembolso):
+        fuente = recibo.company_id.l10n_co_ne_fuente_fecha_pago
+        quitar = []
+        if recibo.state == 'paid':
+            quitar.append(_('pulse «Sin pagar» en %s', recibo._ne_recibos_con_id()))
+        if fuente == 'contabilidad' and recibo._ne_fechas_pagos_contables():
+            quitar.append(_('en Contabilidad, rompa la conciliación del pago con la línea del neto de su asiento'))
+        elif fuente == 'recibo' and recibo.state == 'done':
+            quitar.append(_('borre la fecha de pago del recibo («Fecha de cierre»)'))
+        if not quitar:          # neto 0 con fecha registrada a mano
+            quitar.append(_('quite la fecha de pago registrada en el recibo'))
+        return _(
+            'El recibo %(recibo)s de %(empleado)s (%(desde)s a %(hasta)s) tiene el reembolso %(reembolso)s confirmado, pero figura pagado: no se saca del XML ni se envía. Si NO se pagó: %(quitar)s. '
+            'Si SÍ se pagó y el trabajador devuelve el dinero, el pago se reporta y la devolución va aparte. %(devolver)s',
+            recibo=recibo._ne_recibos_con_id(), empleado=recibo.employee_id.name, desde=recibo.date_from, hasta=recibo.date_to, reembolso=reembolso._ne_recibos_con_id(), quitar=_(' y ').join(quitar),
+            devolver=reembolso._ne_en_este_orden(_('registre la devolución como «Reintegro» (descuento, con orden escrita del trabajador) en el siguiente recibo'), _('genere o envíe el XML')))
 
     def _ne_recibos_con_id(self):
         return ', '.join('«%s» (id %s)' % (r.number or r.name, r.id) for r in self)
@@ -1467,7 +1499,7 @@ class HrPayslip(models.Model):
     def _ne_salida_de_la_duda(self, reembolso):
         """Lo que sí destraba una duda: sin ese reembolso confirmado no hay nada que emparejar, y quien sabe qué se pagó cancela lo demás. Nunca se pide eliminar: borrar un recibo puede pasar el reembolso a otro."""
         return reembolso._ne_en_este_orden(
-            _('deje confirmados solo los recibos de lo que sí se pagó y cancele los demás, sin eliminarlos (si un valor estaba mal, cancele ese recibo y haga uno nuevo)'), _('genere o envíe el XML'))
+            _('si un recibo de ese pago no se pagó o tenía un valor mal, cancélelo sin eliminarlo y, si hace falta, haga el que corresponda; deje confirmado el que sí se pagó'), _('genere o envíe el XML'))
 
     def _ne_en_este_orden(self, *despues):
         """``self``: los reembolsos que estorban. La salida paso a paso, nombrándolos: «Sin pagar» (botón nativo) solo si alguno figura pagado, porque un recibo pagado no tiene «Cancelar»."""
@@ -1512,6 +1544,52 @@ class HrPayslip(models.Model):
                     'El lote no cambió el estado de este recibo porque tiene el reembolso %(reembolsos)s. Solo si necesita cambiarlo: %(salida)s',
                     reembolsos=reembolsos._ne_recibos_con_id(), salida=reembolsos._ne_en_este_orden(_('cambie este recibo desde su propia ficha'))))
         return self - conservan
+
+    def _ne_exigir_cancelar_antes_su_reembolso(self, van_juntos):
+        """``self``: recibos confirmados que se van a cancelar. Con un reembolso confirmado, posterior y del mismo pago, que no vaya en la operación, se detiene (Odoo no guarda el enlace: cuenta el pago, no las líneas)."""
+        for recibo in self._ne_solo_colombia().filtered(lambda r: not r.credit_note and not r.l10n_co_ne_is_adjustment):
+            reembolsos = recibo.sudo().search(
+                recibo._ne_rete_mismo_pago() + [('credit_note', '=', True), ('state', 'in', ('done', 'paid')), ('id', '>', recibo.id)], order='id') - van_juntos.sudo()
+            if reembolsos:
+                raise UserError(_(
+                    'No se puede cancelar %(recibo)s de %(empleado)s: tiene el reembolso confirmado %(reembolsos)s, que quedaría restando solo. %(salida)s', recibo=recibo._ne_recibos_con_id(),
+                    empleado=recibo.employee_id.name, reembolsos=reembolsos._ne_recibos_con_id(), salida=reembolsos._ne_en_este_orden(_('cancele %s', recibo._ne_recibos_con_id()))))
+
+    def _ne_exigir_recibo_que_respalde(self, van_juntos):
+        """``self``: reembolsos que se van a confirmar. Cada uno necesita un recibo confirmado del mismo pago, creado antes que él, que no tenga ya su reembolso confirmado."""
+        def cubiertos(reembolsos, originales):
+            libres, total = sorted(originales.ids), 0
+            for numero in sorted(reembolsos.ids):
+                if libres and libres[0] < numero:
+                    libres, total = libres[1:], total + 1
+            return total
+
+        confirmados = ('done', 'paid')
+        for reembolso in self._ne_solo_colombia().sorted('id'):
+            del_pago = reembolso.sudo().search(reembolso._ne_rete_mismo_pago() + [('l10n_co_ne_is_adjustment', '=', False)])
+            originales = del_pago.filtered(lambda r: not r.credit_note and (r.state in confirmados or (r in van_juntos and r.state != 'cancel')))
+            otros = del_pago.filtered(lambda r: r.credit_note and r.id != reembolso.id and (r.state in confirmados or (r in van_juntos and r.id < reembolso.id)))
+            if cubiertos(otros | reembolso.sudo(), originales) <= cubiertos(otros, originales):
+                raise UserError(_(
+                    'No se puede confirmar el reembolso %(reembolso)s de %(empleado)s (%(desde)s a %(hasta)s): no hay un recibo confirmado anterior del mismo pago (empleado, contrato, estructura y fechas) que no tenga '
+                    'ya su reembolso. Cancele este reembolso, o confirme primero el recibo que devuelve.', reembolso=reembolso._ne_recibos_con_id(), empleado=reembolso.employee_id.name, desde=reembolso.date_from,
+                    hasta=reembolso.date_to))
+
+    # ── «Reintegro» (.341): sin cuenta no se contabiliza a medias ──
+    def _ne_validar_cuentas_reintegro(self):
+        """Si la estructura contabiliza, cada línea de «Reintegro» necesita su cuenta en «Cuenta de débito» y la de crédito vacía (así el asiento cuadra con el devengado y con el descuento); si no, el nativo cuadraría
+        en silencio contra la cuenta por defecto del diario."""
+        for recibo in self._ne_solo_colombia():
+            lineas = recibo.line_ids.filtered(
+                lambda l: l.salary_rule_id.l10n_co_ne_dian_concept in ('Reintegro', 'ReintegroDed') and not float_is_zero(l.total, precision_digits=2))
+            if not lineas or not recibo.struct_id.rule_ids.with_company(recibo.company_id).filtered(lambda r: r.account_debit or r.account_credit):
+                continue
+            malas = lineas.salary_rule_id.with_company(recibo.company_id).filtered(lambda r: not r.account_debit or r.account_credit)
+            if malas:
+                raise UserError(_(
+                    'No se puede contabilizar %(recibo)s de %(empleado)s: ponga la cuenta de %(reglas)s (estructura «%(estructura)s», compañía «%(compania)s») en «Cuenta de débito» y deje vacía la de crédito, en '
+                    'Nómina > Configuración > Nómina Colombia > Cuentas Contables. La cuenta depende de la causa del reintegro; en un descuento el asiento la acredita.', recibo=recibo._ne_recibos_con_id(),
+                    empleado=recibo.employee_id.name, estructura=recibo.struct_id.name, compania=recibo.company_id.name, reglas=', '.join('«%s» (%s)' % (r.name, r.code) for r in malas)))
 
     @api.ondelete(at_uninstall=False)
     def _ne_no_eliminar_lo_reembolsado(self):
@@ -1662,6 +1740,7 @@ class HrPayslip(models.Model):
 
     def _prepare_slip_lines(self, date, line_ids):
         self._ne_validar_cuenta_neto()
+        self._ne_validar_cuentas_reintegro()
         new_lines = super()._prepare_slip_lines(date, line_ids)
         precision = self.company_id.currency_id.decimal_places
         procesadas = []
@@ -1779,6 +1858,7 @@ class HrPayslip(models.Model):
         colombia._ne_validar_duracion_periodo()
         colombia._ne_validar_sin_solape()
         colombia._ne_validar_cuenta_neto()
+        colombia._ne_validar_cuentas_reintegro()
         colombia._ne_validar_pacto_no_salarial()
         colombia._ne_validar_afiliaciones()       # H-F1-06: la afiliación completa, aun sin cuenta contable en las reglas
         sin_confirmar = colombia.filtered(lambda r: r.state in ('draft', 'verify'))
