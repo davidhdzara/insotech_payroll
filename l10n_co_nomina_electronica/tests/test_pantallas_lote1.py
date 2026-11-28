@@ -56,10 +56,15 @@ class TestPantallasLote1(TransactionCase):
                     self.assertFalse(dominio)
 
     def test_la_entrada_de_trabajo_se_valida_desde_su_ficha(self):
-        """Q-58: botón con la validación nativa, solo en borrador."""
+        """Q-58: botón con la validación nativa, solo en borrador y en compañía colombiana."""
         arbol = self._arbol('hr.work.entry', 'hr_work_entry.hr_work_entry_view_form')
         boton, = arbol.xpath("//header/button[@name='action_validate']")
-        self.assertEqual((boton.get('type'), boton.get('invisible'), boton.get('string')), ('object', "state != 'draft'", 'Validar'))
+        self.assertEqual((boton.get('type'), boton.get('string')), ('object', 'Validar'))
+        for estado, colombiana, oculto in (('draft', True, False), ('draft', False, True), ('validated', True, True)):
+            self.assertEqual(bool(safe_eval(boton.get('invisible'), {'state': estado, 'l10n_co_ne_es_colombia': colombiana})), oculto)
+        for pais, colombiana in (('base.co', True), ('base.mx', False)):
+            compania = self.env['res.company'].create({'name': 'Compañía Entradas %s' % pais, 'country_id': self.env.ref(pais).id})
+            self.assertEqual(self.env['hr.work.entry'].new({'company_id': compania.id}).l10n_co_ne_es_colombia, colombiana)
         empleado = self.env['hr.employee'].create({'name': 'Entrada de trabajo', 'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
         contrato = self.env['hr.contract'].create({
             'name': 'Contrato entrada', 'employee_id': empleado.id, 'wage': 3000000.0, 'date_start': datetime(2026, 1, 1).date(), 'state': 'open',

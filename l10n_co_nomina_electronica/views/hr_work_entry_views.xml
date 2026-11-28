@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <!-- Q-58: validar la entrada de trabajo desde su propia ficha. La barra de estado nativa es de solo lectura; el botón llama la validación nativa, que revisa los cruces
+    <!-- Q-58: validar la entrada de trabajo desde su propia ficha, en compañías colombianas. La barra de estado nativa es de solo lectura; el botón llama la validación nativa, que revisa los cruces
          (si hay, la deja en conflicto). Una entrada validada queda bloqueada, como en el nativo. -->
     <record id="hr_work_entry_view_form_ne" model="ir.ui.view">
         <field name="name">hr.work.entry.form.ne</field>
@@ -9,7 +9,8 @@
         <field name="inherit_id" ref="hr_work_entry.hr_work_entry_view_form"/>
         <field name="arch" type="xml">
             <xpath expr="//header" position="inside">
-                <button name="action_validate" type="object" string="Validar" class="btn-primary" invisible="state != 'draft'" groups="hr_payroll.group_hr_payroll_user"/>
+                <field name="l10n_co_ne_es_colombia" invisible="1"/>
+                <button name="action_validate" type="object" string="Validar" class="btn-primary" invisible="state != 'draft' or not l10n_co_ne_es_colombia" groups="hr_payroll.group_hr_payroll_user"/>
             </xpath>
         </field>
     </record>
