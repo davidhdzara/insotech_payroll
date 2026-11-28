@@ -47,3 +47,4 @@ from . import l10n_co_employee_pacto
 from . import l10n_co_employee_descanso
 from . import hr_payslip_retencion       # R-2: después de hr_payslip (sus create/write protegen las cifras de la retención)
 from . import l10n_co_ne_consecutivo      # .304: después de l10n_co_ne_exchange y de l10n_co_ne_documento (la vista SQL lee sus tablas)
+from . import hr_work_entry
