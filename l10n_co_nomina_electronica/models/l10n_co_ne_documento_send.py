@@ -171,8 +171,10 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
                 Markup('<li>%s: %s</li>') % (etiquetas.get(a['level'], a['level']), a['message']) for a in alertas)
             van = self._ne_recibos_que_van(grupo).sorted(lambda s: (s.date_to, s.id))
             if van:
-                detalle = Markup('<li>%s: %s</li>') % (_('Recibos del documento'), ', '.join(
-                    _('%(recibo)s (%(desde)s a %(hasta)s)', recibo=s.display_name, desde=s.date_from, hasta=s.date_to) for s in van)) + detalle
+                textos = []
+                for s in van:          # un bucle y no un generador: `_()` busca el idioma en las variables del marco; en un generador sin `self` no lo encuentra, no traduce y avisa en el registro
+                    textos.append(_('%(recibo)s (%(desde)s a %(hasta)s)', recibo=s.display_name, desde=s.date_from, hasta=s.date_to))
+                detalle = Markup('<li>%s: %s</li>') % (_('Recibos del documento'), ', '.join(textos)) + detalle
             items.append(Markup('<li><b>%s</b><ul>%s</ul></li>') % (titulo, detalle))
         return Markup('<ul>%s</ul>') % Markup('').join(items) if items else False
 

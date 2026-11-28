@@ -43,17 +43,27 @@ class TestPantallasLote1(TransactionCase):
         """Q-48; en una compañía de otro país queda igual que en el nativo (sin filtro)."""
         Asistente = self.env['hr.payslip.employees']
         arbol = self._arbol('hr.payslip.employees', 'hr_payroll.view_hr_payslip_by_employees')
-        for campo in arbol.xpath("//field[@name='structure_id']"):
-            self.assertFalse(campo.get('domain'), 'La vista nativa no impone otro filtro que tape el del campo')
+        self.assertFalse(arbol.xpath("//field[@name='structure_type_id']")[0].get('domain'), 'La vista no impone un filtro que tape el del campo')
+        self.assertIn(None, [campo.get('domain') for campo in arbol.xpath("//field[@name='structure_id']")], 'Sin tipo elegido, vale el filtro del campo')
         for pais, colombiana in (('base.co', True), ('base.mx', False)):
-            with self.subTest(pais):
-                company = self.env['res.company'].create({'name': 'Compañía Estructuras %s' % pais, 'country_id': self.env.ref(pais).id})
-                dominio = Asistente.with_company(company).fields_get(['structure_id'])['structure_id'].get('domain')
-                estructuras = self.env['hr.payroll.structure'].with_context(active_test=True).search(list(dominio or []))
-                if colombiana:
-                    self.assertEqual(set(estructuras.mapped('country_id.code')), {'CO'})
-                else:
-                    self.assertFalse(dominio)
+            company = self.env['res.company'].create({'name': 'Compañía Estructuras %s' % pais, 'country_id': self.env.ref(pais).id})
+            for campo, modelo in (('structure_id', 'hr.payroll.structure'), ('structure_type_id', 'hr.payroll.structure.type')):
+                with self.subTest(pais=pais, campo=campo):
+                    dominio = Asistente.with_company(company).fields_get([campo])[campo].get('domain')
+                    if colombiana:
+                        self.assertEqual(set(self.env[modelo].search(list(dominio)).mapped('country_id.code')), {'CO'})
+                    else:
+                        self.assertFalse(dominio)
+
+    def test_en_multicompania_mixta_el_filtro_sigue_a_la_compania_activa_como_la_lista_de_empleados(self):
+        """Q-48: el nativo toma los empleados de la compañía activa, aunque el lote sea de otra."""
+        colombia, mexico = (self.env['res.company'].create({'name': 'Mixta %s' % pais, 'country_id': self.env.ref(pais).id}) for pais in ('base.co', 'base.mx'))
+        for activa, del_lote, filtra in ((colombia, mexico, True), (mexico, colombia, False)):
+            with self.subTest(activa=activa.name):
+                lote = self.env['hr.payslip.run'].create({'name': 'Lote mixto', 'company_id': del_lote.id})
+                asistente = self.env['hr.payslip.employees'].with_context(allowed_company_ids=[activa.id, del_lote.id], active_id=lote.id)
+                self.assertEqual(bool(asistente.fields_get(['structure_id'])['structure_id'].get('domain')), filtra)
+                self.assertIn(('company_id', '=', activa.id), asistente.new({}).get_employees_domain())
 
     def test_la_entrada_de_trabajo_se_valida_desde_su_ficha(self):
         """Q-58: botón con la validación nativa, solo en borrador y en compañía colombiana."""
