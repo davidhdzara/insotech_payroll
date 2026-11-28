@@ -18,7 +18,7 @@ from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import dian_utils
 from .common_dane import ciudad_con_dane
-from .common_version import crear_contrato
+from .common_version import confirmar_a_mano, crear_contrato
 
 
 class _FakeCertificate:
@@ -166,6 +166,31 @@ class TestDianPaisMoneda(TransactionCase):
         payslip.write({'struct_id': self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion').id,
                        'date_from': date(2024, 1, 1), 'date_to': date(2026, 9, 20)})
         self.assertEqual(payslip._collect_payslip_data()['periodo']['FechaRetiro'], '2026-09-20')
+
+    def test_sin_calle_en_la_compania_o_en_la_direccion_de_trabajo_hay_un_error_claro_antes_del_consecutivo(self):
+        """.339 (NIE038, NIE053): una dirección vacía no se escribe como atributo vacío: se detiene nombrando a quién corregir y sin gastar el número."""
+        otra = self.env['res.partner'].create({
+            'name': 'Sede sin calle', 'country_id': self.co_country.id, 'state_id': self.co_state.id, 'city_id': self.co_city.id, 'company_id': self.company.id})
+        for calle in (False, '   '):
+            with self.subTest(donde='lugar de trabajo', calle=calle):
+                otra.street = calle
+                payslip = self._make_payslip(work_address=otra)
+                confirmar_a_mano(payslip)
+                with self.assertRaises(UserError) as error:
+                    payslip.action_generate_ne_xml()
+                for texto in ('Empleado Prueba', 'Sede sin calle', 'NIE053'):
+                    self.assertIn(texto, error.exception.args[0])
+                self.assertFalse(payslip.l10n_co_ne_consecutive)
+            with self.subTest(donde='compañía', calle=calle):
+                payslip = self._make_payslip()
+                confirmar_a_mano(payslip)
+                self.company.partner_id.street = calle
+                with self.assertRaises(UserError) as error:
+                    payslip.action_generate_ne_xml()
+                for texto in (self.company.name, 'NIE038'):
+                    self.assertIn(texto, error.exception.args[0])
+                self.assertFalse(payslip.l10n_co_ne_consecutive)
+                self.company.partner_id.street = 'Calle Prueba Compañía # 1-1'
 
     def test_lugar_trabajo_default_usa_los_4_de_la_compania(self):
         """H-018 (2026-10-11), punto (a): un empleado sin Dirección de Trabajo propia

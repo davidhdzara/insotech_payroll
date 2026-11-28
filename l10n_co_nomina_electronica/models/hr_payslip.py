@@ -2100,6 +2100,10 @@ class HrPayslip(models.Model):
         now = datetime.now(_pytz_timezone('America/Bogota'))
         company_nit, company_dv = self._ne_company_nit_dv()
         departamento_cia, municipio_cia = self._ne_codigos_ubicacion(company.partner_id, _('la compañía %s', company.name))
+        if not (company.partner_id.street or '').strip():
+            raise UserError(_(
+                'La compañía %(compania)s no tiene calle en su dirección (contacto «%(contacto)s»): el XML de nómina electrónica exige la dirección del empleador (Anexo V1.0, NIE038). Complete la calle en '
+                'Ajustes > Compañías (o en ese contacto) y vuelva a generar.', compania=company.name, contacto=company.partner_id.display_name))
 
         # AUD-DIAN-34 (2026-09-14): NumeroSecuenciaXML/@Numero debe ser
         # Prefijo+Consecutivo (ej. "NE00000001"), pero @Consecutivo debe
@@ -2679,6 +2683,10 @@ class HrPayslip(models.Model):
         _name_parts = employee._l10n_co_nombre_dian()
         lugar_trabajo = self._ne_lugar_trabajo_partner()
         departamento_trabajo, municipio_trabajo = self._ne_codigos_ubicacion(lugar_trabajo, _('el lugar de trabajo de %s', employee.name))
+        if not (lugar_trabajo.street or '').strip():
+            raise UserError(_(
+                'La Dirección de Trabajo de %(empleado)s (contacto «%(contacto)s») no tiene calle: el XML de nómina electrónica la exige (Anexo V1.0, NIE053). Complete la calle de ese contacto, o elija otra '
+                '«Dirección de Trabajo» en la ficha del empleado, y vuelva a generar.', empleado=employee.name, contacto=lugar_trabajo.display_name))
         return {
             # H-F1-09 y H-F3-04: tipo y subtipo salen de la VERSION del contrato del recibo (para el aprendiz el tipo se deriva con la tabla ``l10n_co_aprendiz_etapas``).
             # ``l10n_co_ne_aviso_tipo_trabajador`` avisa si la ficha dice otra cosa.
