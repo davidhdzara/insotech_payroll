@@ -327,6 +327,10 @@ class L10nCoNeDocumento(models.Model):
         if slip._ne_historia_solo_habilitacion():
             return _('El recibo "%s" solo tiene historia de habilitación (pruebas): no entra a un documento real.',
                      slip.display_name)
+        if slip.credit_note:
+            return _('El recibo "%s" es un reembolso: no se reporta a la DIAN.', slip.display_name)
+        if slip._ne_reembolsos()[0]:      # .340: con duda no se saca aquí; la validación y el envío se detienen
+            return _('El recibo "%s" fue anulado por un reembolso confirmado: no se reporta a la DIAN.', slip.display_name)
         return False
 
     @api.model
@@ -669,6 +673,19 @@ class L10nCoNeDocumento(models.Model):
         recibos_xml = self._ne_recibos_para_xml()
         if not recibos_xml:
             alerta('sin_recibos', 'danger', _('El documento no tiene recibos pagados en el mes.'))
+        # .340: un recibo propio anulado por un reembolso confirmado no puede viajar; con duda sobre cuál se anuló, tampoco.
+        anulados, dudas = (self.payslip_ids | recibos_xml)._ne_reembolsos()
+        if dudas and not self._ne_es_nota_eliminar():
+            alerta('reembolso_dudoso', 'danger', ' '.join(dudas))
+        for slip in anulados & self.payslip_ids:
+            if self.state == 'invoice_accepted':
+                alerta('recibo_reembolsado_%s' % slip.id, 'warning', _(
+                    'El recibo %(recibo)s de este documento fue anulado por un reembolso confirmado después de enviarlo: corríjalo con una nota de ajuste (Reemplazar sin ese recibo, o Eliminar si no queda ninguno).',
+                    recibo=slip.display_name))
+            elif not self._ne_es_nota_eliminar():
+                alerta('recibo_reembolsado_%s' % slip.id, 'danger', _(
+                    'El recibo %(recibo)s fue anulado por un reembolso confirmado y no puede viajar a la DIAN: vuelva a preparar el mes del empleado («Enviar y Procesar» desde sus recibos) para sacarlo.',
+                    recibo=slip.display_name))
         # Datos incompletos: los mismos prerrequisitos del ciclo por recibo, sin sus chequeos de estado.
         try:
             self.company_id._l10n_co_ne_validar_config()
@@ -900,6 +917,7 @@ class L10nCoNeDocumento(models.Model):
             return self.payslip_ids
         recibos = self._ne_con_sus_padres().payslip_ids
         vigentes = recibos.filtered(lambda slip: slip.state in ('done', 'paid'))
+        vigentes -= vigentes._ne_reembolsos()[0]      # .340: lo anulado por un reembolso confirmado no vuelve a componerse
         return recibos if not vigentes and self._ne_es_nota_eliminar() else vigentes
 
     def _ne_con_sus_padres(self):
@@ -925,10 +943,14 @@ class L10nCoNeDocumento(models.Model):
         if self._ne_es_nota_eliminar():
             return
         recibos = self._ne_recibos_para_xml().sudo().sorted('date_to')
-        problemas, vigentes = [], set()
+        anulados, dudas = recibos._ne_reembolsos()
+        problemas, vigentes = list(dudas), set()
         for recibo in recibos:
             if recibo.state not in ('done', 'paid'):
                 problemas.append(_('El recibo "%s" ya no está confirmado ni pagado.', recibo.display_name))
+                continue
+            if recibo in anulados:
+                problemas.append(_('El recibo "%s" fue anulado por un reembolso confirmado.', recibo.display_name))
                 continue
             try:
                 fechas = recibo._ne_fechas_pago()
@@ -947,6 +969,19 @@ class L10nCoNeDocumento(models.Model):
                 if en_el_xml - vigentes:
                     problemas.append(_('El XML generado lleva un pago del %(fechas)s que ya no es el de sus recibos (%(recibos)s).',
                                        fechas=', '.join(sorted(en_el_xml - vigentes)), recibos=', '.join(recibos.mapped('display_name'))))
+        # .340: la nota deriva sus recibos de la cadena y deja fuera los anulados; un XML armado ANTES del reembolso todavía los lleva. Solo si la cadena tiene anulados se comparan los totales.
+        if contra_el_xml and not problemas and self.is_adjustment and self._ne_con_sus_padres().payslip_ids._ne_reembolsos()[0]:
+            try:
+                datos = [recibo._collect_payslip_data() for recibo in recibos]
+                en_el_xml = ne_xml_utils.totales_de_xml(base64.b64decode(self.xml_attachment_id.datas))
+                actuales = [sum(float(d.get(clave) or 0.0) for d in datos) for clave in ('devengados_total', 'deducciones_total')]
+                distintos = any(valor is None or abs(valor - actual) > 0.01 for valor, actual in zip(en_el_xml, actuales))
+            except Exception as error:      # sin poder compararlo no se envía
+                problemas.append(_('No se puede comprobar que el XML generado corresponda a los recibos vigentes: %s', error))
+            else:
+                if distintos:
+                    problemas.append(_('Los totales del XML generado no son los de los recibos vigentes de la nota (%(recibos)s): lleva un recibo anulado por un reembolso.',
+                                       recibos=', '.join(recibos.mapped('display_name'))))
         if not problemas:
             return
         if self.state == 'invoice_sending_failed':

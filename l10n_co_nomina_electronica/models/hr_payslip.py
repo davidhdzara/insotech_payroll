@@ -1366,8 +1366,13 @@ class HrPayslip(models.Model):
         # Clase A (.335): un recibo de un documento mensual que pierde un pago (anular, borrador, cancelar, lote o cualquier otra escritura) no puede dejar enviable un XML que lo lleva.
         vigilados = self.filtered('l10n_co_ne_documento_id') if self._NE_CAMPOS_DEL_PAGO.intersection(vals) else self.browse()
         antes = {recibo.id: recibo.sudo()._ne_pagos_vigentes() for recibo in vigilados}
+        por_confirmar = (self.filtered(lambda r: r.credit_note and r.state not in ('done', 'paid'))
+                         if vals.get('state') in ('done', 'paid') else self.browse())
         res = super().write(vals)
         perdieron = vigilados.filtered(lambda r: not antes[r.id] <= r.sudo()._ne_pagos_vigentes())
+        for reembolso in por_confirmar:          # .340: el original queda igual, pero lo que paga ya no puede viajar
+            originales = reembolso.sudo().search(reembolso._ne_rete_mismo_pago() + [('credit_note', '=', False)])
+            perdieron |= originales._ne_reembolsos()[0].filtered('l10n_co_ne_documento_id').with_env(self.env)
         if perdieron:
             self.env['l10n.co.ne.documento']._ne_tras_perder_un_pago(perdieron)
         if ('input_line_ids' in vals and self._ne_comandos_cambian_novedades(vals['input_line_ids'])) or (
@@ -1376,6 +1381,66 @@ class HrPayslip(models.Model):
         return res
 
     _NE_CAMPOS_DEL_PAGO = frozenset({'state', 'paid_date', 'l10n_co_ne_fecha_pago_registrada'})
+
+    # ── Lo anulado por un reembolso CONFIRMADO no viaja a la DIAN (.340, Q-96) ──
+    def _ne_huella_de_lineas(self, signo=1):
+        """Las líneas con valor del recibo como lista ordenada ``(código, total)``; con ``signo`` -1, las que tendría su reembolso."""
+        self.ensure_one()
+        return sorted((linea.code, float_round(signo * linea.total, precision_digits=2)) for linea in self.sudo().line_ids if not float_is_zero(linea.total, precision_digits=2))
+
+    def _ne_reembolsos(self):
+        """``(anulados, dudas)``: de ``self``, los recibos que un reembolso confirmado anuló, y un texto por cada reembolso confirmado del que NO se puede saber qué recibo anuló (quien arma o envía un XML se detiene con él).
+
+        Odoo no enlaza el reembolso con su original (``refund_sheet`` copia el recibo y niega sus líneas). Regla: un reembolso solo anula un recibo del mismo pago (empleado, compañía, contrato, estructura y fechas) creado
+        ANTES que él; si ese original se cancela y se hace otro, el nuevo no queda anulado. De esos, el que tenga exactamente sus líneas con el signo contrario; si ninguno las tiene y solo hay uno, ese. Si quedan varios y
+        no son iguales en estado, líneas y fecha de pago, no se adivina. Un reembolso sin confirmar no anula nada. Solo para el XML de nómina: la retención, la liquidación y la PILA siguen con su neteo."""
+        propios = self.filtered(lambda r: r.id and not r.credit_note and not r.l10n_co_ne_is_adjustment)
+        anulados, dudas = self.browse(), []
+        if not propios:
+            return anulados, dudas
+        recibos = self.sudo()
+        confirmados = ('done', 'paid')
+        reembolsos = recibos.search([('credit_note', '=', True), ('state', 'in', confirmados), ('employee_id', 'in', propios.employee_id.ids), ('company_id', 'in', propios.company_id.ids)], order='id')
+        if not reembolsos:
+            return anulados, dudas
+        pedidos = {tuple(valor for _campo, _op, valor in r._ne_rete_mismo_pago()) for r in propios}
+        por_pago = {}
+        for reembolso in reembolsos:
+            pago = tuple(valor for _campo, _op, valor in reembolso._ne_rete_mismo_pago())
+            if pago in pedidos:
+                por_pago[pago] = por_pago.get(pago, recibos.browse()) | reembolso
+        hallados = recibos.browse()
+        for del_pago in por_pago.values():
+            libres = recibos.search(del_pago[:1]._ne_rete_mismo_pago() + [('credit_note', '=', False), ('l10n_co_ne_is_adjustment', '=', False)], order='id')
+            for reembolso in del_pago.sorted('id'):
+                antes = libres.filtered(lambda r: r.id < reembolso.id)
+                iguales = antes.filtered(lambda r: r._ne_huella_de_lineas() == reembolso._ne_huella_de_lineas(-1))
+                posibles = (iguales or antes).sorted('id')
+                if len(posibles) > 1:
+                    vigentes = posibles.filtered(lambda r: r.state in confirmados)
+                    if not vigentes:
+                        continue          # ninguno de ellos viaja
+                    if vigentes != posibles or not iguales or len(set(posibles.mapped('paid_date'))) > 1:
+                        dudas.append(_(
+                            'No se puede saber qué recibo anuló el reembolso «%(reembolso)s» de %(empleado)s (%(desde)s a %(hasta)s): puede ser cualquiera de %(recibos)s. Elimine los recibos cancelados o en borrador '
+                            'que no correspondan, o reembolse y rehaga el que quede, antes de generar o enviar el XML.', reembolso=reembolso.number or reembolso.name, empleado=reembolso.employee_id.name,
+                            desde=reembolso.date_from, hasta=reembolso.date_to, recibos=', '.join('«%s» (id %s)' % (r.number or r.name, r.id) for r in posibles)))
+                        continue
+                    posibles = posibles[-1:]
+                hallados |= posibles
+                libres -= posibles
+        return self & hallados.with_env(self.env), dudas
+
+    def _ne_exigir_no_reembolsado(self):
+        """Lo anulado por un reembolso confirmado tampoco viaja por el ciclo por recibo (ni el propio reembolso)."""
+        reembolso = self.filtered('credit_note')[:1]
+        if reembolso:
+            raise UserError(_('«%s» es un reembolso: no se transmite a la DIAN.', reembolso.number or reembolso.name))
+        anulados, dudas = self._ne_reembolsos()
+        if anulados:
+            raise UserError(_('%s fue anulado por un reembolso confirmado: no se transmite a la DIAN.', ', '.join('«%s»' % (r.number or r.name) for r in anulados)))
+        if dudas:
+            raise UserError(' '.join(dudas))
 
     def _ne_pagos_vigentes(self):
         """Fechas de pago con las que este recibo puede ir en un XML: confirmado o pagado y con fecha según la fuente de la compañía. Vacío si no."""
@@ -2660,8 +2725,8 @@ class HrPayslip(models.Model):
         """``FechaRetiro`` del XML (``''`` si no va): el último «Hasta» de las liquidaciones de contrato que van en ``self`` (los recibos del documento mensual, o el recibo en el XML por recibo). La fecha final
         del contrato NO la decide: un término fijo que se prorroga la traería todos los meses. Una liquidación reembolsada no cuenta. Anexo Técnico V1.0, NIE003 (0-1): solo en el mes en que se presenta el
         retiro; con varios, la última fecha."""
-        liquidaciones = self.filtered(lambda r: r._ne_es_liquidacion() and r.date_to and not r.credit_note
-                                      and not (r.state in ('done', 'paid') and r._ne_rete_reembolsado(self.browse())))
+        liquidaciones = self.filtered(lambda r: r._ne_es_liquidacion() and r.date_to and not r.credit_note)
+        liquidaciones -= liquidaciones.filtered(lambda r: r.state in ('done', 'paid'))._ne_reembolsos()[0]
         return str(max(liquidaciones.mapped('date_to'))) if liquidaciones else ''
 
     def _ne_es_semanal(self):

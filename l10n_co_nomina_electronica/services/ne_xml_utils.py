@@ -37,6 +37,13 @@ def cunenov_de_xml(xml_bytes):
     return novedad.get('CUNENov', '') if novedad is not None else ''
 
 
+def totales_de_xml(xml_bytes):
+    """``(DevengadosTotal, DeduccionesTotal)`` de un XML de nómina o de su nota «Reemplazar», como ``float`` (``None`` si falta). Lanza ``lxml.etree.XMLSyntaxError`` si el XML no se puede leer."""
+    raiz = etree.fromstring(xml_bytes)
+    nodos = (next(raiz.iter('{*}%s' % nombre), None) for nombre in ('DevengadosTotal', 'DeduccionesTotal'))
+    return tuple(float(nodo.text) if nodo is not None else None for nodo in nodos)
+
+
 def fechas_de_pago_de_xml(xml_bytes):
     """Las ``FechaPago`` de un XML de nómina (``FechasPagos``) como textos 'AAAA-MM-DD'; vacío si no lleva ninguna.
 

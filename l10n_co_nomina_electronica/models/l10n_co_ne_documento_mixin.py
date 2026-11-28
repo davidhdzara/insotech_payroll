@@ -502,6 +502,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         self.ensure_one()
         self._ne_exigir_administrador_de_nomina()
         self._ne_bloquear_si_va_en_documento()
+        self._ne_exigir_no_reembolsado()
         if self.l10n_co_ne_state not in ('generated', 'rejected'):
             raise UserError(_(
                 'Solo puede enviar a la DIAN documentos en estado '
@@ -789,6 +790,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
         records = self.filtered(
             lambda p: p.l10n_co_ne_state in ('generated', 'uncertain')
         )
+        records._ne_exigir_no_reembolsado()
         if not records:
             raise UserError(_(
                 'No hay nóminas con XML generado, ni en envío incierto, '
@@ -1314,6 +1316,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
     def _validate_ne_prerequisites(self):
         """Valida que la nómina cumpla los prerequisitos para generar XML."""
         self.ensure_one()
+        self._ne_exigir_no_reembolsado()
 
         if self.state != 'done':
             raise UserError(_(
