@@ -157,6 +157,15 @@ class TestDianPaisMoneda(TransactionCase):
         payslip.contract_id.schedule_pay = False
         self.assertNotIn('PeriodoNomina', payslip._collect_payslip_data()['informacion_general'])
 
+    def test_fecha_de_retiro_del_xml_por_recibo_sale_de_la_liquidacion_y_no_del_contrato(self):
+        """.339 (NIE003): un término fijo con fecha final no la envía en sus recibos; el recibo de liquidación envía su «Hasta»."""
+        payslip = self._make_payslip()
+        payslip.contract_id.date_end = date(2026, 12, 31)
+        self.assertEqual(payslip._collect_payslip_data()['periodo']['FechaRetiro'], '')
+        payslip.write({'struct_id': self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion').id,
+                       'date_from': date(2024, 1, 1), 'date_to': date(2026, 9, 20)})
+        self.assertEqual(payslip._collect_payslip_data()['periodo']['FechaRetiro'], '2026-09-20')
+
     def test_lugar_trabajo_default_usa_los_4_de_la_compania(self):
         """H-018 (2026-10-11), punto (a): un empleado sin Dirección de Trabajo propia
         hereda la de la compañía (address_id, compute nativo) -- los 4 atributos
