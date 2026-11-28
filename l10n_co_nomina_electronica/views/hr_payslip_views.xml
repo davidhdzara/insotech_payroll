@@ -409,4 +409,20 @@
         <field name="code">records.action_send_test_set()</field>
     </record>
 
+    <!-- Q-48: en una compañía colombiana el lote solo ofrece estructuras de Colombia (las nativas sin país, como «Regular Pay», dejan la lista de empleados vacía). Decide la compañía del LOTE, que es con la que el
+         nativo v19 arma esa lista (hr_payroll/models/hr_payslip_run.py, _get_valid_version_ids). En otro país queda el dominio nativo. v19 no tiene el asistente de v18 ni elige tipo de estructura en el lote. -->
+    <record id="hr_payslip_run_form_ne_estructuras" model="ir.ui.view">
+        <field name="name">hr.payslip.run.form.ne.estructuras</field>
+        <field name="model">hr.payslip.run</field>
+        <field name="inherit_id" ref="hr_payroll.hr_payslip_run_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='structure_id']" position="before">
+                <field name="country_code" invisible="1"/>
+            </xpath>
+            <xpath expr="//field[@name='structure_id']" position="attributes">
+                <attribute name="domain">[('country_id', 'in', [country_id] if country_code == 'CO' else [country_id, False])]</attribute>
+            </xpath>
+        </field>
+    </record>
+
 </odoo>

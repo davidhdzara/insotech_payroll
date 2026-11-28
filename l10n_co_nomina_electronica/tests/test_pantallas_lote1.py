@@ -5,6 +5,7 @@
 from lxml import etree
 
 from odoo.tests.common import TransactionCase, tagged
+from odoo.tools.safe_eval import safe_eval
 
 
 @tagged('post_install', '-at_install')
@@ -30,3 +31,20 @@ class TestPantallasLote1(TransactionCase):
         self.patch(modelo, '_ne_regenerar_conceptos', lambda recibos: idiomas.append(recibos.env.lang))
         self.env['hr.payslip'].with_context(lang='en_US')._ne_generar_conceptos_pendientes()
         self.assertEqual(idiomas, ['es_CO'])
+
+    def test_en_una_compania_colombiana_el_lote_solo_ofrece_estructuras_de_colombia(self):
+        """Q-48; decide la compañía del lote. En una compañía de otro país queda el dominio nativo."""
+        arbol = self._arbol('hr.payslip.run', 'hr_payroll.hr_payslip_run_form')
+        campo, = arbol.xpath("//field[@name='structure_id']")
+        self.assertTrue(arbol.xpath("//field[@name='country_code']"), 'El dominio lee el país de la compañía del lote')
+        for pais, colombiana in (('base.co', True), ('base.mx', False)):
+            with self.subTest(pais):
+                country = self.env.ref(pais)
+                dominio = safe_eval(campo.get('domain'), {'country_id': country.id, 'country_code': country.code})
+                if colombiana:
+                    estructuras = self.env['hr.payroll.structure'].search(dominio)
+                    self.assertEqual(set(estructuras.mapped('country_id.code')), {'CO'})
+                    self.assertIn(self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina'), estructuras)
+                    self.assertNotIn(self.env.ref('hr_payroll.structure_002'), estructuras)
+                else:
+                    self.assertEqual(dominio, [('country_id', 'in', [country.id, False])], 'El dominio nativo')
