@@ -101,7 +101,7 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
                             'para incluirlos.'))
             if doc.eliminado or doc.legacy:
                 alerta('no_aplica', 'danger', _('El documento "%s" está eliminado o migrado: no se envía.', doc.display_name))
-            if doc.segmento > 1 and not doc.is_adjustment and not doc.state:
+            if doc.segmento > 1 and not doc.is_adjustment and (not doc.state or doc._ne_rechazado_por_regenerar()):
                 # H-F3-04 (Q7 del TL): el segundo documento espera, sin error, a que el anterior sea aceptado. ``warning``, no ``danger``: un problema del segmento 2 no debe bloquear el envío del 1.
                 try:
                     espera = doc._ne_espera_anterior()
@@ -162,6 +162,16 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
             items.append(Markup('<li><b>%s</b><ul>%s</ul></li>') % (titulo, detalle))
         return Markup('<ul>%s</ul>') % Markup('').join(items) if items else False
 
+    @api.model
+    def _ne_motivo_sin_envio(self, doc):
+        """Por qué «Enviar y Procesar» no encola un documento incierto o rechazado."""
+        if doc.regla_90_sin_conciliar:
+            return _('La DIAN contestó «procesado anteriormente» (regla 90) y está por conciliar: use «Consultar estado DIAN por CUNE» o, si verificó que no hay un documento aceptado con ese número, '
+                     '«Usar el siguiente número» en el documento.')
+        if doc.incierto:
+            return _('Tiene un envío incierto: use «Consultar estado DIAN por CUNE» antes de volver a enviarlo.')
+        return _('La DIAN lo rechazó, pero tiene otro envío sin veredicto: consulte su estado antes de volver a enviarlo.')
+
     # ── ejecución ─────────────────────────────────────────────────────
     @api.model
     def _ne_exigir_cron_activo(self):
@@ -208,8 +218,16 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
                     lambda d, g=grupo: d.period == g['period'] and d.employee_id == g['employee'])
             elif grupo['documentos']:
                 for existente in grupo['documentos']:
+                    existente._ne_recomponer_nota_rechazada()
                     existente._ne_validar()
                     docs |= existente
+        # Un rechazado que la preparación no alcanzó (sus recibos ya no entran en ningún mes) no se salta en silencio: se revalida y, si no se puede, se lista.
+        for grupo in grupos:
+            if bloqueo.get(id(grupo)) is True:
+                continue
+            for existente in (grupo['documentos'] - docs).exists().filtered(lambda d: d.state == 'invoice_rejected'):
+                existente._ne_validar()
+                docs |= existente
         preparados = docs.ids
         if enviar:
             confirmados = {id(g) for g in grupos if bloqueo.get(id(g)) != 'preparar'}
@@ -221,10 +239,11 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
             for doc in permitidos.sorted(lambda d: (d.period, d.employee_id.id, d.segmento, d.id)):       # H-F3-04: en orden de segmento (el segundo lleva el CUNE del primero)
                 try:
                     with self.env.cr.savepoint():
-                        if doc.state in (False, 'invoice_sending_failed') and not doc.is_being_sent:
-                            if not doc.state:
-                                # Sin envío previo: se (re)genera el XML vigente (reutiliza el consecutivo no usado, no
-                                # gasta otro); un envío fallido se reintenta con el MISMO XML y no se regenera.
+                        por_regenerar = doc._ne_rechazado_por_regenerar()
+                        if (doc.state in (False, 'invoice_sending_failed') or por_regenerar) and not doc.is_being_sent:
+                            if not doc.state or por_regenerar:
+                                # Sin envío previo o rechazado: se (re)genera el XML vigente (el número, según ``_ne_numero_se_conserva``);
+                                # un envío fallido se reintenta con el MISMO XML y no se regenera.
                                 doc.action_generar_xml()
                             doc._ne_encolar(confirmo_extemporaneo=confirma_ext)
                             encolados.append(doc.id)
@@ -234,6 +253,8 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
                                     body=_('Mes incompleto confirmado por %(usuario)s el %(fecha)s.',
                                            usuario=self.env.user.name, fecha=fields.Date.context_today(self)),
                                     message_type='comment', subtype_xmlid='mail.mt_note')
+                        elif doc.incierto or doc.state == 'invoice_rejected':
+                            raise UserError(self._ne_motivo_sin_envio(doc))          # se lista: nunca «0 encolados» sin decir por qué
                 except UserError as error:
                     bloqueados.append('%s: %s' % (doc.display_name, error))
         return {'preparados': preparados, 'encolados': encolados, 'bloqueados': bloqueados}

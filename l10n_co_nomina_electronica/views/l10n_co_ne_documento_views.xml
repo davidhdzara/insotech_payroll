@@ -144,7 +144,7 @@
                 <field name="period"/>
                 <separator/>
                 <filter string="Por transmitir" name="por_transmitir"
-                        domain="[('state', 'in', (False, 'invoice_sending_failed')), ('eliminado', '=', False)]"/>
+                        domain="[('state', 'in', (False, 'invoice_sending_failed', 'invoice_rejected')), ('eliminado', '=', False)]"/>
                 <filter string="Pendientes" name="pendientes" domain="[('state', '=', 'invoice_pending')]"/>
                 <filter string="Aceptados" name="aceptados" domain="[('state', '=', 'invoice_accepted')]"/>
                 <filter string="Rechazados" name="rechazados" domain="[('state', '=', 'invoice_rejected')]"/>

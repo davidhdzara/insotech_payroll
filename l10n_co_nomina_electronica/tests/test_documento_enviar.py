@@ -142,7 +142,7 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
     def test_rechazado_vigente_no_se_reenvia_y_remite_a_regenerar(self):
         self._intento('invoice_rejected')
         mensaje = self._no_envia()
-        self.assertIn('genere el XML otra vez', mensaje)
+        self.assertIn('Enviar y Procesar', mensaje)
         self.assertIn('no se reenvía', mensaje)
 
     def test_rechazado_ya_regenerado_si_se_envia(self):
@@ -545,8 +545,14 @@ class TestDocumentoEnviar(DocumentoFixture, TransactionCase):
     def test_pendiente_sigue_sin_recomponerse(self):
         self._sigue_sin_recomponerse('invoice_pending')
 
-    def test_rechazado_sigue_sin_recomponerse(self):
-        self._sigue_sin_recomponerse('invoice_rejected')
+    def test_rechazado_si_se_recompone(self):
+        """.338: un rechazado se corrige en el mismo documento: entra el recibo nuevo y el XML rechazado queda hasta regenerar."""
+        self._intento('invoice_rejected')
+        originales, cune = self.doc.payslip_ids, self.doc.cune
+        nuevo = self._recibo_nuevo_del_mes()
+        self.env['l10n.co.ne.documento']._ne_preparar(nuevo)
+        self.assertEqual(self.doc.payslip_ids, originales | nuevo)
+        self.assertEqual((self.doc.state, self.doc.cune), ('invoice_rejected', cune))
 
     def test_documento_sin_estado_dian_si_se_recompone(self):
         originales = self.doc.payslip_ids
