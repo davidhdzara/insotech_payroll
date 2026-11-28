@@ -1810,7 +1810,7 @@ class HrPayslip(models.Model):
         return recibos
 
     def _ne_huella_calculo(self):
-        """La huella de los datos ACTUALES del recibo (``services.huella_calculo``). Datos propios del recibo que el cálculo lee: cabecera, salario del contrato (D1), novedades, días
+        """La huella de los datos ACTUALES del recibo (``services.huella_calculo``). Datos propios del recibo que el cálculo lee: cabecera, salario del contrato (D1), su clase de riesgo ARL efectiva (Q-60), novedades, días
         trabajados (las reglas de básico y de ausencias los leen), ajustes de la empresa, lo que la retención lee del mes (R-2: si cierra y los recibos confirmados) y las ausencias VALIDADAS del empleado que se cruzan con el periodo (D2; la cadena de prórrogas
         anterior al periodo no entra). Fuera: parámetros, reglas, datos del empleado, el resto del contrato y los demás recibos anteriores (se resuelven con «Calcular hoja»)."""
         self.ensure_one()
@@ -1825,7 +1825,8 @@ class HrPayslip(models.Model):
             dias=[(d.work_entry_type_id.id, d.number_of_days, d.number_of_hours) for d in recibo.worked_days_line_ids],
             ajustes=[(a.salary_rule_id.id, a.quantity, a.rate, a.amount) for a in recibo.l10n_co_ajuste_ids],
             ausencias=[(a.id, a.request_date_from, a.request_date_to, a.holiday_status_id.id) for a in ausencias],
-            mes=recibo._ne_rete_huella())
+            mes=recibo._ne_rete_huella(),
+            riesgo=bool(recibo.contract_id) and recibo.contract_id._ne_clase_riesgo_o_falso())
 
     def _ne_guardar_huella(self):
         """Guarda la huella de cada recibo. Escribe por debajo de ``HrPayslip.write`` (``super``): así la guarda que rechaza escrituras externas no depende de un contexto que un cliente RPC
@@ -1845,7 +1846,7 @@ class HrPayslip(models.Model):
             lineas.append(_('- «%(recibo)s» de %(empleado)s (%(desde)s a %(hasta)s)', recibo=r.number or r.name, empleado=r.employee_id.name, desde=r.date_from, hasta=r.date_to))
         raise UserError(_(
             'No se puede confirmar: la hoja de cálculo no está al día en %(cantidad)s recibo(s):\n%(recibos)s\n'
-            'Cambiaron sus novedades, ajustes, días trabajados, datos del recibo, el salario del contrato o las ausencias del periodo después del último cálculo, o la hoja se calculó antes de '
+            'Cambiaron sus novedades, ajustes, días trabajados, datos del recibo, el salario o la clase de riesgo ARL del contrato o las ausencias del periodo después del último cálculo, o la hoja se calculó antes de '
             'esta versión. Abra cada recibo, pulse «Calcular hoja», revise las líneas y vuelva a confirmar. «Recalcular la hoja entera» además rehace los días trabajados y descarta los que se '
             'hayan editado a mano.', cantidad=len(viejos), recibos='\n'.join(lineas)))
 
