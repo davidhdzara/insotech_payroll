@@ -9,14 +9,31 @@ import copy
 from datetime import date
 from unittest.mock import MagicMock
 
+from lxml import etree
+
 from odoo.exceptions import AccessError, RedirectWarning, UserError
 from odoo.tests.common import TransactionCase, tagged
 
-from odoo.addons.l10n_co_nomina_electronica.services import dian_utils, nomina_xml_builder, xml_signer
+from odoo.addons.l10n_co_nomina_electronica.services import dian_utils, nomina_xml_builder, soap_client, xml_signer
 
 from .common_documento import DocumentoFixture
+from .test_documento_enviar import ACEPTADA, RECHAZO
 from .test_documento_generar import FECHA, HORA, PIN, XML_STUB, _quincena_con_prima
 from .test_documento_merge import _recibo
+from .test_envio_ya_procesado import NO_CONOCIDA, REGLA_90
+
+NS_NOMINA = 'dian:gov:co:facturaelectronica:NominaIndividual'
+NS_AJUSTE = 'dian:gov:co:facturaelectronica:NominaIndividualDeAjuste'
+
+
+def _xml_con_datos(datos):
+    """XML mínimo que deja ver lo que viajó: el sueldo del trabajador y el total devengado."""
+    return ('<NominaIndividual xmlns="%s"><InformacionGeneral FechaGen="2026-04-01"/><Trabajador Sueldo="%s"/><DevengadosTotal>%s</DevengadosTotal></NominaIndividual>'
+            % (NS_NOMINA, datos['trabajador']['Sueldo'], datos['totales']['DevengadosTotal'])).encode()
+
+
+def _xml_de_nota(datos):
+    return ('<NominaIndividualDeAjuste xmlns="%s"><TipoNota>%s</TipoNota><InformacionGeneral/></NominaIndividualDeAjuste>' % (NS_AJUSTE, datos['tipo_nota'])).encode()
 
 
 @tagged('post_install', '-at_install')
@@ -39,7 +56,10 @@ class TestDocumentoAsistente(DocumentoFixture, TransactionCase):
 
         def fabrica(slip):
             datos = copy.deepcopy(_quincena_con_prima() if slip.date_to.day > 15 else _recibo())
-            datos['informacion_general'] = dict(datos['informacion_general'], FechaGen=FECHA, HoraGen=HORA)
+            datos['informacion_general'] = dict(datos['informacion_general'], FechaGen=FECHA, HoraGen=getattr(self, 'hora', HORA))
+            datos['trabajador']['Sueldo'] = getattr(self, 'sueldo', datos['trabajador']['Sueldo'])
+            datos['lugar_generacion'] = {'Pais': 'CO', 'DepartamentoEstado': '11', 'MunicipioCiudad': '11001', 'Idioma': 'es'}          # lo trae el recibo real; la nota lo exige
+            datos['numero_secuencia'] = dict(datos['numero_secuencia'], CodigoTrabajador='1020304050')
             return datos
         self._patch(type(self.env['hr.payslip']), '_collect_payslip_data', lambda s: fabrica(s))
         self._patch(dian_utils, 'compute_software_security_code', lambda *a: 'SC')
@@ -254,3 +274,144 @@ class TestDocumentoAsistente(DocumentoFixture, TransactionCase):
         self.assertEqual(doc.consecutive, consecutivo)
         self.assertTrue(doc.xml_attachment_id and doc.cune)
         self.assertNotEqual(doc.xml_attachment_id, adjunto_viejo)   # XML nuevo, con el recibo incluido
+
+    # ── .338: un documento RECHAZADO se corrige y se envía otra vez desde el asistente real ──
+    def _con_dian(self):
+        self._patch(nomina_xml_builder, 'build_nomina_individual_v2', _xml_con_datos)
+        self._patch(nomina_xml_builder, 'build_nota_ajuste_v2', _xml_de_nota)
+        self.soap = MagicMock(name='send_nomina_sync', return_value=RECHAZO)
+        self._patch(soap_client, 'send_nomina_sync', self.soap)
+        self.consulta = MagicMock(name='get_status', return_value=NO_CONOCIDA)
+        self._patch(soap_client, 'get_status', self.consulta)
+
+    def _responde(self, doc, respuesta):
+        """El envío que haría la cola, con la respuesta dada; la siguiente generación ocurre a otra hora."""
+        self.soap.return_value = respuesta
+        doc._ne_enviar_uno()
+        self.minuto = getattr(self, 'minuto', 0) + 1          # nunca la misma hora: el CUNE de una nota «Eliminar» solo cambia con ella (y el número)
+        self.hora = '10:%02d:00-05:00' % self.minuto
+
+    def _rechazado(self):
+        self._con_dian()
+        self.hora = HORA
+        recibos = self._recibos()
+        self._asistente(recibos, enviar=True).action_send_and_print()
+        doc = recibos.l10n_co_ne_documento_id
+        self._responde(doc, RECHAZO)
+        self.assertEqual((doc.state, doc.is_being_sent, doc.incierto), ('invoice_rejected', False, False))
+        return recibos, doc
+
+    def _del_xml(self, doc):
+        raiz = etree.fromstring(doc.xml_attachment_id.raw)
+        return raiz.find('{*}Trabajador').get('Sueldo'), raiz.find('{*}DevengadosTotal').text
+
+    def _comprobar_encolado(self, doc, accion):
+        self.assertIn('1 encolados, 0 bloqueados', self._mensaje(accion))
+        self.assertEqual((doc.is_being_sent, doc.state, doc.etapa), (True, False, 'ready'))
+
+    def test_un_rechazado_se_envia_otra_vez_con_el_mismo_numero_desde_el_documento_y_desde_los_recibos(self):
+        for origen in ('documento', 'recibos'):
+            with self.subTest(origen):
+                recibos, doc = self._rechazado()
+                numero, cune, adjunto, siguiente = doc.consecutive, doc.cune, doc.xml_attachment_id, self.secuencia.number_next_actual
+                asistente = self._asistente(documentos=doc, enviar=True) if origen == 'documento' else self._asistente(recibos, enviar=True)
+                self._comprobar_encolado(doc, asistente.action_send_and_print())
+                self.assertEqual((doc.consecutive, self.secuencia.number_next_actual), (numero, siguiente))
+                self.assertNotEqual((doc.cune, doc.xml_attachment_id), (cune, adjunto))
+                self.assertTrue(adjunto.exists())                     # el XML rechazado queda como evidencia
+                self._responde(doc, ACEPTADA)
+                self.assertEqual((doc.state, doc.consecutive), ('invoice_accepted', numero))
+                self.assertEqual(doc.intento_ids.sorted('id').mapped('state'), ['invoice_rejected', 'invoice_accepted'])
+
+    def test_el_dato_corregido_y_el_recibo_que_faltaba_salen_en_el_xml_nuevo(self):
+        recibos, doc = self._rechazado()
+        numero = doc.consecutive
+        self.assertEqual(self._del_xml(doc), ('3000000.00', '4249095.00'), 'Premisa')
+        self.sueldo = '3100000.00'                                     # se corrigió un dato
+        nuevo = self._recibo_tardio(doc)                               # y se pagó un recibo que faltaba
+        self._comprobar_encolado(doc, self._asistente(documentos=doc, enviar=True).action_send_and_print())
+        self.assertEqual(doc.payslip_ids, recibos | nuevo)
+        self.assertEqual(self._del_xml(doc), ('3100000.00', '6873642.50'))
+        self.assertEqual(doc.consecutive, numero)
+
+    def test_un_recibo_que_ya_no_entra_sale_del_rechazado(self):
+        recibos, doc = self._rechazado()
+        primero, segundo = recibos.sorted('date_to')
+        segundo.write({'state': 'cancel'})
+        self._comprobar_encolado(doc, self._asistente(documentos=doc, enviar=True).action_send_and_print())
+        self.assertEqual(doc.payslip_ids, primero)
+
+    def test_solo_preparar_recompone_un_rechazado_y_no_lo_encola(self):
+        recibos, doc = self._rechazado()
+        cune = doc.cune
+        nuevo = self._recibo_tardio(doc)
+        self._asistente(documentos=doc, enviar=False).action_send_and_print()
+        self.assertEqual((doc.payslip_ids, doc.state, doc.is_being_sent, doc.cune), (recibos | nuevo, 'invoice_rejected', False, cune))
+        self.assertNotIn('recibo_tardio', [a['key'] for a in doc.alertas])
+
+    def test_un_rechazado_que_no_se_puede_regenerar_se_lista_con_el_motivo(self):
+        recibos, doc = self._rechazado()
+        numero, cune = doc.consecutive, doc.cune
+        recibos.write({'state': 'cancel'})                             # ya no queda ningún recibo que reportar
+        accion = self._asistente(documentos=doc, enviar=True).action_send_and_print()
+        self.assertIn('0 encolados, 1 bloqueados', self._mensaje(accion))
+        self.assertIn(doc.display_name, self._mensaje(accion))
+        self.assertEqual((doc.state, doc.is_being_sent, doc.consecutive, doc.cune), ('invoice_rejected', False, numero, cune))
+
+    def test_tras_la_regla_90_se_lista_por_conciliar_y_despues_de_usar_el_siguiente_sale_con_numero_nuevo(self):
+        self._con_dian()
+        recibos = self._recibos()
+        self._asistente(recibos, enviar=True).action_send_and_print()
+        doc = recibos.l10n_co_ne_documento_id
+        self._responde(doc, REGLA_90)
+        numero = doc.consecutive
+        accion = self._asistente(documentos=doc, enviar=True).action_send_and_print()
+        self.assertIn('0 encolados, 1 bloqueados', self._mensaje(accion))
+        self.assertIn('por conciliar', self._mensaje(accion))
+        self.assertFalse(doc.is_being_sent)
+        doc.action_usar_numero_siguiente()
+        self._comprobar_encolado(doc, self._asistente(documentos=doc, enviar=True).action_send_and_print())
+        self.assertNotEqual(doc.consecutive, numero)
+
+    def test_un_envio_incierto_se_lista_con_el_motivo(self):
+        self._con_dian()
+        recibos = self._recibos()
+        self._asistente(recibos, enviar=True).action_send_and_print()
+        doc = recibos.l10n_co_ne_documento_id
+        self.soap.return_value = {'IsValid': 'false', 'StatusCode': '0', 'ZipKey': 'abc'}
+        doc._ne_enviar_uno()
+        doc.incierto = True
+        accion = self._asistente(documentos=doc, enviar=True).action_send_and_print()
+        self.assertIn('0 encolados, 1 bloqueados', self._mensaje(accion))
+        self.assertIn('envío incierto', self._mensaje(accion))
+
+    def test_una_nota_de_ajuste_rechazada_se_envia_otra_vez_con_su_mismo_numero(self):
+        for tipo, origen in (('1', 'documento'), ('1', 'recibos'), ('2', 'documento')):
+            with self.subTest(tipo=tipo, origen=origen):
+                self._con_dian()
+                self.hora = HORA
+                self.company.l10n_co_ne_adjust_prefix = 'NA'
+                secuencia = self.env['ir.sequence'].search([('code', '=', 'l10n_co_nomina.ajuste'), ('company_id', '=', self.company.id)], limit=1) or self.env['ir.sequence'].create({
+                    'name': 'Secuencia NA asistente', 'code': 'l10n_co_nomina.ajuste', 'company_id': self.company.id})
+                secuencia.write({'prefix': 'NA', 'padding': 8, 'implementation': 'no_gap'})
+                recibos = self._recibos()
+                self._asistente(recibos, enviar=True).action_send_and_print()
+                original = recibos.l10n_co_ne_documento_id
+                self._responde(original, ACEPTADA)
+                nota = original.action_crear_ajuste(tipo)
+                self._comprobar_encolado(nota, self._asistente(documentos=nota, enviar=True).action_send_and_print())
+                self._responde(nota, RECHAZO)
+                self.assertEqual(nota.state, 'invoice_rejected')
+                numero, cune = nota.consecutive, nota.cune
+                nuevo = self._recibo_tardio(original) if tipo == '1' else self.env['hr.payslip']
+                asistente = self._asistente(documentos=nota, enviar=True) if origen == 'documento' else self._asistente(recibos | nuevo, enviar=True)
+                accion = asistente.action_send_and_print()
+                self.assertIn('1 encolados, 0 bloqueados', self._mensaje(accion))
+                self.assertEqual((nota.is_being_sent, nota.state, nota.consecutive), (True, False, numero))
+                self.assertNotEqual(nota.cune, cune)
+                self.assertEqual(nota.payslip_ids, nuevo)
+                self.assertEqual((original.state, original.is_being_sent), ('invoice_accepted', False))
+
+    def test_los_rechazados_aparecen_en_por_transmitir(self):
+        arch = etree.fromstring(self.env.ref('l10n_co_nomina_electronica.view_l10n_co_ne_documento_search').arch_db)
+        self.assertIn('invoice_rejected', arch.find('.//filter[@name="por_transmitir"]').get('domain'))
