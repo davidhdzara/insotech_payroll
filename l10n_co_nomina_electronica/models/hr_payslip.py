@@ -1342,11 +1342,21 @@ class HrPayslip(models.Model):
         }
 
     @api.model
+    def _ne_idioma_de_la_actualizacion(self):
+        """«es_CO» si está instalado; si no, otro español instalado; si no hay ninguno, el de quien ejecuta."""
+        instalados = [codigo for codigo, _nombre in self.env['res.lang'].get_installed()]
+        espanoles = ['es_CO'] + sorted(codigo for codigo in instalados if codigo.startswith('es_'))
+        return next((codigo for codigo in espanoles if codigo in instalados), self.env.lang)
+
+    @api.model
     def _ne_generar_conceptos_pendientes(self):
         """Función de datos (corre en cada ``-u``): genera las filas de los recibos YA calculados de estructuras con «Conceptos de pago» que
         todavía no las tienen (los creados antes de .289 y los de una estructura recién activada). No recalcula ni cambia ningún valor: las
         filas son una vista de las líneas; un recibo hecho o pagado también las recibe, de solo lectura. Las de «Cálculo del salario» se regeneran además en los
-        recibos en borrador (H-QA-040)."""
+        recibos en borrador (H-QA-040).
+
+        Q-38: la actualización corre en inglés y las filas son texto guardado: se escriben en el español instalado."""
+        self = self.with_context(lang=self._ne_idioma_de_la_actualizacion())
         recibos = self.sudo().with_context(active_test=False).search([
             ('struct_id.l10n_co_ne_conceptos_de_pago', '=', True), ('line_ids', '!=', False), ('l10n_co_concepto_ids', '=', False)])
         recibos._ne_regenerar_conceptos()
