@@ -122,6 +122,7 @@ Funcionalidades principales:
         'views/hr_salary_attachment_views.xml',
         'views/hr_contract_deductions_views.xml',
         'views/hr_contract_retefuente_views.xml',
+        'views/hr_work_entry_views.xml',
         # Reports
         'report/hr_payslip_ne_report.xml',
         'report/comprobante_pago_report.xml',

@@ -2,6 +2,8 @@
 # Part of InSoTech. See LICENSE file for full copyright and licensing details.
 """Pantallas del lote 1 de mejoras: solo componentes nativos."""
 
+from datetime import datetime
+
 from lxml import etree
 
 from odoo.tests.common import TransactionCase, tagged
@@ -48,3 +50,18 @@ class TestPantallasLote1(TransactionCase):
                     self.assertEqual(set(estructuras.mapped('country_id.code')), {'CO'})
                 else:
                     self.assertFalse(dominio)
+
+    def test_la_entrada_de_trabajo_se_valida_desde_su_ficha(self):
+        """Q-58: botón con la validación nativa, solo en borrador."""
+        arbol = self._arbol('hr.work.entry', 'hr_work_entry.hr_work_entry_view_form')
+        boton, = arbol.xpath("//header/button[@name='action_validate']")
+        self.assertEqual((boton.get('type'), boton.get('invisible'), boton.get('string')), ('object', "state != 'draft'", 'Validar'))
+        empleado = self.env['hr.employee'].create({'name': 'Entrada de trabajo', 'l10n_co_ne_worker_type': '01', 'l10n_co_ne_worker_subtype': '00', 'l10n_co_ne_payment_method': '10'})
+        contrato = self.env['hr.contract'].create({
+            'name': 'Contrato entrada', 'employee_id': empleado.id, 'wage': 3000000.0, 'date_start': datetime(2026, 1, 1).date(), 'state': 'open',
+            'l10n_co_ne_contract_type': '2', 'l10n_co_pila_tipo_cotizante': '01', 'l10n_co_pila_subtipo_cotizante': '00'})
+        entrada = self.env['hr.work.entry'].create({
+            'name': 'Asistencia de prueba', 'employee_id': empleado.id, 'contract_id': contrato.id, 'date_start': datetime(2026, 10, 5, 13), 'date_stop': datetime(2026, 10, 5, 17),
+            'work_entry_type_id': self.env.ref('hr_work_entry.work_entry_type_attendance').id})
+        entrada.action_validate()
+        self.assertEqual(entrada.state, 'validated')
