@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 from lxml import etree
 
+from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.l10n_co_nomina_electronica.services import xml_signer
@@ -103,6 +104,15 @@ class TestDocumentoGenerarReal(TransactionCase):
                 etree.SubElement(etree.SubElement(ext, '{%s}ExtensionContent' % NS_EXT), '{urn:relleno}Firma')
         valido = esquema.validate(etree.ElementTree(raiz))
         return valido, [e.message[:200] for e in esquema.error_log]
+
+    def test_sin_calle_de_la_compania_el_documento_queda_bloqueado_con_el_motivo_y_no_toma_numero(self):
+        """.339 (NIE038): la corrida en seco lo detiene antes de tomar el consecutivo, con un mensaje que dice qué completar."""
+        self.company.partner_id.street = False
+        doc = self.env['l10n.co.ne.documento']._ne_preparar(self.recibos)['documentos']
+        self.assertIn('NIE038', ' '.join(a['message'] for a in (doc.alertas or []) if a['level'] == 'danger'))
+        with self.assertRaisesRegex(UserError, 'NIE038'):
+            doc.action_generar_xml()
+        self.assertFalse(doc.consecutive)
 
     def test_dos_quincenas_reales_generan_un_documento_valido(self):
         resultado = self.env['l10n.co.ne.documento']._ne_preparar(self.recibos)

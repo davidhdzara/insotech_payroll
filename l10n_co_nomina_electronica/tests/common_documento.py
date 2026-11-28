@@ -27,7 +27,7 @@ class DocumentoFixture:
     def _fixture_documento(cls, nombre):
         activar_crons_de_envio(cls.env)
         cls.company = cls.env['res.company'].create({
-            'name': nombre, 'country_id': cls.env.ref('base.co').id,
+            'name': nombre, 'country_id': cls.env.ref('base.co').id, 'street': 'Calle de prueba # 1-1',
             'l10n_co_pila_tipo_aportante': '1', 'l10n_co_pila_forma_presentacion': 'U',
             'l10n_co_pila_clase_riesgo': '1', 'l10n_co_ne_febrero_modo': 'real',
             'l10n_co_ne_fuente_fecha_pago': 'recibo', 'l10n_co_ne_payroll_prefix': 'NE'})
