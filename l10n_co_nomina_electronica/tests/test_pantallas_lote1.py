@@ -23,3 +23,12 @@ class TestPantallasLote1(TransactionCase):
         self.assertEqual(actividad.getparent(), clase.getparent())
         hermanos = list(actividad.getparent())
         self.assertEqual(hermanos.index(clase), hermanos.index(actividad) + 1)
+
+    def test_las_filas_que_genera_la_actualizacion_salen_en_espanol(self):
+        """Q-38: ``-u`` corre en inglés y las filas son texto guardado («Attendance»)."""
+        self.env['res.lang']._activate_lang('es_CO')
+        idiomas = []
+        modelo = type(self.env['hr.payslip'])
+        self.patch(modelo, '_ne_regenerar_conceptos', lambda recibos: idiomas.append(recibos.env.lang))
+        self.env['hr.payslip'].with_context(lang='en_US')._ne_generar_conceptos_pendientes()
+        self.assertEqual(idiomas, ['es_CO'])
