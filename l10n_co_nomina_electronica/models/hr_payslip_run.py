@@ -10,9 +10,12 @@ el comportamiento nativo.
 
 Volver a borrador (.333): el nativo ``action_draft`` del lote escribe ``state = 'draft'`` en sus recibos sin pasar por su cancelacion: el asiento
 sigue ligado al recibo (al confirmar de nuevo no se crea otro) y la cuota de libranza sigue aplicada. En companias colombianas se detiene y pide
-cancelar recibo por recibo, que si reversa las dos cosas."""
+cancelar recibo por recibo, que si reversa las dos cosas.
 
-from odoo import _, models
+Recibos reembolsados (.341): «Confirmar» y el asistente de generar escriben «en espera» en TODOS los recibos del lote; los que un reembolso protege se quedan como están y los demás siguen igual. «A borrador» y el borrado del
+lote se detienen nombrándolos. El borrado del lote borra sus recibos por cascada en la base, sin pasar por el borrado del recibo: por eso la protección se repite aquí."""
+
+from odoo import _, api, models
 from odoo.exceptions import UserError
 
 
@@ -20,11 +23,31 @@ class HrPayslipRun(models.Model):
     _inherit = 'hr.payslip.run'
 
     def action_draft(self):
+        self._ne_exigir_lote_sin_reembolsados(_('No se puede devolver el lote a borrador'), self.slip_ids.filtered(lambda s: s.state not in ('draft', 'verify')))
         self._ne_validar_volver_a_borrador()
         colombia = self.slip_ids._ne_solo_colombia()
         res = super().action_draft()
         colombia._ne_olvidar_pago()          # el lote no pasa por ``action_payslip_draft``
         return res
+
+    def action_confirm(self):
+        return super(HrPayslipRun, self.with_context(ne_lote_conserva_reembolsados=True)).action_confirm()
+
+    @api.ondelete(at_uninstall=False)
+    def _ne_no_eliminar_con_recibos_reembolsados(self):
+        self._ne_exigir_lote_sin_reembolsados(_('No se puede eliminar el lote'), self.slip_ids, van_juntos=self.slip_ids)
+
+    def _ne_exigir_lote_sin_reembolsados(self, que, recibos, van_juntos=None):
+        detalle, estorban = [], self.env['hr.payslip']
+        for recibo in recibos:
+            reembolsos = recibo._ne_reembolsos_que_lo_protegen(van_juntos)
+            if reembolsos:
+                estorban |= reembolsos
+                detalle.append(_('%(recibo)s de %(empleado)s, con el reembolso %(reembolsos)s', recibo=recibo._ne_recibos_con_id(), empleado=recibo.employee_id.name, reembolsos=reembolsos._ne_recibos_con_id()))
+        if detalle:
+            raise UserError(_(
+                '%(que)s: hay recibos reembolsados (%(detalle)s). %(salida)s', que=que, detalle='; '.join(detalle),
+                salida=estorban._ne_en_este_orden(_('conserve confirmados solo los recibos de los pagos reales, cancele los demás y vuelva a intentarlo'))))
 
     def _ne_validar_volver_a_borrador(self):
         """Los cancelados ya se reversaron; los pagados los rechaza el nativo con su propio mensaje."""

@@ -1363,6 +1363,13 @@ class HrPayslip(models.Model):
         C-24: la huella del cálculo la escribe solo el cálculo (``_ne_guardar_huella``, que pasa por debajo de este método): cualquier otro ``write`` que la traiga se rechaza."""
         if 'l10n_co_ne_huella_calculo' in vals:
             self._ne_rechazar_huella_externa()
+        if vals.get('state') in ('draft', 'verify'):          # .341: aquí pasan el botón, el lote, el asistente y cualquier escritura que vuelva editable un recibo
+            if self.env.context.get('ne_lote_conserva_reembolsados') and vals == {'state': 'verify'}:          # generar o confirmar el lote sigue con los demás; esta marca solo sirve para NO cambiar
+                siguen = self._ne_dejar_como_estan_los_reembolsados()
+                if siguen != self:
+                    return siguen.write(vals) if siguen else True
+            else:
+                self.filtered(lambda r: r.state not in ('draft', 'verify'))._ne_exigir_que_ningun_reembolso_lo_anule()
         # Clase A (.335): un recibo de un documento mensual que pierde un pago (anular, borrador, cancelar, lote o cualquier otra escritura) no puede dejar enviable un XML que lo lleva.
         vigilados = self.filtered('l10n_co_ne_documento_id') if self._NE_CAMPOS_DEL_PAGO.intersection(vals) else self.browse()
         antes = {recibo.id: recibo.sudo()._ne_pagos_vigentes() for recibo in vigilados}
@@ -1392,8 +1399,9 @@ class HrPayslip(models.Model):
         """``(anulados, dudas)``: de ``self``, los recibos que un reembolso confirmado anuló, y un texto por cada reembolso confirmado del que NO se puede saber qué recibo anuló (quien arma o envía un XML se detiene con él).
 
         Odoo no enlaza el reembolso con su original (``refund_sheet`` copia el recibo y niega sus líneas). Regla: un reembolso solo anula un recibo del mismo pago (empleado, compañía, contrato, estructura y fechas) creado
-        ANTES que él; si ese original se cancela y se hace otro, el nuevo no queda anulado. De esos, el que tenga exactamente sus líneas con el signo contrario; si ninguno las tiene y solo hay uno, ese. Si quedan varios y
-        no son iguales en estado, líneas y fecha de pago, no se adivina. Un reembolso sin confirmar no anula nada. Solo para el XML de nómina: la retención, la liquidación y la PILA siguen con su neteo."""
+        ANTES que él; si ese original se cancela y se hace otro, el nuevo no queda anulado. Y de esos, solo el que tenga exactamente sus líneas con el signo contrario (.341): si ninguno las tiene y alguno está confirmado
+        (reembolso modificado, o su original eliminado o recalculado), o si hay varios que las tienen, no alcanzan los reembolsos para todos y no coinciden en estado y fecha de pago, no se adivina. Un reembolso sin
+        confirmar no anula nada. Solo para el XML de nómina: la retención, la liquidación y la PILA siguen con su neteo."""
         propios = self.filtered(lambda r: r.id and not r.credit_note and not r.l10n_co_ne_is_adjustment)
         anulados, dudas = self.browse(), []
         if not propios:
@@ -1412,24 +1420,102 @@ class HrPayslip(models.Model):
         hallados = recibos.browse()
         for del_pago in por_pago.values():
             libres = recibos.search(del_pago[:1]._ne_rete_mismo_pago() + [('credit_note', '=', False), ('l10n_co_ne_is_adjustment', '=', False)], order='id')
-            for reembolso in del_pago.sorted('id'):
-                antes = libres.filtered(lambda r: r.id < reembolso.id)
-                iguales = antes.filtered(lambda r: r._ne_huella_de_lineas() == reembolso._ne_huella_de_lineas(-1))
-                posibles = (iguales or antes).sorted('id')
+            sueltos = del_pago.sorted('id')
+            por_lineas = {}
+            for reembolso in sueltos:
+                clave = tuple(reembolso._ne_huella_de_lineas(-1))
+                por_lineas[clave] = por_lineas.get(clave, recibos.browse()) | reembolso
+            for clave, gemelos in por_lineas.items():          # .341: si cada recibo con esas líneas tiene su reembolso posterior, quedan anulados todos y no hay nada que adivinar
+                candidatos = libres.filtered(lambda r: r.id < max(gemelos.ids) and tuple(r._ne_huella_de_lineas()) == clave).sorted('id')
+                sin_reembolso, usados = candidatos.ids, recibos.browse()
+                for reembolso in gemelos.sorted('id'):
+                    if sin_reembolso and sin_reembolso[0] < reembolso.id:
+                        sin_reembolso = sin_reembolso[1:]
+                        usados |= reembolso
+                if candidatos and not sin_reembolso:
+                    hallados |= candidatos
+                    libres -= candidatos
+                    sueltos -= usados
+            for reembolso in sueltos:
+                antes = libres.filtered(lambda r: r.id < reembolso.id).sorted('id')
+                posibles = antes.filtered(lambda r: r._ne_huella_de_lineas() == reembolso._ne_huella_de_lineas(-1))
+                if not posibles:          # .341: un recibo con otras líneas nunca se da por anulado
+                    if antes.filtered(lambda r: r.state in confirmados):
+                        dudas.append(_(
+                            'No se puede saber qué anula el reembolso «%(reembolso)s» de %(empleado)s (%(desde)s a %(hasta)s): sus líneas no son exactamente las contrarias de ningún recibo de ese pago (%(recibos)s). '
+                            '%(salida)s', reembolso=reembolso.number or reembolso.name, empleado=reembolso.employee_id.name, desde=reembolso.date_from, hasta=reembolso.date_to,
+                            recibos=antes._ne_recibos_con_id(), salida=self._ne_salida_de_la_duda(reembolso)))
+                    continue
                 if len(posibles) > 1:
                     vigentes = posibles.filtered(lambda r: r.state in confirmados)
                     if not vigentes:
                         continue          # ninguno de ellos viaja
-                    if vigentes != posibles or not iguales or len(set(posibles.mapped('paid_date'))) > 1:
+                    if vigentes != posibles or len(set(posibles.mapped('paid_date'))) > 1:
                         dudas.append(_(
-                            'No se puede saber qué recibo anuló el reembolso «%(reembolso)s» de %(empleado)s (%(desde)s a %(hasta)s): puede ser cualquiera de %(recibos)s. Elimine los recibos cancelados o en borrador '
-                            'que no correspondan, o reembolse y rehaga el que quede, antes de generar o enviar el XML.', reembolso=reembolso.number or reembolso.name, empleado=reembolso.employee_id.name,
-                            desde=reembolso.date_from, hasta=reembolso.date_to, recibos=', '.join('«%s» (id %s)' % (r.number or r.name, r.id) for r in posibles)))
+                            'No se puede saber qué recibo anuló el reembolso «%(reembolso)s» de %(empleado)s (%(desde)s a %(hasta)s): puede ser cualquiera de %(recibos)s. %(salida)s',
+                            reembolso=reembolso.number or reembolso.name, empleado=reembolso.employee_id.name, desde=reembolso.date_from, hasta=reembolso.date_to,
+                            recibos=posibles._ne_recibos_con_id(), salida=self._ne_salida_de_la_duda(reembolso)))
                         continue
                     posibles = posibles[-1:]
                 hallados |= posibles
                 libres -= posibles
         return self & hallados.with_env(self.env), dudas
+
+    def _ne_recibos_con_id(self):
+        return ', '.join('«%s» (id %s)' % (r.number or r.name, r.id) for r in self)
+
+    def _ne_salida_de_la_duda(self, reembolso):
+        """Lo que sí destraba una duda: sin ese reembolso confirmado no hay nada que emparejar, y quien sabe qué se pagó cancela lo demás. Nunca se pide eliminar: borrar un recibo puede pasar el reembolso a otro."""
+        return reembolso._ne_en_este_orden(
+            _('deje confirmados solo los recibos de lo que sí se pagó y cancele los demás, sin eliminarlos (si un valor estaba mal, cancele ese recibo y haga uno nuevo)'), _('genere o envíe el XML'))
+
+    def _ne_en_este_orden(self, *despues):
+        """``self``: los reembolsos que estorban. La salida paso a paso, nombrándolos: «Sin pagar» (botón nativo) solo si alguno figura pagado, porque un recibo pagado no tiene «Cancelar»."""
+        pasos = []
+        pagados = self.filtered(lambda r: r.state == 'paid')
+        if pagados:
+            pasos.append(_('quite el pago de %s con su botón «Sin pagar»', pagados._ne_recibos_con_id()))
+        pasos.append(_('cancele %s con su botón «Cancelar» (administrador de nómina; con permiso de Contabilidad si tiene asiento)', self._ne_recibos_con_id()))
+        return _('En este orden: %s', ' '.join('%s) %s.' % (numero, paso) for numero, paso in enumerate(pasos + list(despues), 1)))
+
+    def _ne_reembolsos_que_lo_protegen(self, van_juntos=None):
+        """Los reembolsos por los que este recibo no se elimina ni vuelve editable (.341): sin él, o con otras líneas, uno de ellos pasaría a anular otro recibo idéntico sin avisar. Odoo no guarda el enlace, así que
+        cuenta todo reembolso sin cancelar, creado después del recibo, del mismo pago y con exactamente sus líneas en contrario. ``van_juntos``: reembolsos que se eliminan en la misma operación."""
+        self.ensure_one()
+        if not self.id or self.credit_note or self.l10n_co_ne_is_adjustment or not self._ne_solo_colombia():
+            return self.browse()
+        huella = self._ne_huella_de_lineas()
+        if not huella:
+            return self.browse()
+        reembolsos = self.sudo().search(self._ne_rete_mismo_pago() + [('credit_note', '=', True), ('state', '!=', 'cancel'), ('id', '>', self.id)], order='id')
+        if van_juntos:
+            reembolsos -= van_juntos.sudo()
+        return reembolsos.filtered(lambda r: r._ne_huella_de_lineas(-1) == huella)
+
+    def _ne_exigir_que_ningun_reembolso_lo_anule(self, van_juntos=None):
+        for recibo in self:
+            reembolsos = recibo._ne_reembolsos_que_lo_protegen(van_juntos)
+            if reembolsos:
+                salida = reembolsos._ne_en_este_orden(_(
+                    'decida sobre %s: si ese pago es real, consérvelo confirmado; si no, cancélelo (ya podrá volverlo a borrador o eliminarlo)', recibo._ne_recibos_con_id()))
+                raise UserError(_('No se puede eliminar ni volver a borrador %(recibo)s de %(empleado)s: tiene el reembolso %(reembolsos)s. %(salida)s',
+                                  recibo=recibo._ne_recibos_con_id(), empleado=recibo.employee_id.name, reembolsos=reembolsos._ne_recibos_con_id(), salida=salida))
+
+    def _ne_dejar_como_estan_los_reembolsados(self):
+        """Al generar o confirmar un lote: el recibo hecho o cancelado que un reembolso protege conserva su estado, su asiento y su fecha de pago, y queda nota en su historial. Devuelve los que sí cambian."""
+        conservan = self.browse()
+        for recibo in self.filtered(lambda r: r.state not in ('draft', 'verify')):
+            reembolsos = recibo._ne_reembolsos_que_lo_protegen()
+            if reembolsos:
+                conservan |= recibo
+                recibo._message_log(body=_(          # sin exigir correo a quien opera
+                    'El lote no cambió el estado de este recibo porque tiene el reembolso %(reembolsos)s. Solo si necesita cambiarlo: %(salida)s',
+                    reembolsos=reembolsos._ne_recibos_con_id(), salida=reembolsos._ne_en_este_orden(_('cambie este recibo desde su propia ficha'))))
+        return self - conservan
+
+    @api.ondelete(at_uninstall=False)
+    def _ne_no_eliminar_lo_reembolsado(self):
+        self._ne_exigir_que_ningun_reembolso_lo_anule(van_juntos=self)
 
     def _ne_exigir_no_reembolsado(self):
         """Lo anulado por un reembolso confirmado tampoco viaja por el ciclo por recibo (ni el propio reembolso)."""

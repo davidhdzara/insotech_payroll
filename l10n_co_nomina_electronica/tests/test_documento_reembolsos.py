@@ -203,6 +203,36 @@ class TestDocumentoReembolsos(DocumentoFixture, TransactionCase):
         with self.assertRaisesRegex(UserError, 'No se puede saber'):
             doc.action_generar_xml()
 
+    def test_con_tantos_reembolsos_como_recibos_iguales_quedan_anulados_sin_duda(self):
+        for dias_de_pago in ((15, 15), (15, 20)):
+            with self.subTest(dias_de_pago=dias_de_pago):
+                doc = self._doc(pagos=((15, dias_de_pago[0]),))
+                primero = doc.payslip_ids
+                segundo = self._otro(primero, primero.line_ids.total, documento=doc)
+                segundo.paid_date = date(2026, 3, dias_de_pago[1])
+                _reembolsar(primero)
+                _reembolsar(segundo)
+                self.assertEqual((primero | segundo)._ne_reembolsos(), (primero | segundo, []))
+
+    def test_un_reembolso_solo_anula_recibos_anteriores_aunque_los_numeros_cuadren(self):
+        doc = self._doc(pagos=((15, 15),))
+        primero = doc.payslip_ids
+        _reembolsar(primero)
+        _reembolsar(primero)                                      # dos reembolsos y dos recibos iguales, pero el segundo recibo es posterior a ambos
+        despues = self._otro(primero, primero.line_ids.total, documento=doc)
+        self.assertEqual((primero | despues)._ne_reembolsos(), (primero, []))
+
+    def test_con_menos_reembolsos_que_recibos_iguales_y_distinta_fecha_de_pago_sigue_la_duda(self):
+        doc = self._doc(pagos=((15, 15),))
+        primero = doc.payslip_ids
+        segundo = self._otro(primero, primero.line_ids.total, documento=doc)
+        segundo.paid_date = date(2026, 3, 20)
+        _reembolsar(primero)
+        despues = self._otro(primero, primero.line_ids.total, documento=doc)          # creado después: no entra en la duda
+        anulados, dudas = (primero | segundo | despues)._ne_reembolsos()
+        self.assertEqual((anulados, len(dudas)), (primero.browse(), 1))
+        self.assertNotIn('id %s' % despues.id, dudas[0])
+
     def test_un_anulado_sin_fecha_de_pago_no_falta_en_el_mes(self):
         doc = self._doc(pagos=((15, 15),))
         otro = self._otro(doc.payslip_ids, 900000.0, date_from=date(2026, 3, 16), date_to=date(2026, 3, 31))
