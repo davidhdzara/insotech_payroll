@@ -32,3 +32,19 @@ class TestPantallasLote1(TransactionCase):
         self.patch(modelo, '_ne_regenerar_conceptos', lambda recibos: idiomas.append(recibos.env.lang))
         self.env['hr.payslip'].with_context(lang='en_US')._ne_generar_conceptos_pendientes()
         self.assertEqual(idiomas, ['es_CO'])
+
+    def test_en_una_compania_colombiana_el_asistente_solo_ofrece_estructuras_de_colombia(self):
+        """Q-48; en una compañía de otro país queda igual que en el nativo (sin filtro)."""
+        Asistente = self.env['hr.payslip.employees']
+        arbol = self._arbol('hr.payslip.employees', 'hr_payroll.view_hr_payslip_by_employees')
+        for campo in arbol.xpath("//field[@name='structure_id']"):
+            self.assertFalse(campo.get('domain'), 'La vista nativa no impone otro filtro que tape el del campo')
+        for pais, colombiana in (('base.co', True), ('base.mx', False)):
+            with self.subTest(pais):
+                company = self.env['res.company'].create({'name': 'Compañía Estructuras %s' % pais, 'country_id': self.env.ref(pais).id})
+                dominio = Asistente.with_company(company).fields_get(['structure_id'])['structure_id'].get('domain')
+                estructuras = self.env['hr.payroll.structure'].with_context(active_test=True).search(list(dominio or []))
+                if colombiana:
+                    self.assertEqual(set(estructuras.mapped('country_id.code')), {'CO'})
+                else:
+                    self.assertFalse(dominio)
