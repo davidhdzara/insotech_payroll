@@ -219,24 +219,13 @@ class L10nCoPayslipConcepto(models.Model):
 
     @api.model
     def _filas_de_dias(self, recibo, siguiente):
-        """Filas de días bajo la del sueldo. Ajuste de David (22-nov, decisión del TL: opción B): el descanso remunerado NO se desagrega aquí: UNA sola fila de días, «Asistencia»,
-        con los días pagados con el sueldo (asistencia + festivos trabajados + descansos remunerados + ajuste del mes comercial: ``_ne_tipos_dias_de_asistencia``), sin importe. Es
-        la cantidad del «Sueldo Básico» (``_ne_dias_pagables``); el desglose por fecha de E2a sigue en la pestaña de días trabajados. Las demás líneas de días (ausencias) salen
-        como antes, cada una en su fila. Las filas de días no se editan: «sin mecanismo nuevo»."""
-        lineas = recibo.worked_days_line_ids.sorted(lambda w: (w.sequence, w.id)).filtered(lambda w: w.number_of_days or w.number_of_hours)
+        """Filas de días bajo la del sueldo: solo las que NO se pagan con él (ausencias), cada una en su fila. Q-64 (David, 27-nov): la fila «Asistencia» se quitó; repetía, sin valor, los días del «Sueldo Básico»
+        (asistencia, festivos trabajados, descansos remunerados y ajuste del mes comercial: ``_ne_tipos_dias_de_asistencia``). El desglose por fecha sigue en la pestaña de días trabajados. Las filas de días no se
+        editan."""
         tipos = recibo._ne_tipos_dias_de_asistencia()
-        de_asistencia = lineas.filtered(lambda w: w.work_entry_type_id in tipos)
-        filas = []
-        if de_asistencia:
-            principal = de_asistencia[0]                      # la línea que enlaza la fila; el NOMBRE no sale de ella (N2 «cu»): siempre «Asistencia»
-            filas.append({
-                'slip_id': recibo.id, 'sequence': siguiente(), 'name': recibo._ne_nombre_dias_de_asistencia(), 'origen': 'dias',
-                'worked_day_id': principal.id, 'quantity': sum(de_asistencia.mapped('number_of_days')), 'unidad': 'dias', 'rate': 0.0})
-        for dia in lineas - de_asistencia:
-            filas.append({
-                'slip_id': recibo.id, 'sequence': siguiente(), 'name': dia.name or dia.work_entry_type_id.name, 'origen': 'dias',
-                'worked_day_id': dia.id, 'quantity': dia.number_of_days, 'unidad': 'dias', 'rate': 0.0})
-        return filas
+        lineas = recibo.worked_days_line_ids.sorted(lambda w: (w.sequence, w.id)).filtered(lambda w: (w.number_of_days or w.number_of_hours) and w.work_entry_type_id not in tipos)
+        return [{'slip_id': recibo.id, 'sequence': siguiente(), 'name': dia.name or dia.work_entry_type_id.name, 'origen': 'dias',
+                 'worked_day_id': dia.id, 'quantity': dia.number_of_days, 'unidad': 'dias', 'rate': 0.0} for dia in lineas]
 
     @api.model
     def _valores_del_recibo(self, recibo):
