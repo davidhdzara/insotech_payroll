@@ -1018,25 +1018,31 @@ class L10nCoNeDocumento(models.Model):
         return nota_ajuste.predecesor(padre.consecutive, padre.cune, fecha)
 
     def _ne_periodo(self, contrato):
-        """Bloque ``Periodo`` del documento mensual (D3): liquidación desde max(1.º del mes, ingreso) hasta el retiro
-        si el contrato terminó ese mes, o el fin de mes si sigue vigente. TiempoLaborado 360/30 con el día de
-        ingreso incluido (D19, Anexo §8.3.1)."""
+        """Bloque ``Periodo`` del documento mensual (D3): liquidación desde max(1.º del mes, ingreso) hasta el fin del
+        contrato si termina antes del fin de mes, o hasta el fin de mes. Si el contrato terminó ANTES del mes del
+        documento (último pago o liquidación al mes siguiente), el periodo es el del mes en que terminó: nunca el
+        inicio queda después del fin. FechaRetiro sale solo de las liquidaciones del documento (``_ne_fecha_retiro``).
+        TiempoLaborado 360/30 con el día de ingreso incluido (D19, Anexo §8.3.1)."""
         self.ensure_one()
         primero = self.period
         ultimo = (primero.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
         inicio = max(primero, contrato.contract_date_start) if contrato.contract_date_start else primero
         fin = min(ultimo, contrato.contract_date_end) if contrato.contract_date_end else ultimo
         # H-F3-04, regla PROVISIONAL aprobada por el TL (23-nov, Q4; NO VERIFICADA con la DIAN, doc 95 §4.2): con el mes partido en segmentos, el periodo de liquidación de cada documento es el
-        # primer y el último día cubiertos por SUS recibos, recortados al mes y al contrato. FechaIngreso, FechaRetiro y TiempoLaborado siguen como siempre. Con un solo segmento no cambia nada.
+        # primer y el último día cubiertos por SUS recibos, recortados al mes y al contrato. FechaIngreso y TiempoLaborado siguen como siempre. Con un solo segmento no cambia nada.
+        desde = [contrato.contract_date_start]
         if len(self._ne_segmentar(self.company_id, self._ne_recibos_del_mes(self.company_id, self.employee_id, self.period))) > 1:
             cubiertos = self._ne_recibos_para_xml()
             if cubiertos:
-                inicio = max(inicio, min(cubiertos.mapped('date_from')))
+                desde.append(min(cubiertos.mapped('date_from')))
+                inicio = max(inicio, desde[-1])
                 fin = min(fin, max(cubiertos.mapped('date_to')))
+        if inicio > fin:    # lo liquidado terminó antes del mes del documento: del 1.º del mes en que termina (o del ingreso / primer día cubierto, si es posterior) a ese fin
+            inicio = max([fin.replace(day=1)] + [dia for dia in desde if dia])
         ahora = _dt.now(pytz.timezone('America/Bogota'))
         return {
             'FechaIngreso': str(contrato.contract_date_start) if contrato.contract_date_start else '',
-            'FechaRetiro': str(contrato.contract_date_end) if contrato.contract_date_end else '',
+            'FechaRetiro': self._ne_recibos_para_xml()._ne_fecha_retiro(),
             'FechaLiquidacionInicio': str(inicio),
             'FechaLiquidacionFin': str(fin),
             'TiempoLaborado': str(dian_utils.compute_worked_time_360(contrato.contract_date_start, fin, inclusive=True)),

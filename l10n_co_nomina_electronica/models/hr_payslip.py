@@ -2180,7 +2180,7 @@ class HrPayslip(models.Model):
         data['pago'] = self._ne_pago()
         data['periodo'] = {
                 'FechaIngreso': str(contract.contract_date_start) if contract.contract_date_start else '',
-                'FechaRetiro': str(contract.contract_date_end) if contract.contract_date_end else '',
+                'FechaRetiro': self._ne_fecha_retiro(),
                 'FechaLiquidacionInicio': str(self.date_from),
                 'FechaLiquidacionFin': str(self.date_to),
                 # Anexo §8.3.1: 360/30; el día de ingreso cuenta (D19, David 2026-11-11).
@@ -2797,6 +2797,14 @@ class HrPayslip(models.Model):
         self.ensure_one()
         return self.struct_id == self.env.ref(
             'l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion', raise_if_not_found=False)
+
+    def _ne_fecha_retiro(self):
+        """``FechaRetiro`` del XML (``''`` si no va): el último «Hasta» de las liquidaciones de contrato que van en ``self`` (los recibos del documento mensual, o el recibo en el XML por recibo). La fecha final
+        del contrato NO la decide: un término fijo que se prorroga la traería todos los meses. Una liquidación reembolsada no cuenta. Anexo Técnico V1.0, NIE003 (0-1): solo en el mes en que se presenta el
+        retiro; con varios, la última fecha."""
+        liquidaciones = self.filtered(lambda r: r._ne_es_liquidacion() and r.date_to and not r.credit_note
+                                      and not (r.state in ('validated', 'paid') and r._ne_liq_reembolsado()))
+        return str(max(liquidaciones.mapped('date_to'))) if liquidaciones else ''
 
     def _ne_es_semanal(self):
         """El empleado se paga por semana (periodicidad nativa del contrato o, sin ella, la de su tipo de estructura)."""

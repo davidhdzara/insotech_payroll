@@ -12,6 +12,7 @@ from odoo.tests.common import TransactionCase, tagged
 from odoo.addons.l10n_co_nomina_electronica.services import documento_merge, dian_utils, nomina_xml_builder
 
 from .common_documento import DocumentoFixture
+from .common_version import confirmar_a_mano
 from .test_documento_merge import _recibo as _datos_recibo
 
 
@@ -44,9 +45,9 @@ class TestDocumentoXml(DocumentoFixture, TransactionCase):
         self.assertEqual(datos['periodo']['FechaLiquidacionFin'], '2026-03-31')
         self.assertEqual(datos['periodo']['TiempoLaborado'], '21')   # dias comerciales 10..30
 
-    def test_periodo_retiro_en_el_mes_cierra_en_el_retiro(self):
+    def test_periodo_contrato_que_termina_en_el_mes_cierra_ahi_y_sin_liquidacion_no_lleva_retiro(self):
         datos = self._datos(self._documento(date(2025, 1, 1), retiro=date(2026, 3, 20)))
-        self.assertEqual(datos['periodo']['FechaRetiro'], '2026-03-20')
+        self.assertEqual(datos['periodo']['FechaRetiro'], '')          # la fecha final del contrato no es un retiro (.339)
         self.assertEqual(datos['periodo']['FechaLiquidacionFin'], '2026-03-20')
         # 01-ene-2025 a 20-mar-2026 inclusivo: 1 anio (360) + 2 meses (60) + 20 dias = 440
         self.assertEqual(datos['periodo']['TiempoLaborado'], '440')
@@ -54,6 +55,58 @@ class TestDocumentoXml(DocumentoFixture, TransactionCase):
     def test_periodo_retiro_en_otro_mes_no_recorta(self):
         datos = self._datos(self._documento(date(2025, 1, 1), retiro=date(2026, 6, 30)))
         self.assertEqual(datos['periodo']['FechaLiquidacionFin'], '2026-03-31')
+        self.assertEqual(datos['periodo']['FechaRetiro'], '')          # término fijo vigente: el mes normal no lleva retiro
+
+    # ── FechaRetiro (.339, NIE003): solo de las liquidaciones que van en el documento ──
+    def _liquidacion(self, doc, retiro, pago=None, **vals):
+        """Recibo de liquidación de contrato (del inicio del contrato a ``retiro``) pagado y enlazado al documento."""
+        slip = self.env['hr.payslip'].create({
+            'name': 'Liquidación Doc', 'employee_id': doc.employee_id.id, 'version_id': doc.version_id.id, 'company_id': self.company.id,
+            'struct_id': self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion').id,
+            'date_from': doc.version_id.contract_date_start, 'date_to': retiro})
+        confirmar_a_mano(slip, 'paid', **dict({'paid_date': pago or doc.period.replace(day=28), 'l10n_co_ne_documento_id': doc.id}, **vals))
+        return slip
+
+    def test_la_liquidacion_del_documento_da_la_fecha_de_retiro(self):
+        for fin_de_contrato in (None, date(2026, 3, 20), date(2026, 12, 31)):
+            with self.subTest(fin_de_contrato=fin_de_contrato):
+                doc = self._documento(date(2025, 1, 1), retiro=fin_de_contrato, pagos=())
+                self._liquidacion(doc, date(2026, 3, 20))
+                self.assertEqual(self._datos(doc)['periodo']['FechaRetiro'], '2026-03-20')
+
+    def test_con_varias_liquidaciones_va_la_ultima_fecha(self):
+        doc = self._documento(date(2025, 1, 1), pagos=())
+        self._liquidacion(doc, date(2026, 3, 20))
+        self._liquidacion(doc, date(2026, 3, 10))
+        self.assertEqual(self._datos(doc)['periodo']['FechaRetiro'], '2026-03-20')
+
+    def test_una_liquidacion_reembolsada_no_es_un_retiro(self):
+        doc = self._documento(date(2025, 1, 1))
+        liquidacion = self._liquidacion(doc, date(2026, 3, 20))
+        self.assertEqual(doc.payslip_ids._ne_fecha_retiro(), '2026-03-20')
+        # v19: el reembolso nativo queda ligado a su original por ``origin_payslip_id`` y de ahí lo lee ``_ne_liq_reembolsado``.
+        self._liquidacion(doc, date(2026, 3, 20), credit_note=True, l10n_co_ne_documento_id=False, origin_payslip_id=liquidacion.id)
+        self.assertTrue(liquidacion._ne_liq_reembolsado())
+        self.assertEqual(doc.payslip_ids._ne_fecha_retiro(), '')
+
+    def test_periodo_de_un_mes_posterior_al_retiro_no_queda_con_el_inicio_despues_del_fin(self):
+        for ingreso, inicio in ((date(2025, 1, 1), '2026-02-01'), (date(2026, 2, 10), '2026-02-10')):
+            with self.subTest(ingreso=ingreso):
+                doc = self._documento(ingreso, retiro=date(2026, 2, 20), mes=3, pagos=())
+                self._liquidacion(doc, date(2026, 2, 20), pago=date(2026, 3, 5))
+                periodo = self._datos(doc)['periodo']
+                self.assertEqual((periodo['FechaLiquidacionInicio'], periodo['FechaLiquidacionFin'], periodo['FechaRetiro']),
+                                 (inicio, '2026-02-20', '2026-02-20'))
+
+    def test_periodo_de_un_segmento_con_dias_del_mes_anterior_no_queda_invertido(self):
+        doc = self._documento(date(2025, 1, 1), pagos=())
+        slip = self.env['hr.payslip'].create({
+            'name': 'Recibo atrasado', 'employee_id': doc.employee_id.id, 'version_id': doc.version_id.id, 'company_id': self.company.id,
+            'struct_id': self.struct.id, 'date_from': date(2026, 2, 16), 'date_to': date(2026, 2, 28)})
+        confirmar_a_mano(slip, 'paid', paid_date=date(2026, 3, 5), l10n_co_ne_documento_id=doc.id)
+        with patch.object(type(doc), '_ne_segmentar', lambda *a: [slip, slip]):
+            periodo = doc._ne_periodo(doc.version_id)
+        self.assertEqual((periodo['FechaLiquidacionInicio'], periodo['FechaLiquidacionFin']), ('2026-02-16', '2026-02-28'))
 
     # ── Fusion ───────────────────────────────────────────────────────
     def test_fusion_dos_quincenas(self):
