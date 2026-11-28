@@ -2,10 +2,15 @@
 # Part of InSoTech. See LICENSE file for full copyright and licensing details.
 """Pantallas del lote 1 de mejoras: solo componentes nativos."""
 
+from datetime import date
+
 from lxml import etree
 
 from odoo.tests.common import TransactionCase, tagged
 from odoo.tools.safe_eval import safe_eval
+
+from . import test_documento_enviar as enviar
+from .common_documento import DocumentoFixture
 
 
 @tagged('post_install', '-at_install')
@@ -60,3 +65,23 @@ class TestPantallasLote1(TransactionCase):
         for cambios, oculto in casos:
             with self.subTest(**cambios):
                 self.assertEqual(bool(safe_eval(boton.get('invisible'), dict(base, **cambios))), oculto)
+
+
+@tagged('post_install', '-at_install')
+class TestResumenDelEnvio(DocumentoFixture, TransactionCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        enviar.TestDocumentoEnviar._preparar_compania(cls, 'Compañía Resumen de Envío')
+
+    def test_el_resumen_lista_todos_los_recibos_que_llevara_el_documento(self):
+        """Q-83: aunque se abra uno solo."""
+        doc = self._documento(date(2024, 3, 1))
+        primera, segunda = doc.payslip_ids.sorted('date_to')
+        Envio = self.env['l10n.co.ne.documento.send']
+        grupos = Envio._ne_grupos(primera, self.env['l10n.co.ne.documento'])
+        self.assertEqual(Envio._ne_recibos_que_van(grupos[0]), primera | segunda)
+        resumen = str(Envio._ne_resumen(grupos))
+        for recibo in (primera, segunda):
+            self.assertIn('%s a %s' % (recibo.date_from, recibo.date_to), resumen)
