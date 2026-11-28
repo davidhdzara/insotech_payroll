@@ -85,6 +85,8 @@ class TestDocumentoXml(DocumentoFixture, TransactionCase):
         self.assertEqual(doc.payslip_ids._ne_fecha_retiro(), '2026-03-20')
         self._liquidacion(doc, date(2026, 3, 20), credit_note=True, l10n_co_ne_documento_id=False)
         self.assertTrue(liquidacion._ne_rete_reembolsado(self.env['hr.payslip']))
+        self.assertEqual(doc.payslip_ids._ne_fecha_retiro(), '2026-03-20')          # .341: pagada y reembolsada no se saca sola (detiene la generación)
+        liquidacion.write({'state': 'done', 'paid_date': False})
         self.assertEqual(doc.payslip_ids._ne_fecha_retiro(), '')
 
     def test_periodo_de_un_mes_posterior_al_retiro_no_queda_con_el_inicio_despues_del_fin(self):

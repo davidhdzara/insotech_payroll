@@ -500,15 +500,83 @@ class L10nCoNeDocumento(models.Model):
             ('segmento', '=', segmento), ('is_adjustment', '=', False), ('legacy', '=', False), ('eliminado', '=', False)], limit=1)
         return doc or self.create({'company_id': company.id, 'employee_id': employee.id, 'period': period, 'segmento': segmento})
 
+    def _ne_los_que_puede_llevar(self, recibos):
+        """H-F3-04: un recibo que ya está en un documento TRANSMITIDO de otro segmento no se mueve nunca (con un solo segmento esto no filtra nada)."""
+        self.ensure_one()
+        return recibos.filtered(lambda slip: not (
+            slip.l10n_co_ne_documento_id and slip.l10n_co_ne_documento_id != self and slip.l10n_co_ne_documento_id.segmento != self.segmento
+            and (slip.l10n_co_ne_documento_id.is_being_sent
+                 or (slip.l10n_co_ne_documento_id.state and not slip.l10n_co_ne_documento_id._ne_rechazado_por_regenerar()))))
+
+    def _ne_composicion_de_hoy(self):
+        """Los recibos que «Preparar» le pondría HOY a este documento (a una nota, los que adoptaría), o ``None`` si no hay con qué compararlo: «Eliminar», migrado o eliminado, o un mes partido en segmentos cuyos
+        documentos transmitidos ya no coinciden (ahí «Preparar» no recompone). Solo recibos con fecha de pago en el mes y sin motivo para no entrar."""
+        self.ensure_one()
+        if self.legacy or self.eliminado or self._ne_es_nota_eliminar():
+            return None
+        original = self._ne_con_sus_padres().filtered(lambda d: not d.is_adjustment)[:1]
+        if not original:
+            return None
+        mes = self._ne_recibos_del_mes(self.company_id, self.employee_id, self.period)
+        segmentos = self._ne_segmentar(self.company_id, mes)
+        existentes = self.search([
+            ('company_id', '=', self.company_id.id), ('employee_id', '=', self.employee_id.id), ('period', '=', self.period),
+            ('is_adjustment', '=', False), ('legacy', '=', False), ('eliminado', '=', False)], order='segmento, id')
+        if not self._ne_segmentos_coinciden(mes, segmentos, existentes):
+            return None
+        del_segmento = segmentos[original.segmento - 1] if 0 < original.segmento <= len(segmentos) else mes.browse()
+        return original._ne_adoptables(del_segmento, self) if self.is_adjustment else self._ne_los_que_puede_llevar(del_segmento)
+
+    def _ne_texto_de_la_diferencia(self, hoy):
+        partes = []
+        if hoy - self.payslip_ids:
+            partes.append(_('faltan %s', ', '.join((hoy - self.payslip_ids).mapped('display_name'))))
+        if self.payslip_ids - hoy:
+            partes.append(_('sobran %s', ', '.join((self.payslip_ids - hoy).mapped('display_name'))))
+        return '; '.join(partes)
+
+    def _ne_alerta_composicion(self):
+        """``(clave, mensaje)`` si lo que ya se envió (envío fallido o último aceptado) no es lo que hoy se compondría; ``False`` si no. No se recompone ni se frena el reintento: se avisa y se corrige con nota."""
+        self.ensure_one()
+        if self.state == 'invoice_sending_failed':
+            clave = 'fallo_envio_composicion'
+        elif self.state == 'invoice_accepted' and self == self._ne_ultimo_aceptado():
+            clave = 'aceptado_composicion'
+        else:
+            return False
+        hoy = self._ne_composicion_de_hoy()
+        if hoy is None or hoy == self.payslip_ids:
+            return False
+        diferencia = self._ne_texto_de_la_diferencia(hoy)
+        if clave == 'fallo_envio_composicion':
+            return clave, _('El documento tuvo un envío fallido y su XML pudo haber llegado a la DIAN: no se recompone y se reintenta tal como está. Hoy este documento llevaría otros recibos (%s). Al ser aceptado, '
+                            'corrija con una nota de ajuste.', diferencia)
+        return clave, _('La DIAN aceptó el documento, pero hoy este documento llevaría otros recibos (%s). Corrija con una nota de ajuste.', diferencia)
+
+    def _ne_dejar_constancia_de_composicion(self, mensaje):
+        if not self.message_ids.filtered(lambda m: m.body and 'este documento llevaría otros recibos' in str(m.body)):
+            self._message_log(body=mensaje)          # sin exigir correo a quien opera
+
+    def _ne_avisar_composicion(self):
+        """Tras un envío o un veredicto. Nunca lanza: lo que ya se envió queda registrado aunque no se pueda comparar."""
+        for doc in self:
+            try:
+                with self.env.cr.savepoint():
+                    otras = [a for a in (doc.alertas or []) if a['key'] not in ('fallo_envio_composicion', 'aceptado_composicion')]
+                    aviso = doc._ne_alerta_composicion()
+                    if aviso:
+                        otras.append({'key': aviso[0], 'level': 'warning', 'message': aviso[1]})
+                        doc._ne_dejar_constancia_de_composicion(aviso[1])
+                    if otras != (doc.alertas or []):
+                        doc.alertas = otras
+            except Exception:      # noqa: BLE001
+                _logger.exception('Documento %s: no se pudo comparar lo enviado con los recibos de hoy', doc.id)
+
     def _ne_componer(self, recibos):
         """Deja exactamente ``recibos`` en el documento (los que ya no corresponden se sueltan) y fija el contrato.
         Solo se compone un documento sin transmitir (draft/ready/envío fallido): lo llama ``_ne_preparar``."""
         self.ensure_one()
-        # H-F3-04: un recibo que ya está en un documento TRANSMITIDO de otro segmento no se mueve nunca (con un solo segmento esto no filtra nada).
-        recibos = recibos.filtered(lambda slip: not (
-            slip.l10n_co_ne_documento_id and slip.l10n_co_ne_documento_id != self and slip.l10n_co_ne_documento_id.segmento != self.segmento
-            and (slip.l10n_co_ne_documento_id.is_being_sent
-                 or (slip.l10n_co_ne_documento_id.state and not slip.l10n_co_ne_documento_id._ne_rechazado_por_regenerar()))))
+        recibos = self._ne_los_que_puede_llevar(recibos)
         sueltos = self.payslip_ids - recibos
         if sueltos:
             sueltos.write({'l10n_co_ne_documento_id': False})
@@ -674,9 +742,9 @@ class L10nCoNeDocumento(models.Model):
         if not recibos_xml:
             alerta('sin_recibos', 'danger', _('El documento no tiene recibos pagados en el mes.'))
         # .340: un recibo propio anulado por un reembolso confirmado no puede viajar; con duda sobre cuál se anuló, tampoco.
-        anulados, dudas = (self.payslip_ids | recibos_xml)._ne_reembolsos()
-        if dudas and not self._ne_es_nota_eliminar():
-            alerta('reembolso_dudoso', 'danger', ' '.join(dudas))
+        anulados, dudas = (self.payslip_ids | recibos_xml | self._ne_reembolsados_pagados_del_mes())._ne_reembolsos()
+        if dudas and not self._ne_es_nota_eliminar():          # sobre un documento aceptado es solo un aviso
+            alerta('reembolso_dudoso', 'warning' if self.state == 'invoice_accepted' else 'danger', ' '.join(dudas))
         for slip in anulados & self.payslip_ids:
             if self.state == 'invoice_accepted':
                 alerta('recibo_reembolsado_%s' % slip.id, 'warning', _(
@@ -716,15 +784,11 @@ class L10nCoNeDocumento(models.Model):
                 alerta('recibo_tardio', 'warning', _(
                     'Hay recibos pagados del mes que no están en ningún documento: %(recibos)s. Cree una nota de '
                     'ajuste Reemplazar para incluirlos.', recibos=', '.join(tardios.mapped('display_name'))))
-        # Envío fallido: no se recompone (su XML pudo llegar a la DIAN); si el mes cambió, se avisa en vez de cambiarlo.
-        if self.state == 'invoice_sending_failed' and not self.is_adjustment and not self.legacy:
-            mes = self._ne_recibos_del_segmento()
-            if mes != self.payslip_ids:
-                alerta('fallo_envio_composicion', 'warning', _(
-                    'El documento tuvo un fallo de envío y su XML pudo haber llegado a la DIAN: no se recompone. Los '
-                    'recibos del mes ya no coinciden con los del documento (%(recibos)s). Reintente el envío tal como '
-                    'está y corrija el resto con una nota de ajuste.',
-                    recibos=', '.join(((mes - self.payslip_ids) | (self.payslip_ids - mes)).mapped('display_name'))))
+        # Envío fallido o aceptado: no se recompone; si hoy se compondría otra cosa, se avisa en el documento y en su historial.
+        aviso = self._ne_alerta_composicion()
+        if aviso:
+            alerta(aviso[0], 'warning', aviso[1])
+            self._ne_dejar_constancia_de_composicion(aviso[1])
         # H-F3-04: el mes partido en documentos por segmento (separación del mes, solo con el ajuste de la compañía encendido).
         for clave, nivel, mensaje in self._ne_alertas_segmento():
             alerta(clave, nivel, mensaje)
@@ -920,6 +984,21 @@ class L10nCoNeDocumento(models.Model):
         vigentes -= vigentes._ne_reembolsos()[0]      # .340: lo anulado por un reembolso confirmado no vuelve a componerse
         return recibos if not vigentes and self._ne_es_nota_eliminar() else vigentes
 
+    def _ne_reembolsados_pagados_del_mes(self):
+        """Recibos del empleado, de un pago con reembolso confirmado, que figuran pagados en el mes del documento: por su fecha de pago según la fuente o, si solo están marcados «Pagado», por su fecha de cierre o su
+        «Hasta». ``_ne_reembolsos`` dice de cada uno si el reembolso lo anula (entonces detiene)."""
+        self.ensure_one()
+        Recibo = self.env['hr.payslip'].sudo()
+        dominio = [('company_id', '=', self.company_id.id), ('employee_id', '=', self.employee_id.id), ('state', 'in', ('done', 'paid'))]
+        del_pago = Recibo
+        for reembolso in Recibo.search(dominio + [('credit_note', '=', True)]):
+            del_pago |= Recibo.search(reembolso._ne_rete_mismo_pago() + dominio + [('credit_note', '=', False), ('l10n_co_ne_is_adjustment', '=', False)])
+
+        def en_el_mes(recibo):
+            fechas = recibo._ne_pagos_vigentes() or ([recibo.paid_date or recibo.date_to] if recibo.state == 'paid' else [])
+            return self.period in {fecha.replace(day=1) for fecha in fechas}
+        return del_pago.filtered(en_el_mes)
+
     def _ne_con_sus_padres(self):
         """Este documento y los de arriba, subiendo por ``parent_id`` (con guarda de ciclos)."""
         self.ensure_one()
@@ -943,7 +1022,7 @@ class L10nCoNeDocumento(models.Model):
         if self._ne_es_nota_eliminar():
             return
         recibos = self._ne_recibos_para_xml().sudo().sorted('date_to')
-        anulados, dudas = recibos._ne_reembolsos()
+        anulados, dudas = (recibos | self._ne_reembolsados_pagados_del_mes())._ne_reembolsos()          # .341: también el que se pagó DESPUÉS de armar el XML sin él
         problemas, vigentes = list(dudas), set()
         for recibo in recibos:
             if recibo.state not in ('done', 'paid'):
@@ -969,6 +1048,24 @@ class L10nCoNeDocumento(models.Model):
                 if en_el_xml - vigentes:
                     problemas.append(_('El XML generado lleva un pago del %(fechas)s que ya no es el de sus recibos (%(recibos)s).',
                                        fechas=', '.join(sorted(en_el_xml - vigentes)), recibos=', '.join(recibos.mapped('display_name'))))
+        # .341: un XML que nunca viajó solo sale (y solo se genera) si lleva lo que hoy se compondría; los totales, con la misma función que lo arma.
+        hoy = None
+        if not problemas and not self.incierto and (not self.state or self._ne_rechazado_por_regenerar()):
+            hoy = self._ne_composicion_de_hoy()
+        if hoy is not None and hoy != self.payslip_ids:
+            problemas.append(_('Hoy el documento llevaría otros recibos (%s).', self._ne_texto_de_la_diferencia(hoy)))
+        elif hoy is not None and contra_el_xml:
+            try:
+                en_el_xml = ne_xml_utils.totales_de_xml(base64.b64decode(self.xml_attachment_id.datas))
+                distintos = False
+                if any(valor is not None for valor in en_el_xml):          # se compara lo que el XML declara
+                    totales = self._collect_documento_data()['totales']
+                    distintos = any(valor is None or abs(valor - float(totales[clave])) > 0.005 for valor, clave in zip(en_el_xml, ('DevengadosTotal', 'DeduccionesTotal')))
+            except Exception as error:      # sin poder compararlo no se envía
+                problemas.append(_('No se puede comprobar que el XML generado corresponda a los recibos de hoy: %s', error))
+            else:
+                if distintos:
+                    problemas.append(_('Los totales del XML generado ya no son los de los recibos de hoy.'))
         # .340: la nota deriva sus recibos de la cadena y deja fuera los anulados; un XML armado ANTES del reembolso todavía los lleva. Solo si la cadena tiene anulados se comparan los totales.
         if contra_el_xml and not problemas and self.is_adjustment and self._ne_con_sus_padres().payslip_ids._ne_reembolsos()[0]:
             try:
@@ -988,7 +1085,7 @@ class L10nCoNeDocumento(models.Model):
             que_hacer = _('Tuvo un envío fallido y su XML pudo haber llegado a la DIAN: no se regenera. Consulte su estado por CUNE; si la DIAN lo aceptó, corríjalo con una nota de ajuste. Solo se reintenta '
                           'cuando el pago vuelva a estar registrado como viaja en el XML.')
         elif self.is_adjustment:
-            que_hacer = _('Vuelva a preparar el mes del empleado y genere el XML otra vez. Un recibo que no se pagará en ese mes sale de la nota al cancelarlo.')
+            que_hacer = _('Vuelva a preparar el mes del empleado («Enviar y Procesar» desde sus recibos) y genere el XML otra vez. Un recibo que no se pagará en ese mes sale de la nota al cancelarlo.')
         else:
             que_hacer = _('Vuelva a preparar el mes del empleado («Enviar y Procesar» desde sus recibos) y genere el XML otra vez.')
         raise UserError(_('El documento "%(doc)s" no se puede generar ni enviar: %(problemas)s %(que_hacer)s', doc=self.display_name, problemas=' '.join(problemas), que_hacer=que_hacer))
@@ -1576,6 +1673,7 @@ class L10nCoNeDocumento(models.Model):
         """Lo que sigue a un veredicto de la DIAN (envío síncrono, reconsulta o consulta por CUNE): aplicar la eliminación
         de una nota y, si se pidió, entregar la representación al empleado."""
         self._ne_aplicar_eliminacion()
+        self._ne_avisar_composicion()
         self._ne_entregar_representacion_si_acepta()
 
     def _ne_entregar_representacion_si_acepta(self):

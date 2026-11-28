@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!--
+            «Reintegro» (.341; Anexo Técnico de Nómina V1.0: NIE201 Devengados/Reintegro y NIE184 Deducciones/Reintegro): devolver lo que en OTRO pago se descontó o se devengó mal.
+            Las dos reglas van en la secuencia 190, después de la retención, el embargo y la libranza: no cambian sus bases. Tampoco son salario (no entran al IBC, parafiscales ni PILA). No se halló norma que
+            diga expresamente sus efectos: es una inferencia, NO VERIFICADA.
+            Sin cuentas contables: dependen de la causa. Se ponen en «Cuenta de débito» de la regla (ver hr.payslip._ne_validar_cuentas_reintegro).
+        -->
+
+        <record id="hr_salary_rule_category_reintegros" model="hr.salary.rule.category">
+            <field name="name">Reintegros</field>
+            <field name="code">DEV_REINT</field>
+            <field name="parent_id" ref="hr_salary_rule_category_devengados"/>
+            <field name="note">Devolución al trabajador de un descuento mal hecho en otro pago. Entra al neto; no es salario.</field>
+            <field name="l10n_co_ne_seccion_concepto">devengados</field>
+        </record>
+
+        <record id="input_co_reintegro_dev" model="hr.payslip.input.type">
+            <field name="name">Reintegro a favor del trabajador</field>
+            <field name="code">CO_REINTEGRO_DEV</field>
+            <field name="country_id" ref="base.co"/>
+        </record>
+
+        <record id="input_co_reintegro_ded" model="hr.payslip.input.type">
+            <field name="name">Reintegro a favor de la empresa (exige orden escrita del trabajador)</field>
+            <field name="code">CO_REINTEGRO_DED</field>
+            <field name="country_id" ref="base.co"/>
+        </record>
+
+        <!-- ==================== Nómina Colombia - General ==================== -->
+        <record id="hr_salary_rule_co_reintegro_dev" model="hr.salary.rule">
+            <field name="name">Reintegro a Favor del Trabajador</field>
+            <field name="code">CO_REINTEGRO_DEV</field>
+            <field name="l10n_co_ne_ajustable" eval="True"/>
+            <field name="l10n_co_ne_vigilar_habitualidad" eval="False"/>
+            <field name="l10n_co_ne_base_prima_cesantias" eval="False"/>
+            <field name="l10n_co_ne_base_vacaciones" eval="False"/>
+            <field name="sequence">190</field>
+            <field name="category_id" ref="hr_salary_rule_category_reintegros"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">result = inputs.get('CO_REINTEGRO_DEV') and inputs.get('CO_REINTEGRO_DEV').amount > 0</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = inputs['CO_REINTEGRO_DEV'].amount</field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">Reintegro</field>
+            <field name="note">Devolución al trabajador de lo que se le descontó mal en otro pago. No es salario: no suma al IBC, a la retención, al embargo ni a la PILA, y no corrige las cifras del pago original.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_reintegro_ded" model="hr.salary.rule">
+            <field name="name">Reintegro a Favor de la Empresa</field>
+            <field name="code">CO_REINTEGRO_DED</field>
+            <field name="l10n_co_ne_ajustable" eval="True"/>
+            <field name="l10n_co_ne_vigilar_habitualidad" eval="False"/>
+            <field name="l10n_co_ne_base_prima_cesantias" eval="False"/>
+            <field name="l10n_co_ne_base_vacaciones" eval="False"/>
+            <field name="sequence">190</field>
+            <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_nomina"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">result = inputs.get('CO_REINTEGRO_DED') and inputs.get('CO_REINTEGRO_DED').amount > 0</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = -abs(inputs['CO_REINTEGRO_DED'].amount)</field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">ReintegroDed</field>
+            <field name="note">Lo que el trabajador devuelve de un pago mal hecho en otro recibo. Exige orden escrita del trabajador para cada caso (o mandamiento judicial) y no puede tocar el salario mínimo ni lo inembargable (CST, artículos 149 y 151). No corrige los aportes, la retención ni las prestaciones del pago original.</field>
+        </record>
+
+        <!-- ==================== Liquidación de Contrato - Colombia ==================== -->
+        <record id="hr_salary_rule_co_liq_reintegro_dev" model="hr.salary.rule">
+            <field name="name">Reintegro a Favor del Trabajador</field>
+            <field name="code">CO_REINTEGRO_DEV</field>
+            <field name="l10n_co_ne_ajustable" eval="True"/>
+            <field name="l10n_co_ne_vigilar_habitualidad" eval="False"/>
+            <field name="l10n_co_ne_base_prima_cesantias" eval="False"/>
+            <field name="l10n_co_ne_base_vacaciones" eval="False"/>
+            <field name="sequence">190</field>
+            <field name="category_id" ref="hr_salary_rule_category_reintegros"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">result = inputs.get('CO_REINTEGRO_DEV') and inputs.get('CO_REINTEGRO_DEV').amount > 0</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = inputs['CO_REINTEGRO_DEV'].amount</field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">Reintegro</field>
+            <field name="note">Devolución al trabajador de lo que se le descontó mal en otro pago. No es salario: no suma al IBC, a la retención, al embargo ni a la PILA, y no corrige las cifras del pago original.</field>
+        </record>
+
+        <record id="hr_salary_rule_co_liq_reintegro_ded" model="hr.salary.rule">
+            <field name="name">Reintegro a Favor de la Empresa</field>
+            <field name="code">CO_REINTEGRO_DED</field>
+            <field name="l10n_co_ne_ajustable" eval="True"/>
+            <field name="l10n_co_ne_vigilar_habitualidad" eval="False"/>
+            <field name="l10n_co_ne_base_prima_cesantias" eval="False"/>
+            <field name="l10n_co_ne_base_vacaciones" eval="False"/>
+            <field name="sequence">190</field>
+            <field name="category_id" ref="hr_salary_rule_category_deducciones"/>
+            <field name="struct_id" ref="hr_payroll_structure_co_liquidacion"/>
+            <field name="condition_select">python</field>
+            <field name="condition_python">result = inputs.get('CO_REINTEGRO_DED') and inputs.get('CO_REINTEGRO_DED').amount > 0</field>
+            <field name="amount_select">code</field>
+            <field name="amount_python_compute">result = -abs(inputs['CO_REINTEGRO_DED'].amount)</field>
+            <field name="appears_on_payslip" eval="True"/>
+            <field name="l10n_co_ne_dian_concept">ReintegroDed</field>
+            <field name="note">Lo que el trabajador devuelve de un pago mal hecho en otro recibo. Exige orden escrita del trabajador para cada caso (o mandamiento judicial) y no puede tocar el salario mínimo ni lo inembargable (CST, artículos 149 y 151). No corrige los aportes, la retención ni las prestaciones del pago original.</field>
+        </record>
+
+    </data>
+</odoo>

@@ -991,7 +991,8 @@ result_qty = payslip._ne_dias_pagables()
             <field name="l10n_co_ne_vigilar_habitualidad" eval="False"/>
             <field name="l10n_co_ne_base_prima_cesantias" eval="False"/>
             <field name="l10n_co_ne_base_vacaciones" eval="False"/>
-            <field name="sequence">99</field>
+            <!-- .341: despues de TODOS los devengados (el «Reintegro» va en la 190 para no cambiar retencion, embargo ni libranza). Ninguna regla lee este total; lo usa gross_wage. -->
+            <field name="sequence">195</field>
             <!-- Bug critico corregido: categoria propia era DEV (la misma que
                  lee en amount_python_compute), y CO_NETO (seq 200) volvia a
                  leer categories['DEV'] DESPUES de que este subtotal ya se

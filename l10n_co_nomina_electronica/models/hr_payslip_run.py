@@ -47,7 +47,7 @@ class HrPayslipRun(models.Model):
         if detalle:
             raise UserError(_(
                 '%(que)s: hay recibos reembolsados (%(detalle)s). %(salida)s', que=que, detalle='; '.join(detalle),
-                salida=estorban._ne_en_este_orden(_('conserve confirmados solo los recibos de los pagos reales, cancele los demás y vuelva a intentarlo'))))
+                salida=estorban._ne_en_este_orden(_('cancele los recibos que no se pagaron o estaban mal, conserve confirmados los que sí se pagaron y vuelva a intentarlo'))))
 
     def _ne_validar_volver_a_borrador(self):
         """Los cancelados ya se reversaron; los pagados los rechaza el nativo con su propio mensaje."""
