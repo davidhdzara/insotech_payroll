@@ -149,6 +149,16 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
         return virtual.fecha_limite
 
     @api.model
+    def _ne_recibos_que_van(self, grupo):
+        """Q-83: los recibos que llevará el documento (o los documentos) del grupo, no solo los que se tenían abiertos. Lo ya transmitido muestra los suyos."""
+        documentos = grupo['documentos']
+        if documentos and not documentos.filtered(lambda d: d._ne_se_compone()):
+            return documentos.payslip_ids
+        if not grupo['period']:
+            return self.env['hr.payslip']
+        return self.env['l10n.co.ne.documento']._ne_recibos_del_mes(grupo['company'], grupo['employee'], grupo['period'])
+
+    @api.model
     def _ne_resumen(self, grupos):
         """HTML del resumen de grupos y alertas (solo texto: sin íconos ni colores propios)."""
         etiquetas = {'danger': _('Bloqueo'), 'warning': _('Advertencia'), 'info': _('Aviso')}
@@ -159,6 +169,10 @@ class L10nCoNeDocumentoSend(models.AbstractModel):
                                   grupo['period'].strftime('%Y-%m') if grupo['period'] else _('sin mes'))
             detalle = Markup('').join(
                 Markup('<li>%s: %s</li>') % (etiquetas.get(a['level'], a['level']), a['message']) for a in alertas)
+            van = self._ne_recibos_que_van(grupo).sorted(lambda s: (s.date_to, s.id))
+            if van:
+                detalle = Markup('<li>%s: %s</li>') % (_('Recibos del documento'), ', '.join(
+                    _('%(recibo)s (%(desde)s a %(hasta)s)', recibo=s.display_name, desde=s.date_from, hasta=s.date_to) for s in van)) + detalle
             items.append(Markup('<li><b>%s</b><ul>%s</ul></li>') % (titulo, detalle))
         return Markup('<ul>%s</ul>') % Markup('').join(items) if items else False
 
