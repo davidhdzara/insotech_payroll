@@ -114,6 +114,49 @@ class TestDocumentoGenerarReal(TransactionCase):
             doc.action_generar_xml()
         self.assertFalse(doc.consecutive)
 
+    # ── Mes sin sueldo (.339): «Devengados/Basico» es obligatorio ──
+    def _basico_del_xml(self, xml_bytes):
+        basico = etree.fromstring(xml_bytes).find('.//{*}Devengados/{*}Basico')
+        return basico.get('DiasTrabajados'), basico.get('SueldoTrabajado')
+
+    def test_un_mes_solo_con_prima_lleva_basico_en_cero_y_es_valido_en_la_nomina_y_en_la_nota(self):
+        """Sin ningún recibo con días de sueldo, ``Basico`` va con 0 días y 0.00 (válido contra los dos XSD; NO VERIFICADO ante la DIAN, anexo NIE069/070). Antes: ``ValueError`` «Falta 'DiasTrabajados'»."""
+        prima = self.env['hr.payslip'].create({
+            'name': 'Prima junio', 'employee_id': self.empleado.id, 'contract_id': self.contrato.id, 'company_id': self.company.id,
+            'struct_id': self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_prima').id, 'date_from': date(2026, 1, 1), 'date_to': date(2026, 6, 30)})
+        prima.compute_sheet()
+        prima.write({'state': 'paid', 'paid_date': date(2026, 6, 30)})
+        documento = self.env['l10n.co.ne.documento']._ne_preparar(prima)['documentos']
+        self.assertEqual(documento.payslip_ids, prima)
+        self.assertFalse([a['message'] for a in (documento.alertas or []) if a['level'] == 'danger'])
+        documento.action_generar_xml()
+        xml_bytes = base64.b64decode(documento.xml_attachment_id.datas)
+        valido, errores = self._validar_xsd(xml_bytes)
+        self.assertTrue(valido, 'XML de un mes solo con prima invalido contra el XSD de nomina: %s' % errores)
+        self.assertEqual(self._basico_del_xml(xml_bytes), ('0', '0.00'))
+        # Nota «Reemplazar»: el mismo Basico contra el XSD de ajuste
+        self.company.l10n_co_ne_adjust_prefix = 'NA'
+        secuencias = self.env['ir.sequence'].search([('code', '=', 'l10n_co_nomina.ajuste'), ('company_id', '=', self.company.id)])
+        if not secuencias:
+            secuencias = self.env['ir.sequence'].create({'name': 'Secuencia NA real', 'code': 'l10n_co_nomina.ajuste', 'company_id': self.company.id})
+        secuencias.write({'prefix': 'NA', 'padding': 8, 'number_next': 1, 'implementation': 'no_gap'})
+        self.env['l10n.co.ne.documento.intento'].create({
+            'documento_id': documento.id, 'state': 'invoice_accepted', 'identifier': documento.cune, 'numero': documento.consecutive, 'datetime': datetime(2026, 7, 2)})
+        nota = documento.action_crear_ajuste('1')
+        nota.action_generar_xml()
+        xml_nota = base64.b64decode(nota.xml_attachment_id.datas)
+        valido, errores = self._validar_xsd(xml_nota, 'NominaIndividualDeAjusteElectronicaXSDV1.0.6.xsd')
+        self.assertTrue(valido, 'Nota de un mes solo con prima invalida contra el XSD de ajuste: %s' % errores)
+        self.assertEqual(self._basico_del_xml(xml_nota), ('0', '0.00'))
+
+    def test_con_dias_de_sueldo_y_sin_valor_de_basico_hay_un_error_claro_y_no_se_toma_numero(self):
+        self.recibos.line_ids.filtered(lambda l: l.code == 'CO_BASICO').write({'amount': 0.0, 'total': 0.0})
+        documento = self.env['l10n.co.ne.documento']._ne_preparar(self.recibos)['documentos']
+        self.assertIn('NIE069', ' '.join(a['message'] for a in (documento.alertas or []) if a['level'] == 'danger'))
+        with self.assertRaisesRegex(UserError, 'NIE069'):
+            documento.action_generar_xml()
+        self.assertFalse(documento.consecutive)
+
     def test_dos_quincenas_reales_generan_un_documento_valido(self):
         resultado = self.env['l10n.co.ne.documento']._ne_preparar(self.recibos)
         self.assertFalse(resultado['sin_fecha'], resultado['sin_fecha'])

@@ -1072,6 +1072,8 @@ class L10nCoNeDocumento(models.Model):
         descuadres = documento_merge.conciliar_fusion(datos_recibos, datos)
         if descuadres:
             raise UserError(_('La fusión de los recibos no cuadra: %s', ' '.join(descuadres)))
+        if not self._ne_es_nota_eliminar():
+            recibos._ne_completar_basico(datos)     # mes sin sueldo: «Basico» obligatorio con 0 días y 0.00, o error claro
         company = self.company_id
         numero = self.consecutive or consecutivo or ''
         prefijo = self._ne_prefijo()

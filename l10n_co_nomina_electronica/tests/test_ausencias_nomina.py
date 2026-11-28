@@ -346,6 +346,20 @@ class TestAusenciasNomina(TransactionCase):
         payslip.compute_sheet()
         self._assert_sin_doble_pago(payslip, 'CO_INC_LABORAL', wage)
 
+    def test_un_mes_completo_de_maternidad_arma_el_xml_con_basico_en_cero(self):
+        """.339 (anexo NIE069/070; XSD sin mínimo; NO VERIFICADO ante la DIAN): sin días de sueldo, ``Basico`` va con 0 y 0.00. Antes: ``ValueError`` al armar el XML."""
+        employee, contract = self._make_contract('LicMatMes', wage=1800000.0)
+        self._make_validated_leave(employee, contract, self.leave_type_lic_mat, date(2026, 9, 1), date(2026, 9, 30))
+        payslip = self._make_payslip(employee, contract, date(2026, 9, 1), date(2026, 9, 30))
+        payslip.compute_sheet()
+        self.assertEqual(payslip._ne_dias_pagables(), 0)
+        datos = payslip._collect_payslip_data()
+        self.assertNotIn('Basico', datos['devengados'])          # los datos del recibo no cambian: en un mes con sueldo los días los suma la fusión
+        payslip._ne_completar_basico(datos)
+        self.assertEqual(datos['devengados']['Basico'], {'DiasTrabajados': '0', 'SueldoTrabajado': '0.00'})
+        payslip._ne_corrida_en_seco()                            # arma el XML por recibo sin ValueError
+        self.assertFalse(payslip.l10n_co_ne_consecutive)
+
     def test_licencia_maternidad_sin_doble_pago(self):
         wage = 1800000.0
         employee, contract = self._make_contract('LicMat', wage=wage)

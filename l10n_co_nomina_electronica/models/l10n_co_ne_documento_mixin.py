@@ -420,6 +420,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
 
         # Recopilar datos
         payslip_data = self._collect_payslip_data()
+        self._ne_completar_basico(payslip_data)
 
         # Construir XML sin firmar
         # NOTA (doc 24 §17): corte a builder v2 (dict_to_xml) restaurado e
@@ -1228,6 +1229,7 @@ class L10nCoNeDocumentoMixin(models.AbstractModel):
             with self.env.cr.savepoint():
                 self.l10n_co_ne_consecutive = '%s1' % self._ne_expected_prefix()
                 payslip_data = self._collect_payslip_data()
+                self._ne_completar_basico(payslip_data)
                 if self.l10n_co_ne_is_adjustment:
                     nomina_xml_builder.build_nota_ajuste_v2(payslip_data)
                 else:
