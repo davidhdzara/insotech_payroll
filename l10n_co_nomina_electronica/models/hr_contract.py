@@ -336,11 +336,14 @@ class HrVersion(models.Model):
                     empleado=contrato.employee_id.name or contrato.display_name,
                     version=contrato.date_version, faltan=', '.join(faltan)))
 
+    def _ne_clase_riesgo_o_falso(self):
+        return self.l10n_co_pila_clase_riesgo or self.company_id.l10n_co_pila_clase_riesgo
+
     def _ne_clase_riesgo(self):
         """Clase de riesgo ARL efectiva: la del contrato y, si no tiene, la general de la
         empresa. Única fuente para el aporte ARL y para PILA. Sin ninguna: UserError."""
         self.ensure_one()
-        clase = self.l10n_co_pila_clase_riesgo or self.company_id.l10n_co_pila_clase_riesgo
+        clase = self._ne_clase_riesgo_o_falso()
         if not clase:
             raise UserError(_(
                 'No hay Clase de Riesgo ARL para el contrato de %(employee)s: ni el contrato '

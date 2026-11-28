@@ -9,7 +9,7 @@ fechas van en ISO y un vínculo vacío es ``false``. El resultado lleva el prefi
 import hashlib
 import json
 
-VERSION = '2'
+VERSION = '3'
 
 
 def _numero(valor):
@@ -28,7 +28,7 @@ def _ordenadas(filas):
     return sorted(filas, key=json.dumps)
 
 
-def huella(cabecera, salario, tramo, entradas, dias, ajustes, ausencias, mes=None):
+def huella(cabecera, salario, tramo, entradas, dias, ajustes, ausencias, mes=None, riesgo=False):
     """Texto ``"<versión>:<sha256>"`` de los datos de un recibo.
 
     :param cabecera: (empleado_id, contrato_id, estructura_id, fecha_desde, fecha_hasta)
@@ -39,6 +39,7 @@ def huella(cabecera, salario, tramo, entradas, dias, ajustes, ausencias, mes=Non
     :param ajustes: iterable de (regla_id, cantidad, porcentaje, importe)
     :param ausencias: iterable de (ausencia_id, fecha_desde, fecha_hasta, tipo_de_ausencia_id)
     :param mes: lo que la retención lee del mes (R-2): ``None`` o ``[cierra, [[recibo_id, base, base_salarial, salud, pensión, retenido, exento], ...]]``
+    :param riesgo: clase de riesgo ARL efectiva (la del contrato o, sin ella, la de la compañía); de ella sale la tarifa del aporte
     """
     empleado, contrato, estructura, desde, hasta = cabecera
     datos = {
@@ -50,6 +51,7 @@ def huella(cabecera, salario, tramo, entradas, dias, ajustes, ausencias, mes=Non
         'ajustes': _ordenadas([[_vinculo(regla), _numero(cantidad), _numero(porcentaje), _numero(importe)] for regla, cantidad, porcentaje, importe in ajustes]),
         'ausencias': _ordenadas([[_vinculo(ausencia), _fecha(inicio), _fecha(fin), _vinculo(tipo)] for ausencia, inicio, fin, tipo in ausencias]),
         'mes': mes,
+        'riesgo': _vinculo(riesgo),
     }
     texto = json.dumps(datos, sort_keys=True, separators=(',', ':'))
     return '%s:%s' % (VERSION, hashlib.sha256(texto.encode('utf-8')).hexdigest())

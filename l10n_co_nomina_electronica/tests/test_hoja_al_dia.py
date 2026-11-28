@@ -57,6 +57,7 @@ class TestHuellaCalculoPura(BaseCase):
             'desde': dict(cabecera=(1, 2, 3, date(2026, 9, 2), date(2026, 9, 15))),
             'hasta': dict(cabecera=(1, 2, 3, date(2026, 9, 1), date(2026, 9, 14))),
             'salario': dict(salario=3000001.0),
+            'clase de riesgo ARL': dict(riesgo='3'),
             'inicio del tramo pagable': dict(tramo=(date(2026, 9, 2), date(2026, 9, 15))),
             'fin del tramo pagable': dict(tramo=(date(2026, 9, 1), date(2026, 9, 9))),
             'importe de una novedad': dict(entradas=[(10, 200001.0), (11, 5.0)]),
@@ -189,6 +190,23 @@ class TestHojaAlDia(TransactionCase):
         recibo = self._recibo(calculado=False)
         self.assertFalse(recibo.l10n_co_ne_huella_calculo)
         self._no_se_confirma(recibo)
+
+    def test_cambiar_la_clase_de_riesgo_arl_desactualiza_la_hoja(self):
+        """Q-60: la del contrato y, si el contrato no la tiene, la de la compañía (de ella sale la tarifa del aporte)."""
+        for caso in ('contrato', 'compañía'):
+            with self.subTest(caso):
+                recibo = self._recibo()
+                antes = sum(recibo.line_ids.filtered(lambda l: l.code == 'CO_ARL_CIA').mapped('total'))
+                if caso == 'contrato':
+                    recibo.version_id.l10n_co_pila_clase_riesgo = '3'
+                else:
+                    self.assertFalse(recibo.version_id.l10n_co_pila_clase_riesgo, 'Premisa: la clase sale de la compañía')
+                    self.company.l10n_co_pila_clase_riesgo = '3'
+                self.assertIn('clase de riesgo ARL', self._no_se_confirma(recibo))
+                recibo.compute_sheet()
+                self.assertNotEqual(sum(recibo.line_ids.filtered(lambda l: l.code == 'CO_ARL_CIA').mapped('total')), antes, 'Premisa: el aporte cambia con la clase')
+                self._se_confirma(recibo)
+                self.company.l10n_co_pila_clase_riesgo = '1'
 
     def test_calculado_antes_de_la_version_pide_calcular_y_despues_se_confirma(self):
         recibo = self._recibo()
