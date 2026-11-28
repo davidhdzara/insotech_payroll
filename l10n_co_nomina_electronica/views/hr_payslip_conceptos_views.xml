@@ -57,7 +57,7 @@
                             <field name="edita_porcentaje" column_invisible="True"/>
                             <field name="edita_importe" column_invisible="True"/>
                             <!-- Presentación (22-nov, decisión del TL tras el re-test de QA): la PRIMERA columna es «Concepto», el nombre de la fila (el de la regla en las calculadas y las
-                                 novedades, «Asistencia» en los días, el título de las secciones), como en el diseño de David. v19: sin ``widget`` (lista estándar, decisión del TL, §10.8). En una fila
+                                 novedades, el del tipo en las filas de ausencias, el título de las secciones), como en el diseño de David. v19: sin ``widget`` (lista estándar, decisión del TL, §10.8). En una fila
                                  nueva se llena sola al elegir la regla (``onchange``); en las calculadas y en los días es de solo lectura. -->
                             <field name="name" string="Concepto" readonly="origen in ('calculado', 'dias')"/>
                             <!-- Selector de la regla (22-nov, diseño aprobado por el TL; doc 74 §19): segunda columna, «Regla» (Many2one), editable solo en la fila nueva

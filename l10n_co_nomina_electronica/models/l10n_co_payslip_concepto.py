@@ -221,30 +221,17 @@ class L10nCoPayslipConcepto(models.Model):
 
     @api.model
     def _filas_de_dias(self, recibo, siguiente):
-        """Filas de días bajo la del sueldo. Ajuste de David (22-nov, decisión del TL: opción B): el descanso remunerado NO se desagrega aquí: UNA sola fila de días, «Asistencia»,
-        con los días pagados con el sueldo (asistencia + festivos trabajados + descansos remunerados + ajuste del mes comercial: ``_ne_tipos_dias_de_asistencia``), sin importe. Es
-        la cantidad del «Sueldo Básico» (``_ne_dias_pagables``); el desglose por fecha de E2a sigue en la pestaña de días trabajados. Las demás líneas de días (ausencias) salen
-        como antes, cada una en su fila. Las filas de días no se editan: «sin mecanismo nuevo»."""
+        """Filas de días bajo la del sueldo: solo las que NO se pagan con él (ausencias), cada una en su fila. Q-64 (David, 27-nov): la fila «Asistencia» se quitó; repetía, sin valor, los días del «Sueldo Básico»
+        (asistencia, festivos trabajados, descansos remunerados y ajuste del mes comercial: ``_ne_tipos_dias_de_asistencia``). El desglose por fecha sigue en la pestaña de días trabajados. Las filas de días no se
+        editan."""
         # v19: se excluye la línea «fuera de contrato» (``code == 'OUT'``). v19 la agrega cuando la versión empieza o termina a mitad del periodo
         # (``hr_payroll/models/hr_payslip.py:951-958``); no se paga (el ``hr_payslip_worked_days.py:43`` nativo le pone importe 0: R16) y no es un día trabajado que
-        # mostrar bajo el sueldo. ``code`` es el related del tipo de entrada de trabajo (``hr_work_entry_type_out_of_contract``). v18 no genera esta línea. El filtro vive
-        # AQUÍ (y no en el bucle de ``_valores_del_recibo``) porque esta función reemplazó ese bucle: sin él la fila «fuera de contrato» volvería, pues la línea ``OUT``
-        # no es de asistencia y saldría con las demás (``lineas - de_asistencia``).
-        lineas = recibo.worked_days_line_ids.sorted(lambda w: (w.sequence, w.id)).filtered(
-            lambda w: (w.number_of_days or w.number_of_hours) and w.code != 'OUT')
+        # mostrar bajo el sueldo. ``code`` es el related del tipo de entrada de trabajo (``hr_work_entry_type_out_of_contract``). v18 no genera esta línea.
         tipos = recibo._ne_tipos_dias_de_asistencia()
-        de_asistencia = lineas.filtered(lambda w: w.work_entry_type_id in tipos)
-        filas = []
-        if de_asistencia:
-            principal = de_asistencia[0]                      # la línea que enlaza la fila; el NOMBRE no sale de ella (N2 «cu»): siempre «Asistencia»
-            filas.append({
-                'slip_id': recibo.id, 'sequence': siguiente(), 'name': recibo._ne_nombre_dias_de_asistencia(), 'origen': 'dias',
-                'worked_day_id': principal.id, 'quantity': sum(de_asistencia.mapped('number_of_days')), 'unidad': 'dias', 'rate': 0.0})
-        for dia in lineas - de_asistencia:
-            filas.append({
-                'slip_id': recibo.id, 'sequence': siguiente(), 'name': dia.name or dia.work_entry_type_id.name, 'origen': 'dias',
-                'worked_day_id': dia.id, 'quantity': dia.number_of_days, 'unidad': 'dias', 'rate': 0.0})
-        return filas
+        lineas = recibo.worked_days_line_ids.sorted(lambda w: (w.sequence, w.id)).filtered(
+            lambda w: (w.number_of_days or w.number_of_hours) and w.code != 'OUT' and w.work_entry_type_id not in tipos)
+        return [{'slip_id': recibo.id, 'sequence': siguiente(), 'name': dia.name or dia.work_entry_type_id.name, 'origen': 'dias',
+                 'worked_day_id': dia.id, 'quantity': dia.number_of_days, 'unidad': 'dias', 'rate': 0.0} for dia in lineas]
 
     @api.model
     def _valores_del_recibo(self, recibo):
