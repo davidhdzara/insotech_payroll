@@ -4495,6 +4495,24 @@ class HrPayslip(models.Model):
                 company=self.company_id.name, valor=valor, nomina=self.display_name))
         return int(float_round(valor, precision_rounding=1.0, rounding_method=modo))
 
+    def _ne_completar_basico(self, datos):
+        """``Devengados/Basico`` es obligatorio (XSD V1.0.6: ``DiasTrabajados`` entero requerido SIN mínimo y ``SueldoTrabajado``; Anexo V1.0, NIE069 y NIE070: días efectivamente laborados en el periodo de pago y
+        sueldo por esos días). Si los ``datos`` del XML de ``self`` (un recibo, o los del documento mensual ya fusionados) no lo traen y NINGÚN recibo tiene días de sueldo (maternidad o incapacidad de todo el mes,
+        liquidación sin días por pagar, solo prima), va con 0 días y 0.00. NO VERIFICADO ante la DIAN, anexo NIE069/070, XSD sin mínimo. Si algún recibo sí tiene días de sueldo y no aporta el nodo, error claro
+        antes de tomar el consecutivo (nunca un ``ValueError`` del constructor del XML). La nota «Eliminar» no lleva devengados."""
+        devengados = datos.get('devengados')
+        if devengados is None or 'Basico' in devengados or (len(self) == 1 and self.l10n_co_ne_is_adjustment and self.l10n_co_ne_adjustment_type == '2'):
+            return
+        de_sueldo = (self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_nomina')
+                     | self.env.ref('l10n_co_nomina_electronica.hr_payroll_structure_co_liquidacion'))
+        con_dias = self.filtered(lambda r: (r.struct_id in de_sueldo or r.line_ids.filtered(lambda l: l.code in r._NE_BASICO_CODES)) and r._ne_dias_pagables() > 0)
+        if con_dias:
+            raise UserError(_(
+                'No se puede generar el XML de %(empleado)s: %(recibos)s tiene días de sueldo por pagar y ningún valor para «Devengados / Básico», que la DIAN exige (Anexo V1.0, NIE069 y NIE070). Revise la línea '
+                'del sueldo del recibo (valor mayor que cero y regla salarial con el concepto DIAN «Sueldo») y vuelva a calcularlo.', empleado=con_dias[:1].employee_id.name,
+                recibos=', '.join(_('«%(recibo)s» (%(desde)s a %(hasta)s)', recibo=r._ne_referencia(), desde=r.date_from, hasta=r.date_to) for r in con_dias)))
+        devengados['Basico'] = {'DiasTrabajados': '0', 'SueldoTrabajado': '0.00'}
+
     def _dev_basico_y_transporte(self, concept_lines, devengados):
         """Devengados: sueldo básico, transporte y viáticos."""
         # Sueldo básico
